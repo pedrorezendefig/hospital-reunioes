@@ -10,6 +10,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   areasComVencidas,
+  atrasosDaOuvidoria,
+  atrasosDasAreas,
   avisosDeDegradacao,
   calendarioUtilFoiLido,
   classificarFalha,
@@ -675,5 +677,71 @@ describe("o elogio fica fora dos vencidos (issue #1618, ADR 0088)", () => {
     const reclamacao = { ...elogio, tipo_manifestacao: "reclamacao" };
 
     expect(vencendoEm([reclamacao], "vencido", HOJE)).toEqual([reclamacao]);
+  });
+});
+
+describe("as duas faixas de atraso do Painel (issue #1628, seção 4.11 do anexo)", () => {
+  // O atraso da área e o da triagem da Ouvidoria tinham uma lista só, "Já
+  // venceu": quem cobra um não é quem cobra o outro, e a mistura escondia de
+  // quem era a dívida.
+  const daArea = caso({ prazo_area_em: "2026-08-24T20:00:00+00:00", prazo_estourado: true });
+  const daTriagem = naTriagem("2026-08-24");
+
+  it("o caso com a área vai para os atrasos das áreas, e só para eles", () => {
+    expect(atrasosDasAreas([daArea, daTriagem], HOJE)).toEqual([daArea]);
+  });
+
+  it("o caso vencido ainda na triagem vai para os atrasos da Ouvidoria, e só para eles", () => {
+    expect(atrasosDaOuvidoria([daArea, daTriagem], HOJE)).toEqual([daTriagem]);
+  });
+
+  it("o caso em classificação também é atraso da Ouvidoria", () => {
+    const emClassificacao = naTriagem("2026-08-24", { status: "em_classificacao" });
+
+    expect(atrasosDaOuvidoria([emClassificacao], HOJE)).toEqual([emClassificacao]);
+    expect(atrasosDasAreas([emClassificacao], HOJE)).toEqual([]);
+  });
+
+  it("o que ainda não venceu não entra em faixa de atraso nenhuma", () => {
+    const noPrazo = caso({ prazo_area_em: "2026-08-31T20:00:00+00:00" });
+    const triagemNoPrazo = naTriagem("2026-08-31");
+
+    expect(atrasosDasAreas([noPrazo, triagemNoPrazo], HOJE)).toEqual([]);
+    expect(atrasosDaOuvidoria([noPrazo, triagemNoPrazo], HOJE)).toEqual([]);
+  });
+
+  it("ordena pela gravidade primeiro, e o crítico de ontem passa na frente do médio da semana passada", () => {
+    const vencido = (gravidade: string, dia: string) =>
+      caso({ gravidade, prazo_area_em: `${dia}T20:00:00+00:00`, prazo_estourado: true });
+    const medioAntigo = vencido("medio", "2026-08-17");
+    const criticoRecente = vencido("critico", "2026-08-25");
+    const altoNoMeio = vencido("alto", "2026-08-20");
+    const baixo = vencido("baixo", "2026-08-10");
+
+    expect(atrasosDasAreas([baixo, medioAntigo, altoNoMeio, criticoRecente], HOJE)).toEqual([
+      criticoRecente,
+      altoNoMeio,
+      medioAntigo,
+      baixo,
+    ]);
+  });
+
+  it("na mesma gravidade, o mais atrasado vem primeiro", () => {
+    const venceuOntem = caso({ prazo_area_em: "2026-08-25T20:00:00+00:00", prazo_estourado: true });
+    const venceuHaUmaSemana = caso({ prazo_area_em: "2026-08-19T20:00:00+00:00", prazo_estourado: true });
+
+    expect(atrasosDasAreas([venceuOntem, venceuHaUmaSemana], HOJE)).toEqual([venceuHaUmaSemana, venceuOntem]);
+  });
+
+  it("a triagem também ordena por gravidade e atraso, e o caso sem gravidade fica por último", () => {
+    const semGravidadeAntigo = naTriagem("2026-08-10");
+    const altoRecente = naTriagem("2026-08-25", { gravidade: "alto" });
+    const semGravidadeRecente = naTriagem("2026-08-24");
+
+    expect(atrasosDaOuvidoria([semGravidadeRecente, semGravidadeAntigo, altoRecente], HOJE)).toEqual([
+      altoRecente,
+      semGravidadeAntigo,
+      semGravidadeRecente,
+    ]);
   });
 });

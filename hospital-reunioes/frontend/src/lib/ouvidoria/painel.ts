@@ -192,6 +192,54 @@ function porVencimento(a: CasoDoPainel, b: CasoDoPainel): number {
   );
 }
 
+/**
+ * O peso da gravidade na ordem das faixas de atraso (issue #1628, seção 4.11 do
+ * anexo): do crítico ao baixo. O caso sem gravidade, que é quase todo caso da
+ * triagem, e o valor que esta tela não conhece vão para o fim, sem sumir.
+ */
+const PESO_DA_GRAVIDADE: Record<string, number> = { critico: 0, alto: 1, medio: 2, baixo: 3 };
+
+function pesoDaGravidade(caso: CasoDoPainel): number {
+  return PESO_DA_GRAVIDADE[String(caso.gravidade)] ?? Object.keys(PESO_DA_GRAVIDADE).length;
+}
+
+/**
+ * Gravidade primeiro, e dentro dela o mais atrasado: o crítico vencido ontem
+ * passa na frente do médio vencido há uma semana. "Mais atrasado" é o
+ * vencimento mais antigo, a mesma régua do `porVencimento`.
+ */
+function porGravidadeEAtraso(a: CasoDoPainel, b: CasoDoPainel): number {
+  return pesoDaGravidade(a) - pesoDaGravidade(b) || porVencimento(a, b);
+}
+
+/**
+ * O estado em que a resposta é devida pela ÁREA. É o estado, e não a
+ * existência do prazo da área, que decide de quem é o atraso: quem cobra a
+ * área é o botão Cobrar, e ele só vale para o caso que está com ela.
+ */
+const COM_A_AREA: StatusManifestacao = "aguardando_area";
+
+/**
+ * Faixa 3 do Painel: o que a área deve e já venceu (issue #1628). Separada do
+ * atraso da Ouvidoria porque o dono é outro, e é aqui que mora o Cobrar.
+ */
+export function atrasosDasAreas<T extends CasoDoPainel>(casos: T[], hoje: string): T[] {
+  return vencendoEm(casos, "vencido", hoje)
+    .filter((caso) => caso.status === COM_A_AREA)
+    .sort(porGravidadeEAtraso);
+}
+
+/**
+ * Faixa 4 do Painel: o vencido que ainda está com a Ouvidoria, na triagem.
+ * Todo vencido que não está com a área cai aqui, inclusive o de estado que a
+ * tela não conhece: entre as duas faixas nenhum atraso some (issue #375).
+ */
+export function atrasosDaOuvidoria<T extends CasoDoPainel>(casos: T[], hoje: string): T[] {
+  return vencendoEm(casos, "vencido", hoje)
+    .filter((caso) => caso.status !== COM_A_AREA)
+    .sort(porGravidadeEAtraso);
+}
+
 /** As janelas que ainda não chegaram. Vencido e "vence hoje" têm bloco próprio. */
 const JANELAS_FUTURAS: JanelaDeVencimento[] = ["amanha", "depois"];
 
