@@ -56,7 +56,7 @@ O diretor faz a metade de negócio do grill no app (ADR 0075). No card aberto de
 
 ## Pós-entrega
 
-- `/divulgar <PRD> [--so-video | --so-pagina]`: a entrega pro diretor em dois passos, um comando: vídeo de percepção de valor (MP4 narrado na voz B, feito com a skill global `motion` sobre telas reais do app, gate humano no draft e gate anti-travamento antes de entregar) e página de divulgação publicada na Vercel com o vídeo embutido. A fonte fica numa pasta por PRD em `docs/comunicacao/<contexto>/` (ADR 0045); o MP4 vai para `~/Videos/Hospital/`, nunca para o repositório.
+- `/divulgar <PRD> [--so-video | --so-pagina]`: a entrega pro diretor em dois passos, um comando: vídeo de percepção de valor (MP4 narrado na voz do Pedro, feito com a skill global `motion` sobre telas reais do app, gate humano no draft e gate anti-travamento antes de entregar) e página de divulgação publicada na Vercel com o vídeo embutido. A fonte fica numa pasta por PRD em `docs/comunicacao/<contexto>/` (ADR 0045); o MP4 vai para `~/Videos/Hospital/`, nunca para o repositório.
 - `/mensagem-prd <PRD>`: a mensagem informal de WhatsApp que o Pedro manda ao diretor quando o PRD sobe: o que subiu e o que ele já consegue fazer no app, em tópicos e sem jargão, só o que já está em produção, com o link da página do `/divulgar` quando existir. A `/onda-enxuta` que fecha a última filha do PRD roda sozinha depois da subida e avisa no celular; à mão, para PRD fechado fora da onda. Sai em bloco para copiar e fica registrada como comentário no PRD. O envio é do Pedro.
 - `/snapshot`: mapa factual da app (roda sozinho numa Action no push da `main`, depois do registro da subida, ADR 0068).
 - `/atualizar-app`: rebuild local docker-compose (não toca produção).
