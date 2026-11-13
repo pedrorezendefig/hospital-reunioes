@@ -205,7 +205,7 @@ class TestProposta:
 
     def test_csv_com_cabecalho_de_formato_conhecido_vai_pela_carga_direta_sem_ia(self, ia):
         cliente, _banco = _cliente(GESTAO, _banco_com_bucket(_com_operadoras("ALFA")))
-        texto = "secao;codigo;descricao;valor\nDIARIA;60000090;Diária;1050.00\n"
+        texto = "secao;codigo;descricao;valor\nDIARIA;60000090;Diária;950.00\n"
 
         resposta = _propor(cliente, "diarias.csv", texto.encode("utf-8"), tipo="text/csv")
 

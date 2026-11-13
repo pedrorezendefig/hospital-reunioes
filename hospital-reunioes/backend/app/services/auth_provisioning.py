@@ -24,7 +24,7 @@ def provision_auth_user(supabase, nome: str, email: str, role: str, password: st
     Args:
         supabase: Cliente Supabase com service_role_key (bypassa RLS).
         nome: Nome completo do participante (sem prefixo).
-        email: E-mail do participante (padrão pmrdef+slug@gmail.com).
+        email: E-mail do participante (ex.: exemplo+slug@hospital.local).
         role: Role na hierarquia (diretor, presidente, gerente, coordenador).
         password: Senha customizada. Se None, gera aleatória.
 

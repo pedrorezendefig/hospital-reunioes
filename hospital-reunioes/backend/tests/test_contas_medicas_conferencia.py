@@ -7,7 +7,7 @@ código, quantidades, valor, regra, nível, causa-raiz), não só a presença.
 
 A operadora ALFA é sintética. O ID de cada regra vem da própria memória, no
 bloco `regras_das_conferencias` do cabeçalho: a numeração muda de operadora para
-operadora (a prescrição plena é ASSIM-PRI-07 e LEVE-PRI-02).
+operadora (a prescrição plena é ALFA-PRI-07 numa e GAMA-PRI-02 noutra).
 """
 
 from __future__ import annotations
@@ -740,7 +740,7 @@ class TestDiarias:
         assert linha["regra_codigo"] == "ALFA-DIA-10"
 
     def test_acompanhante_incluso_na_diaria_global_nao_gera_linha(self):
-        # Como na Unimed: diária global e acompanhante incluso (parâmetro nulo).
+        # Diária global com acompanhante incluso (parâmetro nulo).
         parametros = {
             **PARAMETROS_ALFA,
             "diaria": {**PARAMETROS_ALFA["diaria"], "acompanhante_segue_a_regra_do_paciente": None},
@@ -851,7 +851,7 @@ class TestTeto:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 8. Diária global (Unimed, Leve): item incluso, isolamento, pacote, pernoite
+# 8. Diária global: item incluso, isolamento, pacote, pernoite
 # ═══════════════════════════════════════════════════════════════════════════
 
 ENFERMARIA_GLOBAL = "60000090"
@@ -860,21 +860,21 @@ HOSPITAL_DIA = "60034424"
 UTI_CLASSE_1 = "60034599"
 TAXA_ISOLAMENTO = "60029080"
 
-# Como a Leve: diária semi-global, item cobrável a partir de R$ 400 o frasco.
+# Diária semi-global, item cobrável a partir de R$ 450 o frasco (valores fictícios).
 PARAMETROS_GLOBAL: dict[str, Any] = {
     **PARAMETROS_ALFA,
     "colunas_de_preco": {"padrao": None},
     "diaria": {**PARAMETROS_ALFA["diaria"], "acompanhante_segue_a_regra_do_paciente": None, "codigos": {}},
     "diaria_global": {
-        "hospital_dia": {"codigo": HOSPITAL_DIA, "valor": 480.00},
-        "enfermaria": {"codigo": ENFERMARIA_GLOBAL, "valor": 900.00},
-        "apartamento": {"codigo": APARTAMENTO_GLOBAL, "valor": 1100.00},
-        "uti_adulto_classe_1": {"codigo": UTI_CLASSE_1, "valor": 1850.00},
-        "uti_adulto_classe_2": {"codigo": "60034602", "valor": 2650.00},
-        "taxa_isolamento_dia": {"codigo": TAXA_ISOLAMENTO, "valor": 100.00},
+        "hospital_dia": {"codigo": HOSPITAL_DIA, "valor": 450.00},
+        "enfermaria": {"codigo": ENFERMARIA_GLOBAL, "valor": 800.00},
+        "apartamento": {"codigo": APARTAMENTO_GLOBAL, "valor": 1000.00},
+        "uti_adulto_classe_1": {"codigo": UTI_CLASSE_1, "valor": 1600.00},
+        "uti_adulto_classe_2": {"codigo": "60034602", "valor": 2300.00},
+        "taxa_isolamento_dia": {"codigo": TAXA_ISOLAMENTO, "valor": 80.00},
     },
     "tetos_por_dia": {},
-    "precos": {"corte_valor_unitario": 400.00},
+    "precos": {"corte_valor_unitario": 450.00},
     "regras_das_conferencias": {
         **REGRAS_DAS_CONFERENCIAS,
         "taxa_isolamento": "ALFA-DIA-20",
@@ -884,11 +884,11 @@ PARAMETROS_GLOBAL: dict[str, Any] = {
 }
 
 TABELA_GLOBAL = {
-    ("DIARIA_TAXA", ENFERMARIA_GLOBAL): 900.00,
-    ("DIARIA_TAXA", APARTAMENTO_GLOBAL): 1100.00,
-    ("DIARIA_TAXA", HOSPITAL_DIA): 480.00,
-    ("DIARIA_TAXA", UTI_CLASSE_1): 1850.00,
-    ("DIARIA_TAXA", TAXA_ISOLAMENTO): 100.00,
+    ("DIARIA_TAXA", ENFERMARIA_GLOBAL): 800.00,
+    ("DIARIA_TAXA", APARTAMENTO_GLOBAL): 1000.00,
+    ("DIARIA_TAXA", HOSPITAL_DIA): 450.00,
+    ("DIARIA_TAXA", UTI_CLASSE_1): 1600.00,
+    ("DIARIA_TAXA", TAXA_ISOLAMENTO): 80.00,
 }
 
 
@@ -929,8 +929,8 @@ class TestDiariaGlobal:
     def test_taxa_de_isolamento_por_dia_de_isolamento(self):
         # Isolamento de enfermaria: a diária é a da contratada, mais a taxa por dia.
         conta = _conta(
-            *_diarias_lancadas(ENFERMARIA_GLOBAL, 1, 2, 3, unitario=900.00, setor="ISOLAMENTO 2"),
-            *_diarias_lancadas(TAXA_ISOLAMENTO, 1, unitario=100.00, setor="ISOLAMENTO 2"),
+            *_diarias_lancadas(ENFERMARIA_GLOBAL, 1, 2, 3, unitario=800.00, setor="ISOLAMENTO 2"),
+            *_diarias_lancadas(TAXA_ISOLAMENTO, 1, unitario=80.00, setor="ISOLAMENTO 2"),
         )
         prontuario = _prontuario(
             movimentacoes=_internacao(*TestDiarias.TRES_DIARIAS, setor="ISOLAMENTO 2"), tipo_impressao=None
@@ -947,14 +947,14 @@ class TestDiariaGlobal:
             "data": "2026-10-02",
             "data_fim": "2026-10-03",
             "quantidade_devida": 2.0,
-            "valor_diferenca": 200.00,
+            "valor_diferenca": 160.00,
         }
         assert linha["regra_codigo"] == "ALFA-DIA-20"
 
     def test_hospital_dia_que_pernoita_troca_para_a_diaria_da_contratada(self):
         # Day clinic das 7h do dia 1 às 11h do dia 2: atravessou o vencimento das 10h.
         conta = _conta(
-            *_diarias_lancadas(HOSPITAL_DIA, 1, unitario=480.00, setor="DAY CLINIC"), acomodacao="APARTAMENTO"
+            *_diarias_lancadas(HOSPITAL_DIA, 1, unitario=450.00, setor="DAY CLINIC"), acomodacao="APARTAMENTO"
         )
         prontuario = _prontuario(
             movimentacoes=_internacao(datetime(2026, 10, 1, 7, 0), datetime(2026, 10, 2, 11, 0), setor="DAY CLINIC"),
@@ -968,12 +968,12 @@ class TestDiariaGlobal:
             ("RETIRAR", HOSPITAL_DIA, "2026-10-01"),
         ]
         incluir = resultado.linhas[0]
-        assert (incluir["regra_codigo"], incluir["valor_diferenca"]) == ("ALFA-DIA-16", 1100.00)
+        assert (incluir["regra_codigo"], incluir["valor_diferenca"]) == ("ALFA-DIA-16", 1000.00)
         assert "conferir pernoite" in incluir["motivo"].lower()
 
     def test_hospital_dia_sem_pernoite_e_uma_diaria_de_hospital_dia(self):
         conta = _conta(
-            *_diarias_lancadas(HOSPITAL_DIA, 1, unitario=480.00, setor="DAY CLINIC"), acomodacao="APARTAMENTO"
+            *_diarias_lancadas(HOSPITAL_DIA, 1, unitario=450.00, setor="DAY CLINIC"), acomodacao="APARTAMENTO"
         )
         prontuario = _prontuario(
             movimentacoes=_internacao(datetime(2026, 10, 1, 7, 0), datetime(2026, 10, 1, 16, 0), setor="DAY CLINIC"),
@@ -996,7 +996,7 @@ class TestDiariaGlobal:
             consignados=None,
         )
         pacotes = {
-            "31309054": Pacote(codigo="89450171", descricao="Cesariana", permanencia=2, valor=Decimal("3300.00"))
+            "31309054": Pacote(codigo="89450171", descricao="Cesariana", permanencia=2, valor=Decimal("2900.00"))
         }
         prontuario = _prontuario(
             descricoes=[cesariana],
@@ -1018,14 +1018,14 @@ class TestDiariaGlobal:
             for linha in _linhas(resultado, "INCLUIR")
         ]
         assert resumo == [
-            ("89450171", "2026-10-01", None, 1.0, 3300.00),
-            (ENFERMARIA_GLOBAL, "2026-10-02", "2026-10-03", 2.0, 1800.00),
+            ("89450171", "2026-10-01", None, 1.0, 2900.00),
+            (ENFERMARIA_GLOBAL, "2026-10-02", "2026-10-03", 2.0, 1600.00),
         ]
         assert {linha["regra_codigo"] for linha in resultado.linhas} == {"ALFA-PAC-03"}
 
     def test_diaria_de_uti_em_operadora_com_classes_sai_na_classe_mais_baixa_para_conferir(self):
         # Lançadas 2 diárias na classe II; a classe do dia é do Passo B (PRD 2).
-        conta = _conta(*_diarias_lancadas("60034602", 1, 2, unitario=2650.00))
+        conta = _conta(*_diarias_lancadas("60034602", 1, 2, unitario=2300.00))
         prontuario = _prontuario(movimentacoes=_internacao(*TestDiarias.TRES_DIARIAS), tipo_impressao=None)
 
         resultado = conferir(conta, prontuario, _memoria(PARAMETROS_GLOBAL), _tabela(TABELA_GLOBAL), setores=SETORES)
@@ -1035,7 +1035,7 @@ class TestDiariaGlobal:
             "INCLUIR",
             UTI_CLASSE_1,
             "2026-10-03",
-            1850.00,
+            1600.00,
         )
         assert "conferir classe de uti" in linha["motivo"].lower()
 
@@ -1177,7 +1177,7 @@ class TestExames:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 7. Glicemia × fita, lanceta e algodão (conferência 10, ASSIM-INS-18)
+# 7. Glicemia × fita, lanceta e algodão (conferência 10, ALFA-INS-18)
 # ═══════════════════════════════════════════════════════════════════════════
 
 FITA = "70902771"
@@ -1457,40 +1457,40 @@ class TestSeNecessario:
 # 8b. Classe de UTI do dia pelos eventos do Passo A (issue #1134)
 # ═══════════════════════════════════════════════════════════════════════════
 
-UNIMED_CLASSE_1, UNIMED_CLASSE_2, UNIMED_CLASSE_5 = "60000252", "60000236", "60000260"
-ASSIM_NIVEL_1, ASSIM_NIVEL_2 = "98032437", "98032445"
+BETA_CLASSE_1, BETA_CLASSE_2, BETA_CLASSE_5 = "60000252", "60000236", "60000260"
+ALFA_NIVEL_1, ALFA_NIVEL_2 = "98032437", "98032445"
 REGRAS_COM_CLASSE = {**REGRAS_DAS_CONFERENCIAS, "classe_de_uti": "ALFA-DIA-14"}
 
-# Como a Unimed: diária global com as classes I, II e V da UTI adulto.
-PARAMETROS_UNIMED: dict[str, Any] = {
+# BETA: diária global com as classes I, II e V da UTI adulto.
+PARAMETROS_BETA: dict[str, Any] = {
     **PARAMETROS_GLOBAL,
     "diaria_global": {
-        "uti_adulto_classe_1": {"codigo": UNIMED_CLASSE_1, "valor": 2415.00},
-        "uti_adulto_classe_2": {"codigo": UNIMED_CLASSE_2, "valor": 3492.88},
-        "uti_adulto_classe_5": {"codigo": UNIMED_CLASSE_5, "valor": 4831.55},
+        "uti_adulto_classe_1": {"codigo": BETA_CLASSE_1, "valor": 2100.00},
+        "uti_adulto_classe_2": {"codigo": BETA_CLASSE_2, "valor": 3050.20},
+        "uti_adulto_classe_5": {"codigo": BETA_CLASSE_5, "valor": 4210.40},
     },
     "regras_das_conferencias": REGRAS_COM_CLASSE,
 }
-TABELA_UNIMED = {
-    ("DIARIA_TAXA", UNIMED_CLASSE_1): 2415.00,
-    ("DIARIA_TAXA", UNIMED_CLASSE_2): 3492.88,
-    ("DIARIA_TAXA", UNIMED_CLASSE_5): 4831.55,
+TABELA_BETA = {
+    ("DIARIA_TAXA", BETA_CLASSE_1): 2100.00,
+    ("DIARIA_TAXA", BETA_CLASSE_2): 3050.20,
+    ("DIARIA_TAXA", BETA_CLASSE_5): 4210.40,
 }
 
-# Como a ASSIM: pacote de UTI adulto em dois níveis, só na Linha Carioca.
-PARAMETROS_ASSIM: dict[str, Any] = {
+# ALFA com pacote de UTI adulto em dois níveis, só na Linha Carioca.
+PARAMETROS_ALFA_PACOTE_UTI: dict[str, Any] = {
     **PARAMETROS_ALFA,
     "pacote_uti_adulto": {
         "somente_linha_carioca": True,
-        "nivel_1": {"codigo": ASSIM_NIVEL_1, "valor": 1406.77},
-        "nivel_2": {"codigo": ASSIM_NIVEL_2, "valor": 1954.46},
+        "nivel_1": {"codigo": ALFA_NIVEL_1, "valor": 1250.30},
+        "nivel_2": {"codigo": ALFA_NIVEL_2, "valor": 1710.80},
     },
     "regras_das_conferencias": REGRAS_COM_CLASSE,
 }
-TABELA_ASSIM = {
+TABELA_ALFA_PACOTE_UTI = {
     **TABELA_DE_DIARIAS,
-    ("PACOTE", ASSIM_NIVEL_1): 1406.77,
-    ("PACOTE", ASSIM_NIVEL_2): 1954.46,
+    ("PACOTE", ALFA_NIVEL_1): 1250.30,
+    ("PACOTE", ALFA_NIVEL_2): 1710.80,
 }
 
 
@@ -1536,15 +1536,15 @@ class TestClasseDeUti:
         resultado = conferir(
             _conta(),
             self._prontuario_de_cti(),
-            _memoria(PARAMETROS_UNIMED),
-            _tabela(TABELA_UNIMED),
+            _memoria(PARAMETROS_BETA),
+            _tabela(TABELA_BETA),
             setores=SETORES,
             eventos=_eventos(terapias=[self.VENTILACAO]),
         )
 
         assert _resumo_das_diarias(resultado) == [
-            ("INCLUIR", UNIMED_CLASSE_1, "2026-10-03", None, 1.0, 2415.00, "ALFA-DIA-14"),
-            ("INCLUIR", UNIMED_CLASSE_5, "2026-10-01", "2026-10-02", 2.0, 9663.10, "ALFA-DIA-14"),
+            ("INCLUIR", BETA_CLASSE_1, "2026-10-03", None, 1.0, 2100.00, "ALFA-DIA-14"),
+            ("INCLUIR", BETA_CLASSE_5, "2026-10-01", "2026-10-02", 2.0, 8420.80, "ALFA-DIA-14"),
         ]
         classe_1, classe_5 = sorted(resultado.linhas, key=lambda linha: linha["codigo"])
         assert (classe_5["evidencia_pagina"], classe_5["evidencia_trecho"]) == (50, "Em VM, modo PCV")
@@ -1553,53 +1553,53 @@ class TestClasseDeUti:
         assert all("conferir classe de uti" in linha["motivo"].lower() for linha in resultado.linhas)
 
     def test_classe_i_lancada_nos_dias_de_ventilacao_sai_para_retirar_com_a_observacao(self):
-        conta = _conta(*_diarias_lancadas(UNIMED_CLASSE_1, 1, 2, 3, unitario=2415.00))
+        conta = _conta(*_diarias_lancadas(BETA_CLASSE_1, 1, 2, 3, unitario=2100.00))
 
         resultado = conferir(
             conta,
             self._prontuario_de_cti(),
-            _memoria(PARAMETROS_UNIMED),
-            _tabela(TABELA_UNIMED),
+            _memoria(PARAMETROS_BETA),
+            _tabela(TABELA_BETA),
             setores=SETORES,
             eventos=_eventos(terapias=[self.VENTILACAO]),
         )
 
         assert _resumo_das_diarias(resultado) == [
-            ("INCLUIR", UNIMED_CLASSE_5, "2026-10-01", "2026-10-02", 2.0, 9663.10, "ALFA-DIA-14"),
-            ("RETIRAR", UNIMED_CLASSE_1, "2026-10-01", "2026-10-02", 2.0, -4830.00, "ALFA-DIA-14"),
+            ("INCLUIR", BETA_CLASSE_5, "2026-10-01", "2026-10-02", 2.0, 8420.80, "ALFA-DIA-14"),
+            ("RETIRAR", BETA_CLASSE_1, "2026-10-01", "2026-10-02", 2.0, -4200.00, "ALFA-DIA-14"),
         ]
         retirar = _linhas(resultado, "RETIRAR")[0]
         assert "conferir classe de uti" in retirar["motivo"].lower()
 
-    def test_assim_linha_carioca_monitorizacao_invasiva_no_dia_2_e_nivel_2_e_os_outros_nivel_1(self):
+    def test_alfa_linha_carioca_monitorizacao_invasiva_no_dia_2_e_nivel_2_e_os_outros_nivel_1(self):
         pai = _terapia("PRESSAO_INVASIVA", "2026-10-02T09:00", "2026-10-02T18:00", pagina=52, trecho="PAI radial")
 
         resultado = conferir(
             _conta(plano="Alfa Max Qc"),
             self._prontuario_de_cti(),
-            _memoria(PARAMETROS_ASSIM),
-            _tabela(TABELA_ASSIM),
+            _memoria(PARAMETROS_ALFA_PACOTE_UTI),
+            _tabela(TABELA_ALFA_PACOTE_UTI),
             setores=SETORES,
             eventos=_eventos(terapias=[pai]),
         )
 
         assert _resumo_das_diarias(resultado) == [
-            ("INCLUIR", ASSIM_NIVEL_1, "2026-10-01", None, 1.0, 1406.77, "ALFA-DIA-14"),
-            ("INCLUIR", ASSIM_NIVEL_1, "2026-10-03", None, 1.0, 1406.77, "ALFA-DIA-14"),
-            ("INCLUIR", ASSIM_NIVEL_2, "2026-10-02", None, 1.0, 1954.46, "ALFA-DIA-14"),
+            ("INCLUIR", ALFA_NIVEL_1, "2026-10-01", None, 1.0, 1250.30, "ALFA-DIA-14"),
+            ("INCLUIR", ALFA_NIVEL_1, "2026-10-03", None, 1.0, 1250.30, "ALFA-DIA-14"),
+            ("INCLUIR", ALFA_NIVEL_2, "2026-10-02", None, 1.0, 1710.80, "ALFA-DIA-14"),
         ]
-        nivel_2 = _linhas(resultado, "INCLUIR", ASSIM_NIVEL_2)[0]
+        nivel_2 = _linhas(resultado, "INCLUIR", ALFA_NIVEL_2)[0]
         assert (nivel_2["evidencia_pagina"], nivel_2["evidencia_trecho"]) == (52, "PAI radial")
         assert all("conferir classe de uti" in linha["motivo"].lower() for linha in resultado.linhas)
 
-    def test_assim_fora_da_linha_carioca_segue_a_diaria_de_cti(self):
+    def test_alfa_fora_da_linha_carioca_segue_a_diaria_de_cti(self):
         pai = _terapia("PRESSAO_INVASIVA", "2026-10-02T09:00", "2026-10-02T18:00", pagina=52, trecho="PAI radial")
 
         resultado = conferir(
             _conta(plano="Alfa Basico"),
             self._prontuario_de_cti(),
-            _memoria(PARAMETROS_ASSIM),
-            _tabela(TABELA_ASSIM),
+            _memoria(PARAMETROS_ALFA_PACOTE_UTI),
+            _tabela(TABELA_ALFA_PACOTE_UTI),
             setores=SETORES,
             eventos=_eventos(terapias=[pai]),
         )

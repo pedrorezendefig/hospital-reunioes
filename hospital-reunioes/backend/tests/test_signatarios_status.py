@@ -609,16 +609,16 @@ class TestListSignersService:
 
         signers = {
             "data": [
-                _signer_obj("106", "Josiane Alves", "josiane@hsm.com.br"),
-                _signer_obj("fa0", "Lucas Louro", "ti_lucas@hsm.com.br"),
+                _signer_obj("106", "Ana Teste", "ana.teste@exemplo.com"),
+                _signer_obj("fa0", "Bruno Exemplo", "bruno.exemplo@exemplo.com"),
             ],
             "links": {"next": None},
         }
         events = {
             "data": [
-                _started_event("fa0", "ti_lucas@hsm.com.br"),  # so abriu — nao conta
-                _sign_event("fa0", "ti_lucas@hsm.com.br", "Lucas Louro", "2026-05-27T15:09:47.224-03:00"),
-                # josiane (106) nao tem evento sign -> pending
+                _started_event("fa0", "bruno.exemplo@exemplo.com"),  # so abriu — nao conta
+                _sign_event("fa0", "bruno.exemplo@exemplo.com", "Bruno Exemplo", "2026-05-27T15:09:47.224-03:00"),
+                # ana (106) nao tem evento sign -> pending
             ],
             "links": {"next": None},
         }
@@ -628,10 +628,10 @@ class TestListSignersService:
         assert result is not None
         assert len(result) == 2
         by_email = {s["email"]: s for s in result}
-        assert by_email["ti_lucas@hsm.com.br"]["status"] == "signed"
-        assert by_email["ti_lucas@hsm.com.br"]["signed_at"] == "2026-05-27T15:09:47.224-03:00"
-        assert by_email["josiane@hsm.com.br"]["status"] == "pending"
-        assert by_email["josiane@hsm.com.br"]["signed_at"] is None
+        assert by_email["bruno.exemplo@exemplo.com"]["status"] == "signed"
+        assert by_email["bruno.exemplo@exemplo.com"]["signed_at"] == "2026-05-27T15:09:47.224-03:00"
+        assert by_email["ana.teste@exemplo.com"]["status"] == "pending"
+        assert by_email["ana.teste@exemplo.com"]["signed_at"] is None
 
     def test_signature_started_nao_conta_como_assinado(self, monkeypatch):
         """Garante que abrir o documento (signature_started) nao marca como assinado."""

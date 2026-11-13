@@ -1,0 +1,9 @@
+secao_aditivo;codigo;descricao;cbo;preco_carioca;preco_comum
+3.3 CONSULTAS;10101012;Consulta médica em consultório;;64.10;64.10
+3.3 CONSULTAS;10101012;Consulta médica em consultório - Pediatria;225124;101.50;101.50
+3.3 CONSULTAS;10101012;Consulta médica em consultório - Pneumologia;225127;79.30;79.30
+3.5 DIÁRIAS;60000805;Diária de enfermaria adulto;;162.40;191.20
+3.5 DIÁRIAS;60001062;Diária de UTI neonatal;;PACOTE;PACOTE
+3.7 TAXAS E ALUGUEIS;60025662;Taxa de bomba de infusão, por dia;;25.10;31.40
+3.7 TAXAS E ALUGUEIS;60034017;Curativo médio;;6.40;8.05
+3.7 TAXAS E ALUGUEIS;60033568;Taxa de registro de internação;;17.50;21.90

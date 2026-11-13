@@ -45,7 +45,7 @@ Tudo que está na árvore é código, doc viva, decisão ou material de comunica
 | `spec/deploy/` | Contrato e estado do deploy | O `/deploy` lê daqui, nunca de memória | `project.json` (contrato: serviços, chaves, gates), `state.json` (versão em prod agora), `history.json` (todos os deploys, com notas) | `/deploy status`; ler as notas antes de planejar |
 | `spec/snapshots/` | Mapa factual do app, gerado | O código muda, o mapa acompanha sozinho | `ROTAS.md`, `ENTIDADES.md`, `SCHEMA.md`, `MIGRATIONS.md`, `INTEGRACOES.md`, `ESTRUTURA.md` | Para saber o que existe hoje sem abrir o código |
 | `spec/VERSIONING.md` | Regra de versão | A versão sai do tipo dos commits | Bump por tipo, onde a versão aparece | Decidir o tipo do commit; o que subiu quando está no `spec/deploy/history.json` |
-| `pops/` | Glossário do contexto POPs | Segundo contexto de domínio (ADR 0007) | `CONTEXT.md` e `materiais-reais/` (POPs reais como referência) | Trabalhando em POPs |
+| `pops/` | Glossário do contexto POPs | Segundo contexto de domínio (ADR 0007) | `CONTEXT.md` (os POPs reais de referência ficam em `local/docs/pops/materiais-reais/`, fora do git) | Trabalhando em POPs |
 | `comunicacao/` | Material para o diretor e o usuário funcional | Vídeo e página nascem juntos por PRD (ADR 0045) | `<contexto>/<PRD>-<slug>/video/` (composição) e `index.html` (página); `_assets/` (uma fonte, um logo) | `/divulgar <PRD>`. MP4 fica fora do git |
 | `ARQUITETURA.md` | Visão de arquitetura | Um lugar para o desenho geral | Os 3 contextos, fluxos, blocos gerados pelo `/snapshot` | Primeira leitura técnica |
 
