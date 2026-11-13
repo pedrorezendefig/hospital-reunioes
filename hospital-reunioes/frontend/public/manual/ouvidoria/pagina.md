@@ -9,7 +9,7 @@ Quem não é da Ouvidoria vê só a lista dos casos, sem o relato. As tarefas ab
 
 ## O caminho de uma manifestação
 
-Passe o mouse num passo para ver o detalhe, ou clique em **Percorrer** para andar um passo por vez. Os prazos são os padrões da tabela da Diretoria, que pode mudá-los na tela **Prazos**. Eles contam só dias úteis, de segunda a sexta, das 8h às 17h, fora o aviso de recebimento, que conta horas corridas.
+Passe o mouse num passo para ver o detalhe, ou clique em **Percorrer** para andar um passo por vez. Os prazos são os padrões da tabela da Diretoria, que pode mudá-los na tela **Prazos**. Eles correm de segunda a sexta, das 8h às 17h, sem feriados. Só o aviso de recebimento conta horas corridas.
 
 ```fluxograma
 inicio chega 1,1: A manifestação chega | Pelo QR, pelo site, pela Ana, por e-mail ou pelo registro da Ouvidoria. Quem deixou contato recebe o aviso de recebimento em até 24 horas.
@@ -48,7 +48,7 @@ Use quando a pessoa reclama por telefone, no balcão, pelo Instagram ou pelo Rec
 
 ## Encaminhar ao setor
 
-Todo caso novo fica no grupo **Em classificação** até a Ouvidoria conferir e mandar para a área. Nada vai para um setor sem esse passo.
+Todo caso novo fica no grupo **Em classificação** até a Ouvidoria conferir e mandar para a área, e nenhum setor recebe o caso antes disso.
 
 1. Na lista, ache o caso e clique em **Validar e acionar**.
 
