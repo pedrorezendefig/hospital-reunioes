@@ -20,6 +20,8 @@ export interface PontoDeEscuta {
   titulo_cartaz?: TituloDoCartaz | null;
   codigo_controle?: string | null;
   ala_internacao?: boolean | null;
+  /** A chave do ponto no teste do convite ao Google (issue #1625). */
+  google_teste_ativo?: boolean | null;
   /** O PNG do QR embutido: o front autentica por header, e `<img src>` não
    * manda header, então a imagem viaja dentro do JSON. */
   qr_data_uri: string;
@@ -93,6 +95,18 @@ export interface GrupoDeCartazes {
  */
 export function podeGerirPontos(perfilOuvidoria: string | null | undefined): boolean {
   return perfilOuvidoria === "ouvidor" || perfilOuvidoria === "diretoria_executiva";
+}
+
+/** A chave geral do teste do convite ao Google, como `GET /pontos` devolve. */
+export interface ConviteGoogle {
+  global: boolean;
+  ligado_em: string | null;
+}
+
+/** Só a diretoria executiva liga e desliga o convite ao Google (ADR 0089,
+ * decisão 6). O ouvidor vê o estado; o backend recusa de novo com 403. */
+export function podeLigarConviteGoogle(perfilOuvidoria: string | null | undefined): boolean {
+  return perfilOuvidoria === "diretoria_executiva";
 }
 
 /**

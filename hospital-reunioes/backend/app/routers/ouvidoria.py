@@ -47,6 +47,7 @@ from app.services import (
     audit,
     ouvidoria_acionamentos,
     ouvidoria_acuse,
+    ouvidoria_convite_google,
     ouvidoria_encerramento,
     ouvidoria_escalonamento,
     ouvidoria_marcos,
@@ -2852,7 +2853,18 @@ async def listar_pontos(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Não foi possível ler os pontos de escuta agora. Tente de novo em instantes.",
         ) from exc
-    return {"pontos": [{**ponto, "qr_data_uri": ouvidoria_pontos.qr_data_uri(ponto["codigo"])} for ponto in pontos]}
+    # A chave geral do convite ao Google (issue #1625): a tela mostra o estado
+    # aos dois perfis, e só a diretoria executiva muda.
+    try:
+        config = ouvidoria_convite_google.ler_config(supabase)
+        convite = {"global": config["global"], "ligado_em": config["ligado_em"]}
+    except APIError as exc:
+        logger.error("Falha ao ler a chave geral do convite ao Google (código %s)", exc.code)
+        convite = None
+    return {
+        "pontos": [{**ponto, "qr_data_uri": ouvidoria_pontos.qr_data_uri(ponto["codigo"])} for ponto in pontos],
+        "convite_google": convite,
+    }
 
 
 @router.post("/pontos", status_code=status.HTTP_201_CREATED)
@@ -2948,6 +2960,54 @@ def _carregar_ponto(supabase, ponto_id: str) -> dict:
     if ponto is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ponto de escuta não encontrado")
     return ponto
+
+
+class ChaveDoConvite(BaseModel):
+    """Liga ou desliga uma chave do teste do convite ao Google."""
+
+    ligado: bool = Field(strict=True)
+
+
+_FALHA_NA_CHAVE = "Não foi possível mudar o convite ao Google agora. Tente de novo em instantes."
+
+
+@router.put("/convite-google")
+@limiter.limit("30/minute")
+async def mudar_convite_google(
+    request: Request,
+    pedido: ChaveDoConvite,
+    me: dict = Depends(require_diretoria_executiva),
+    supabase=Depends(get_supabase_client),
+):
+    """A chave geral do teste do convite ao Google (issue #1625, ADR 0089
+    decisão 6). Só a diretoria executiva, e cada mudança grava quem, quando,
+    de e para. Ligar começa os 60 dias do aviso de reavaliar."""
+    try:
+        return ouvidoria_convite_google.mudar_chave_geral(supabase, pedido.ligado, me, agora_utc())
+    except APIError as exc:
+        logger.error("Falha ao mudar a chave geral do convite ao Google (código %s)", exc.code)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_FALHA_NA_CHAVE) from exc
+
+
+@router.put("/pontos/{ponto_id}/convite-google")
+@limiter.limit("30/minute")
+async def mudar_convite_google_do_ponto(
+    request: Request,
+    ponto_id: str,
+    pedido: ChaveDoConvite,
+    me: dict = Depends(require_diretoria_executiva),
+    supabase=Depends(get_supabase_client),
+):
+    """A chave de um cartaz no teste do convite ao Google (issue #1625). Mesmo
+    gate e mesma auditoria da chave geral. Fora do PATCH do cartaz de
+    propósito: aquele é dos dois perfis da Ouvidoria."""
+    ponto = _carregar_ponto(supabase, ponto_id)
+    try:
+        ligado = ouvidoria_convite_google.mudar_chave_do_ponto(supabase, ponto, pedido.ligado, me)
+    except APIError as exc:
+        logger.error("Falha ao mudar a chave do convite ao Google no ponto %s (código %s)", ponto_id, exc.code)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_FALHA_NA_CHAVE) from exc
+    return {"id": ponto["id"], "google_teste_ativo": ligado}
 
 
 @router.get("/pontos/{ponto_id}/qr.png")

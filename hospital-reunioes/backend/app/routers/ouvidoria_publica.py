@@ -21,7 +21,7 @@ import logging
 import secrets
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Request, status
 from fastapi.responses import RedirectResponse
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -30,7 +30,13 @@ from slowapi.util import get_remote_address
 from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
-from app.services import ouvidoria_acompanhamento, ouvidoria_acuse, ouvidoria_avaliacoes, ouvidoria_pontos
+from app.services import (
+    ouvidoria_acompanhamento,
+    ouvidoria_acuse,
+    ouvidoria_avaliacoes,
+    ouvidoria_convite_google,
+    ouvidoria_pontos,
+)
 from app.services.ouvidoria_contato import email_utilizavel
 from app.services.ouvidoria_taxonomia import (
     CATEGORIA_PENDENTE,
@@ -486,8 +492,14 @@ async def avaliar_pelo_cartaz(
     )
     if not cartaz:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cartaz não encontrado")
+    # O convite ao Google (issue #1625, ADR 0089): só a nota 4 ou 5, só com a
+    # chave geral e a do cartaz ligadas. Decidido antes de gravar, para a linha
+    # já nascer dizendo que o convite foi mostrado.
+    convite = ouvidoria_convite_google.deve_convidar(supabase, cartaz, avaliacao.nota)
     try:
-        linha = ouvidoria_avaliacoes.gravar(supabase, cartaz, avaliacao.nota, avaliacao.motivos, avaliacao.comentario)
+        linha = ouvidoria_avaliacoes.gravar(
+            supabase, cartaz, avaliacao.nota, avaliacao.motivos, avaliacao.comentario, convite_google=convite
+        )
     except APIError as exc:
         logger.error("Falha ao gravar a avaliação do cartaz (código %s)", exc.code)
         linha = None
@@ -496,7 +508,30 @@ async def avaliar_pelo_cartaz(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Não foi possível registrar sua avaliação agora. Tente novamente em instantes.",
         )
-    return {"id": linha["id"], "nota": linha["nota"]}
+    return {"id": linha["id"], "nota": linha["nota"], "convite_google": bool(linha.get("convite_google_exibido"))}
+
+
+@router.get("/publico/avaliacoes/{avaliacao_id}/convite-google")
+@limiter.limit("10/minute")
+async def seguir_convite_google(
+    request: Request,
+    avaliacao_id: str = Path(max_length=40),
+    supabase=Depends(get_supabase_client),
+):
+    """O botão "Avaliar no Google" da tela N3 (issue #1625, ADR 0089 decisão
+    7): conta o clique e só então leva ao link de avaliação da configuração.
+
+    O destino sai só da configuração, nunca do pedido. Sem link https
+    configurado, 404: a página não tem para onde mandar a pessoa."""
+    try:
+        destino = ouvidoria_convite_google.link_de_avaliacao(supabase)
+    except Exception:
+        logger.warning("[Ouvidoria] Falha ao ler o link de avaliação do Google")
+        destino = None
+    if not destino:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Convite indisponível")
+    ouvidoria_convite_google.registrar_clique(supabase, avaliacao_id)
+    return RedirectResponse(destino, status_code=status.HTTP_302_FOUND)
 
 
 @router.get("/publico/locais")

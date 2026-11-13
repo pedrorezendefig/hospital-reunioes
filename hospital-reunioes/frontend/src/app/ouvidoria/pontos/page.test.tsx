@@ -26,9 +26,13 @@ vi.mock("@/lib/supabase/client", () => ({
   }),
 }));
 
+// O perfil de quem abre a tela: o convite ao Google (issue #1625) só a
+// diretoria executiva liga e desliga.
+const quem = vi.hoisted(() => ({ perfil: "ouvidor" }));
+
 vi.mock("@/hooks/useCurrentParticipante", () => ({
   useCurrentParticipante: () => ({
-    participante: { id: "p1", perfil_ouvidoria: "ouvidor" },
+    participante: { id: "p1", perfil_ouvidoria: quem.perfil },
     loading: false,
   }),
 }));
@@ -46,6 +50,7 @@ const PONTO = {
   titulo_cartaz: "atendimento_hoje",
   codigo_controle: "PSA-01",
   ala_internacao: false,
+  google_teste_ativo: false,
 };
 
 interface Chamada {
@@ -58,6 +63,7 @@ let chamadas: Chamada[] = [];
 
 beforeEach(() => {
   chamadas = [];
+  quem.perfil = "ouvidor";
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -69,7 +75,17 @@ beforeEach(() => {
       if (url.endsWith(".pdf") || url.includes(".pdf?")) {
         return { ok: true, status: 200, blob: async () => new Blob(["%PDF"]) } as Response;
       }
-      return { ok: true, status: 200, json: async () => ({ pontos: [PONTO] }) } as Response;
+      if (metodo === "PUT") {
+        return { ok: true, status: 200, json: async () => ({}) } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          pontos: [PONTO],
+          convite_google: { global: false, ligado_em: null },
+        }),
+      } as Response;
     })
   );
   URL.createObjectURL = vi.fn(() => "blob:cartaz");
@@ -195,5 +211,44 @@ describe("o download do cartaz", () => {
 
     expect(await screen.findByText("Emergência adulta")).toBeTruthy();
     expect(screen.getByText("Parede ao lado do balcão de triagem")).toBeTruthy();
+  });
+});
+
+describe("o teste do convite ao Google (issue #1625)", () => {
+  it("a diretoria executiva liga a chave geral", async () => {
+    quem.perfil = "diretoria_executiva";
+    render(<PontosDeEscutaPage />);
+
+    fireEvent.click(await screen.findByRole("switch", { name: "Convite ao Google em todo o QR" }));
+
+    await waitFor(() => expect(chamadas.some((c) => c.metodo === "PUT")).toBe(true));
+    expect(chamadas.find((c) => c.metodo === "PUT")).toEqual({
+      url: "/api/ouvidoria/convite-google",
+      metodo: "PUT",
+      corpo: { ligado: true },
+    });
+  });
+
+  it("a diretoria executiva liga a chave de um ponto", async () => {
+    quem.perfil = "diretoria_executiva";
+    render(<PontosDeEscutaPage />);
+
+    fireEvent.click(await screen.findByRole("switch", { name: "Convite ao Google em Recepção do PSA" }));
+
+    await waitFor(() => expect(chamadas.some((c) => c.metodo === "PUT")).toBe(true));
+    expect(chamadas.find((c) => c.metodo === "PUT")).toEqual({
+      url: "/api/ouvidoria/pontos/pt1/convite-google",
+      metodo: "PUT",
+      corpo: { ligado: true },
+    });
+  });
+
+  it("o ouvidor vê o estado do teste, sem chave para mudar", async () => {
+    render(<PontosDeEscutaPage />);
+    await screen.findByText("Recepção do PSA");
+
+    expect(screen.getByText(/O teste do convite ao Google está desligado/)).toBeTruthy();
+    expect(screen.getByText(/Só a diretoria executiva liga e desliga/)).toBeTruthy();
+    expect(screen.queryAllByRole("switch")).toEqual([]);
   });
 });
