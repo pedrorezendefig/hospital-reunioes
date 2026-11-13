@@ -37,15 +37,15 @@ O que o `notas` imprimir vale por cima desta skill. A "decisão do fluxo" citada
 
 | Agente | Esforço | Quando |
 |---|---|---|
-| `onda-implementador` | high (`effort: xhigh` na `fatia:G`) | 1 por issue, `isolation: worktree` |
-| `onda-revisor` | high | PR do app (`fluxo.py classe` diz `app`), uma vez só |
-| `onda-corretor` | high (`effort: max` na segunda falha de CI) | must-fix, CI vermelho, conflito, retomada |
+| `onda-implementador` | xhigh | 1 por issue, `isolation: worktree` |
+| `onda-revisor` | xhigh | PR do app (`fluxo.py classe` diz `app`), uma vez só |
+| `onda-corretor` | xhigh (`effort: max` na segunda falha de CI) | must-fix, CI vermelho, conflito, retomada |
 
 Você, orquestrador, **não lê código, diff, PRD nem spec**: mantém a tabela da fila e delega. Prompts em [references/prompts.md](references/prompts.md), literais.
 
 **Nunca pare para perguntar** (decisão do fluxo). Dúvida ou impasse: a fatia é baixa e o lote segue. Sem `AskUserQuestion`: numa sessão de fundo ninguém vê. Todo comentário do agente no GitHub leva `<!-- automacao -->` na primeira linha.
 
-**Baixa:** `gh issue edit <N> --remove-label in-progress --add-label ready-for-human`, comentário com branch, gate que falhou e hipótese, e o evento `pronto-para-voce` (abaixo) com "#<N> ficou com você: <gate>".
+**Baixa:** `gh issue edit <N> --remove-label in-progress --add-label ready-for-human`, comentário com branch, gate que falhou e hipótese, e o evento `pronto-para-voce` (abaixo) com "#<N> ficou com você: <gate>" e `--espera-issue <N>` (mais `--espera-pr <PR>`, se há PR).
 
 ## Estado da Onda e aviso no celular
 
@@ -53,7 +53,8 @@ A Onda grava o que faz num arquivo que o PedroOS lê (formato em `docs/estado-da
 
 - **Nascimento:** `E iniciar --sessao <nome> --onda <N> [--prd <PRD>] --issues <fila desta onda> --descricao-valor "<frase>"`. A frase é a Descrição de valor da Onda: o que ela entrega, numa frase só, para quem não é dev. Escreva a partir do "Por que vale:" de cada Fatia da onda (ou do "O que muda:", na Fatia sem ele), que você tira do corpo sem ler o resto (`gh issue view <I> --json body --jq .body | grep -E '^\*\*(Por que vale|O que muda):\*\*'`), e passe pelo `humanizer` antes de gravar. Sem nenhuma das duas linhas nas Fatias, omita `--descricao-valor`.
 - **Cada issue:** `E issue --sessao <nome> --onda <N> --numero <I> [--pr <PR>] --status <fila|implementando|revisao|correcao|verde|baixa|mergeado>` quando o status muda.
-- **Eventos:** `E evento --sessao <nome> --onda <N> --tipo <tipo> --texto "<uma frase>" [--pr <PR>]`. Tipos: `checkpoint` (lote verde, passo 4), `pr-pronto` (PR verde), `erro` (subida 3, 4 ou 6; sessão que não consegue seguir), `pronto-para-voce` (baixa, migration para aplicar, saídas 7 e 8, Sinal final com issue `ready-for-human`). O `revert` e o `erro` das saídas 9 e 10 quem grava é a própria subida.
+- **Eventos:** `E evento --sessao <nome> --onda <N> --tipo <tipo> --texto "<uma frase>" [--pr <PR>]`. Tipos: `checkpoint` (lote verde, passo 4), `pr-pronto` (PR verde), `erro` (subida 3, 4 ou 6; sessão que não consegue seguir), `pronto-para-voce` (baixa, migration para aplicar, saídas 7 e 8, Sinal final com issue `ready-for-human`). O `revert`, o `erro` das saídas 9 e 10 e o `instavel` (Teste instável: o teste da main falhou e passou ao rodar de novo; sem `push:`, a onda segue) quem grava é a própria subida.
+- **O que espera você:** no `pronto-para-voce` que espera uma issue ou um PR, junte `--espera-issue <N> [...]` e `--espera-pr <PR> [...]` (`--espera-repo dono/repo` quando é de outro repo). Quando tudo isso fecha no GitHub, o PedroOS tira o "espera você" sozinho. Pendência sem issue nem PR (migration, saídas 7 e 8, mensagem para alguém) vai sem as opções e esvazia a lista: essa só sai com `resolvido`.
 - **Fim:** `E fim --sessao <nome> --onda <N> --retro "<a linha retro:>"`.
 - **Resolvido:** `E resolvido --sessao <nome> --onda <N> --texto "<o que acabou>"` quando o que esperava o humano acabou (migration aplicada, saída 7 ou 8 que passou, pedido do passo 4 atendido). A onda sai do "espera você"; issue ainda em `baixa` mantém o selo. Sem nada pendente, não muda nada. A baixa que o humano resolve depois, em outra sessão, sai sozinha: a subida que mergeia o PR dela roda `estado_onda.py mergeadas`.
 
@@ -122,7 +123,7 @@ Cada PR que entrou: `E issue ... --status mergeado`. Saída 0 depois de um `pron
 
 ### 6. Fim
 
-Relatório de até 15 linhas (linha final da subida, issue · PR · versão, baixas, medição, intervalo entre os PRs verdes da onda anterior e o primeiro implementador desta; meta: menos de 2 min; última linha `retro: recomendada (<motivo>)` se houve baixa, rollback, revert, conflito na subida ou corretor em `effort: max`, senão `retro: dispensável`; quem roda é o humano, com `/retro-onda <nome>-onda<N>`), comentado em cada PRD da onda (issue sem PRD: no PR) com `<!-- automacao -->` e `## Onda <nome> <N>`. Passagem que ficou para depois da subida (passo 4): lance agora. Fila vazia: **Sinal final** (fechadas, ready-for-human, bloqueadas, deploys); com issue `ready-for-human` sobrando, evento `pronto-para-voce` "fila vazia, <n> issues com você". Por último, `E fim ... --proxima <N+1> --retro "<a linha retro:>"` quando a onda seguinte foi lançada, ou `--ultima` no lugar de `--proxima` com a fila vazia (o PedroOS fala qual dos dois). Encerre depois do comentário.
+Relatório de até 15 linhas (linha final da subida, issue · PR · versão, baixas, medição, intervalo entre os PRs verdes da onda anterior e o primeiro implementador desta; meta: menos de 2 min; última linha `retro: recomendada (<motivo>)` se houve baixa, rollback, revert, conflito na subida ou corretor em `effort: max`, senão `retro: dispensável`; quem roda é o humano, com `/retro-onda <nome>-onda<N>`), comentado em cada PRD da onda (issue sem PRD: no PR) com `<!-- automacao -->` e `## Onda <nome> <N>`. Passagem que ficou para depois da subida (passo 4): lance agora. Fila vazia: **Sinal final** (fechadas, ready-for-human, bloqueadas, deploys); com issue `ready-for-human` sobrando, evento `pronto-para-voce` "fila vazia, <n> issues com você" com `--espera-issue` dessas issues. Por último, `E fim ... --proxima <N+1> --retro "<a linha retro:>"` quando a onda seguinte foi lançada, ou `--ultima` no lugar de `--proxima` com a fila vazia (o PedroOS fala qual dos dois). Encerre depois do comentário.
 
 ## Scripts
 
@@ -130,7 +131,7 @@ Relatório de até 15 linhas (linha final da subida, issue · PR · versão, bai
 |---|---|
 | `scripts/fluxo.py [chave \| classe \| notas <skill>]` | A configuração do Projeto (`.claude/fluxo.json`), a classe de um PR e as notas de uma skill. |
 | `scripts/estado_onda.py iniciar\|issue\|evento\|fim\|resolvido\|mergeadas\|ler` | O estado da Onda em `~/.pedroos/ondas/<slug>/<sessao>-onda<N>.json` e a linha `push:` do celular. `resolvido` tira o "espera você"; `mergeadas` (chamado pela subida) tira a baixa da issue mergeada em qualquer onda do Projeto. |
-| `scripts/lancar_sessao.sh <nome> <prompt.md>` | Sessão de fundo limpa: zero MCP, plugins desligados, Opus, `high`. |
+| `scripts/lancar_sessao.sh <nome> <prompt.md>` | Sessão de fundo limpa: zero MCP, plugins desligados, Opus, `xhigh`. |
 | `scripts/sensivel.py <PR>` | Arquivo sensível no PR (lista do Projeto em `revisao-sensivel.txt`, mais a varredura de `varredura` no `fluxo.json`); exit 0 se houver. |
 | `scripts/lentes.py --pr <N>` | As Lentes que o `onda-revisor` lê no PR (`lentes/seguranca.md` quando toca login, permissão, rota ou segredo; `lentes/banco.md` quando tem migration; `lentes/design.md` quando o Projeto tem `design.guia` no `fluxo.json` e o PR muda tela) e a linha `Lentes:` do veredito. Quem roda é o revisor. |
 | `scripts/design.py subir\|descer --pr <N>`, `achados --pr <N> <arquivo>` | A Lente de design: sobe o app do PR numa pasta temporária para os prints (ou diz por que não subiu), desce depois e separa os achados: P0 e P1 para o must-fix, P2 e P3 numa issue `needs-triage` e num comentário no PR. Quem roda é o revisor. |

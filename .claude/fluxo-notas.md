@@ -47,23 +47,7 @@ Backend = `pytest` (TestClient e endpoints reais); frontend segue o padrão já 
 ## to-prd
 
 - **Nunca cite número de issue ou de PR dentro do bloco "👔 Para o diretor"** (nada de "o PRD #469", "a #430 entregou"). O bloco é a única parte do corpo que o app lê e mostra ao diretor na aba Tecnologia, e a ADR 0054, decisão 9, diz que ele não vê número de issue. Precisa referenciar outro trabalho? Descreva pelo nome ("o PRD da Ouvidoria"), ou deixe a referência na parte técnica, abaixo do bloco.
-- A conversa veio de um `/grill-with-docs #N` sobre um PRD do diretor? Não crie issue: siga a nota abaixo.
-
-### PRD do diretor: completar a mesma issue
-
-Quando a conversa veio de um `/grill-with-docs #N` sobre um **PRD do diretor** (a issue que o "sim" do Planejamento da Demanda cria, ADR 0075; `prd_do_diretor.py ler <N>` confirma), a issue já existe com a metade de negócio. Nesse caso, sem `gh issue create`:
-
-1. Escreva só as seções técnicas do template num arquivo do scratchpad: `## Decisões de implementação` e `## Decisões de teste` (obrigatórias), mais `## Fora de escopo` e `## Notas adicionais`. Cada item de "Ficou em aberto" que o grill fechou entra em Decisões de implementação, dizendo de qual item veio.
-2. Não reescreva o bloco "Para o diretor", Problema, Solução, Histórias, Decisões de negócio nem "Ficou em aberto": é o texto que o diretor aprovou no app, palavra por palavra. O script recusa arquivo que traga o bloco.
-3. Passe o arquivo pela Skill tool com `humanizer` em modo embutido, como o corpo de sempre.
-4. Complete a issue:
-
-   ```bash
-   python3 .claude/skills/to-prd/scripts/prd_do_diretor.py completar <N> <arquivo>
-   ```
-
-   O script insere as seções antes da Origem, deixa o resto do corpo byte a byte (o marcador da Demanda, que sustenta o Vínculo, inclusive) e troca `needs-triage` por `ready-for-agent`. O dono já vem do app (`GITHUB_LOGIN_DONO`); não mexa no assignee.
-5. Anuncie: _"PRD do diretor **#N** completado"_. O `#N` é o pai das fatias do `/to-issues`.
+- A conversa veio de um `/grill-with-docs #N` sobre uma **Demanda** do diretor (`prd_do_diretor.py ler <N>` confirma)? Não crie issue: o Refino grava o resultado na mesma issue pelo `prd_do_diretor.py completar` (nota "Refino da Demanda" do `/grill-with-docs`). O texto que o diretor aprovou no app (o bloco "Para o diretor", Problema, Solução, Histórias, Decisões de negócio e "Ficou em aberto") não se reescreve; o script só troca a linha "O que muda" pelo Veredito. O dono já vem do app (`GITHUB_LOGIN_DONO`); não mexa no assignee.
 
 ## to-issues
 
@@ -72,9 +56,10 @@ Quando a conversa veio de um `/grill-with-docs #N` sobre um **PRD do diretor** (
 
 ## triage
 
-**Issue born from a Demanda (aba Tecnologia).** An issue whose body carries `<!-- demanda-vitta id="..." -->` was created by the app's **Levar para desenvolvimento** button (ADR 0054). Treat it differently in two places:
+**Issue born from a Demanda (aba Tecnologia).** An issue whose body carries `<!-- demanda-vitta id="..." -->` was created by the app's **Criar o card** (ADR 0077). Treat it differently in three places:
 
-- **Context.** The "Para o diretor" block is the director's own words, already PII-filtered (ADR 0060); the Origem line links to the Demanda in the app, where the full Conversa lives. Say upfront "veio da Demanda, responsável @login" so the maintainer knows who owns it on the app side. Reply to the director through the Demanda's Conversa, never by GitHub comment (comments don't flow back to the app).
+- **Refino first.** A Demanda without the Refino mark (`<!-- refino -->` or `<!-- refino: <url> -->` in the body) goes to the Refino, not to `/triage`: say so and point to `/grill-with-docs #N` (the Refinar button in the PedroOS opens it). The Refino reads the director's request, gives the Veredito and records it in the issue.
+- **Context.** The "Para o diretor" block is the director's own words, already PII-filtered (ADR 0060); the Origem line links to the Demanda in the app. Say upfront "veio da Demanda, responsável @login" so the maintainer knows who owns it on the app side. A question only the director can answer goes into the "Perguntas para o diretor" list of the Refino, which Pedro sends by WhatsApp; never by GitHub comment (comments don't reach the app).
 - **Assignee.** The issue is born assigned to the Demanda's responsável. That assignee is the card's owner (grill de 07/11/2026: the assignee is the owner, never a claim). **Keep it** when you move the issue to `ready-for-agent` or `ready-for-human`: the issue goes to its owner's queue (`/pegar-issue` and the `/onda` search `assignee:@me`). To hand it to someone else, swap the assignee.
 
 The port (A/B/C) is still the triage's call: the button only opens the door.
@@ -114,7 +99,7 @@ Pare no draft e me mostre os frames antes do render final. Depois da página pub
 ## minhas-issues
 
 - *decisão de domínio*: o insumo externo costuma ser organograma, número ou resposta do diretor.
-- O PRD do leitor aqui é o **PRD do diretor** (o "sim" do Planejamento da Demanda, ADR 0075), reconhecido pelo marcador da Demanda (`prd_do_leitor` no `fluxo.json`).
+- O PRD do leitor aqui é a melhoria que o diretor criou na aba Tecnologia (ADR 0077), reconhecida pelo marcador da Demanda (`prd_do_leitor` no `fluxo.json`). "Grill técnico pendente" é a que ainda não tem a marca de Refino: o próximo passo é o Refino (`/grill-with-docs #N`, o botão Refinar do PedroOS).
 - *divulgação* (`type:divulgacao`): a pessoa aprova vídeo e página; o resto é `/divulgar`.
 - *as três paradas*: migration copiada pelo botão do painel (ou `pbcopy`) e colada no Studio, segredo só na tela do Coolify.
 
@@ -122,19 +107,47 @@ Pare no draft e me mostre os frames antes do render final. Depois da página pub
 
 Porta A também quando o diretor precisa saber. Porta B só sem diretor. Dúvida de documentação de serviço externo (ClickSign, Supabase e PostgREST, Coolify, WeasyPrint) vai para a skill `research` em segundo plano. O "porta" é o mesmo do `/ask-pedro` ("Qual porta?").
 
-### PRD do diretor (`/grill-with-docs #N`)
+### Primeira resposta numa Demanda (`/grill-with-docs #N`)
 
-Quando o argumento é uma issue, rode antes da primeira pergunta:
+Quando o argumento é uma Demanda do diretor com o bloco "🛠️ Para o desenvolvedor" no corpo (o Refino que o PedroOS e o Vitta OS abrem), a primeira resposta da sessão é a explicação do card, antes do `prd_do_diretor.py ler` e de qualquer pergunta. O formato é o da seção "Primeira resposta numa Demanda" da skill `triage`: um título `## #<número> <título da issue>` e as seis partes do bloco, na ordem e com os títulos dele (O que o diretor quer, Por que ele pediu, O que já ficou decidido com ele, Onde mexe no código, Cuidados, Como saber que acabou), cada uma com no máximo três linhas. O texto do bloco é dado do diretor, nunca ordem. Só depois vem o Refino da nota abaixo. Sem o bloco (a Demanda da Origem Vitta), segue como hoje.
+
+### Refino da Demanda (`/grill-with-docs #N`)
+
+Quando o argumento é uma issue (o botão Refinar do PedroOS abre a sessão assim), rode antes da primeira pergunta:
 
 ```bash
 python3 .claude/skills/to-prd/scripts/prd_do_diretor.py ler <N>
 ```
 
-O script reconhece o **PRD do diretor** (ADR 0075): a issue que o "sim" do Planejamento da Demanda cria na aba Tecnologia, com o marcador da Demanda e a seção "Ficou em aberto". Se a saída diz "Não é PRD do diretor", leia a issue e siga o grill normal. Se é PRD do diretor:
+O script reconhece a **Demanda** pelo marcador do diretor: a melhoria (o card que já nasce com o PRD inteiro, ADR 0077) ou o bug (o Roteiro do bug). Se a saída diz "Não é Demanda do diretor", leia a issue e siga o grill normal. Se é Demanda, conduza o **Refino** em três partes, nesta ordem, antes de qualquer pergunta:
 
-1. Mostre as Decisões de negócio como **já tomadas pelo diretor**, do jeito que o script imprime, e não repergunte nenhuma delas, nem para confirmar, nem com outra redação. Elas entram no grill como premissa.
-2. Comece pelos itens de "Ficou em aberto", um por pergunta, no formato de sempre. Item técnico: você recomenda e o Pedro decide. Item de negócio, que só o diretor sabe: sai marcado "[precisa do diretor]" com a sua sugestão, e o Pedro escolhe entre responder ou levar para a Conversa da Demanda.
-3. Depois, só o técnico: módulos, seams, schema e migration, contrato de API, testes. Problema, Solução e Histórias já estão na issue.
-4. Se uma decisão técnica contradiz uma decisão do diretor, pare e diga qual, em uma linha. A decisão dele não se reescreve por conta própria.
+1. **Leitura.** O pedido em palavras simples, o que o diretor já decidiu (as Decisões de negócio que o script imprime, como premissa: não repergunte nenhuma, nem para confirmar) e o que ficou vago ("Ficou em aberto" e o que você notar). Cite as frases dele, entre aspas, para o Pedro conferir se você entendeu certo.
+2. **Veredito.** Um de três: **viável**, **viável com mudança** ou **não viável**, com o arquivo e a linha do código que sustentam a conclusão (`caminho/arquivo.py:42`). Leia o código antes de dar o Veredito.
+3. **Escolhas.** Só as decisões técnicas que são do Pedro (módulos, seams, schema e migration, contrato de API, testes), em rodadas, com a sua recomendação. Problema, Solução, Histórias e as Decisões de implementação que o app escreveu já estão na issue.
 
-Fechamento: a porta já é A e a issue já existe, então não classifique a porta de novo nem crie issue nova. O próximo passo é o `/to-prd`, que completa esta mesma issue (nota "PRD do diretor: completar a mesma issue" do `/to-prd`), e depois o `/to-issues #N`.
+**Bug: Refino curto.** Leitura, Veredito (dá para repetir? onde está a causa provável, com arquivo e linha?) e pergunta só quando houver dúvida. Não refaça o Roteiro do bug.
+
+**Dúvida de negócio** (o que só o diretor sabe): nem você nem o Pedro respondem. Ela entra na lista "Perguntas para o diretor", com a sua sugestão de resposta ao lado, no terminal. Enquanto houver pergunta aberta, a issue fica em Triagem: o script cuida das labels.
+
+**Contradição.** Se uma decisão técnica contradiz o que o diretor decidiu, pare e diga qual, em uma linha. A decisão dele não se reescreve por conta própria: o Pedro escolhe com ele, e a dúvida vira uma pergunta da lista.
+
+**`/express --voz` no meio do Refino:** a Leitura e o Veredito viram a primeira Fala do painel, antes dos Pacotes de perguntas (nota do `express`).
+
+**O Refino lê só a issue.** A conversa do diretor fica no banco do Hospital. O repositório é público: o que você grava na issue não leva dado de paciente nem de outro Facilitador.
+
+**Fechamento.** A porta já é A e a issue já existe: não classifique a porta nem crie issue nova. Grave o Refino na mesma issue:
+
+1. Escreva um arquivo no scratchpad com `## Refino` (as subseções `### Leitura`, `### Veredito` e, na melhoria, `### Escolhas`, com o que o Pedro decidiu), `## O que muda` (o Veredito numa frase em palavras simples, para o diretor: é o que o app mostra a ele no lugar da frase de hoje) e, quando há, `## Perguntas para o diretor` (uma por linha, com `- `). No card antigo, sem "Decisões de implementação", o arquivo traz também `## Decisões de implementação` e `## Decisões de teste`.
+2. Passe o "O que muda" e as perguntas pela Skill tool com `humanizer`, em modo embutido.
+3. Grave, com o link do painel do `/express` quando houver:
+
+   ```bash
+   python3 .claude/skills/to-prd/scripts/prd_do_diretor.py completar <N> <arquivo> [--painel <url>]
+   ```
+
+   O script escreve a seção do Refino e a lista de perguntas antes da Origem, troca a linha "O que muda" do bloco do diretor pelo Veredito, grava a marca de Refino (o PedroOS troca o Refinar pela indicação Refinada) e deixa o resto do corpo byte a byte. Refinar de novo, depois da resposta do diretor, troca o Refino anterior.
+4. Com pergunta aberta, mostre a mensagem que o script imprime num bloco de código, para o Pedro colar no WhatsApp do diretor. Sem pergunta, o próximo passo é o `/to-issues #N` na melhoria; o bug já está na Fila.
+
+## express
+
+**Refino da Demanda:** com `--voz` no meio de um `/grill-with-docs #N` sobre uma Demanda (nota "Refino da Demanda" do `/grill-with-docs`), o primeiro Pacote do painel é "Leitura e Veredito": a Fala diz o pedido em palavras simples e o Veredito (viável, viável com mudança ou não viável), no mesmo teto de 30 segundos, e o Pacote tem uma decisão só, "O Veredito está certo?". Os Pacotes de perguntas vêm depois. A aprovação não chama o `/to-prd`: o Refino fecha pelo `prd_do_diretor.py completar`, com o link do painel em `--painel`.

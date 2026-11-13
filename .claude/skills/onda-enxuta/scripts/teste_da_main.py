@@ -10,7 +10,11 @@ squashes que o lote pos na main, na ordem.
      cada squash do lote, na ordem. O primeiro vermelho e o culpado. Main ja vermelha antes do lote, ou
      nenhum squash vermelho (quebrou por um merge de fora do lote): a Onda quebra, nada e desfeito.
      Vermelho so conta repetido em RODADAS_DO_VERMELHO rodadas no mesmo commit; o commit que falha e
-     depois passa tem um teste instavel, e a Onda quebra sem desfazer nada (um PR inocente nao e culpado).
+     depois passa tem um teste instavel, e nada e desfeito (um PR inocente nao e culpado).
+  1b. A ponta que falha e depois passa e o Teste instavel (issue #531): a main esta verde, a Onda segue,
+     e o Estado da Onda ganha o evento `instavel` com o nome dos testes que falharam na primeira rodada
+     (sem `push:` e sem mudar o estado). Na main de antes do lote ou num squash, com a ponta vermelha
+     de verdade, a Onda quebra como antes: a main segue vermelha.
   3. O revert do culpado sobre a ponta da main e testado aqui; verde, vira o PR `revert/<chave>-pr<N>`,
      que espera o CI e entra pela API, como o revert do rollback.
   4. Cada issue que o PR revertido fechava volta para `ready-for-agent`, com o fim da falha num
@@ -38,6 +42,7 @@ VERMELHO = "vermelho"
 INSTAVEL = "instavel"
 RODADAS_DO_VERMELHO = 3  # um vermelho so conta se repete: o teste que falha 1 em 5 nao acha culpado
 ESTADO = Path(__file__).resolve().parent / "estado_onda.py"
+LIMITE_DOS_NOMES = 200  # caracteres dos nomes dos testes no aviso de Teste instavel; o resto vira "e mais N"
 FIM_DA_SAIDA = 60  # linhas da falha que vao no PR do revert e na issue reaberta, como o `tail -60` da Onda
 TETO_S = 30 * 60  # o teste que nao termina conta como vermelho
 PRAZO_DO_CI_S = 20 * 60  # o CI do merge que nao termina nisso nao segura mais o teste da main
@@ -63,14 +68,54 @@ def git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProces
 
 
 def testar(wt: Path, comando: str, ref: str) -> tuple[bool, str]:
-    """Roda o teste do Projeto no `ref`. Devolve (verde, o fim da saida)."""
+    """Roda o teste do Projeto no `ref`. Devolve (verde, a saida inteira)."""
     git(wt, "checkout", "-q", "-f", "--detach", ref)
     try:
         proc = subprocess.run(comando, shell=True, cwd=str(wt), capture_output=True, text=True, encoding="utf-8",
                               errors="replace", timeout=TETO_S)
     except subprocess.TimeoutExpired:
         return False, f"o teste passou de {TETO_S // 60} min e foi cortado"
-    return proc.returncode == 0, "\n".join((proc.stdout + proc.stderr).strip().splitlines()[-FIM_DA_SAIDA:])
+    return proc.returncode == 0, (proc.stdout + proc.stderr).strip()
+
+
+def fim_da(saida: str) -> str:
+    """As ultimas FIM_DA_SAIDA linhas da saida, para o PR do revert e a issue reaberta."""
+    return "\n".join(saida.splitlines()[-FIM_DA_SAIDA:])
+
+
+# O nome do teste que falhou, nos relatorios que o teste da main imprime: o resumo do pytest
+# (`FAILED arq::Caso::teste - erro`), o do unittest (`FAIL: teste (mod.Caso.teste)`) e o do vitest
+# (` FAIL  arq.test.ts > bloco > teste`).
+NOME_DO_TESTE = (
+    re.compile(r"^(?:FAILED|ERROR) ([^\s(]\S*)"),
+    re.compile(r"^(?:FAIL|ERROR): (.+?)\s*$"),
+    re.compile(r"^\s*FAIL\s+(\S+\.\w+ > .+?)\s*$"),
+)
+
+
+def testes_que_falharam(saida: str) -> list[str]:
+    """Os nomes dos testes que falharam, na ordem e sem repetir. Sem nenhum reconhecido, a ultima linha."""
+    nomes: list[str] = []
+    for linha in saida.splitlines():
+        for padrao in NOME_DO_TESTE:
+            achado = padrao.match(linha)
+            if achado and achado[1] not in nomes:
+                nomes.append(achado[1])
+                break
+    return nomes or (saida.splitlines() or ["sem saída"])[-1:]
+
+
+def nomes_do_aviso(nomes: list[str]) -> str:
+    """Os nomes do aviso de Teste instavel, cortados em LIMITE_DOS_NOMES: entram os nomes inteiros que
+    cabem, na ordem, e o resto vira ` e mais N`. O primeiro sempre entra; maior que o limite, sai cortado com `…`."""
+    texto = nomes[0] if len(nomes[0]) <= LIMITE_DOS_NOMES else nomes[0][:LIMITE_DOS_NOMES] + "…"
+    usados = 1
+    for nome in nomes[1:]:
+        if len(texto) + 2 + len(nome) > LIMITE_DOS_NOMES:
+            break
+        texto += ", " + nome
+        usados += 1
+    return texto + (f" e mais {len(nomes) - usados}" if usados < len(nomes) else "")
 
 
 def criar_worktree(raiz: Path, wt: Path) -> None:
@@ -129,14 +174,15 @@ class Quebrou(Exception):
 
 
 def veredito(wt: Path, comando: str, ref: str) -> tuple[str, str]:
-    """VERDE, VERMELHO ou INSTAVEL no `ref`, e a falha. Um verde basta (quebra de verdade nao passa); o
-    vermelho roda de novo ate RODADAS_DO_VERMELHO vezes, e um verde no meio faz o commit INSTAVEL."""
-    falha = ""
+    """VERDE, VERMELHO ou INSTAVEL no `ref`, e a falha da primeira rodada. Um verde basta (quebra de
+    verdade nao passa); o vermelho roda de novo ate RODADAS_DO_VERMELHO vezes, e um verde no meio faz o
+    commit INSTAVEL."""
+    falha = None
     for rodada in range(RODADAS_DO_VERMELHO):
         verde, saida = testar(wt, comando, ref)
         if verde:
-            return (VERDE if rodada == 0 else INSTAVEL), falha
-        falha = saida
+            return (VERDE if rodada == 0 else INSTAVEL), falha or ""
+        falha = saida if falha is None else falha
     return VERMELHO, falha
 
 
@@ -146,7 +192,7 @@ def primeiro_vermelho(wt: Path, comando: str, merges: list[Merge]) -> tuple[Merg
     for m in merges:
         estado, falha = veredito(wt, comando, m.sha)
         if estado != VERDE:
-            return m, estado, falha
+            return m, estado, fim_da(falha)
     return None, VERDE, ""
 
 
@@ -213,19 +259,23 @@ def quebrar(raiz: Path, chave: str, motivo: str, pr: int | None) -> str:
 
 def depois_do_merge(raiz: Path, chave: str, comando: str, merges: list[Merge], github, wt: Path) -> str:
     """O passo inteiro. `github` abre, espera e mergeia o PR do revert e reabre a issue (`entregar`,
-    `mergear`, `reabrir`); `wt` e o caminho do worktree descartavel. Devolve VERDE, REVERTIDA ou QUEBRADA."""
+    `mergear`, `reabrir`); `wt` e o caminho do worktree descartavel. Devolve VERDE, INSTAVEL, REVERTIDA ou
+    QUEBRADA."""
     git(raiz, "fetch", "-q", "origin", "main")
     criar_worktree(raiz, wt)
     try:
         ponta = git(wt, "rev-parse", "HEAD").stdout.strip()
         esperar_o_ci(raiz, ponta)
-        estado, _ = veredito(wt, comando, ponta)
+        estado, falha = veredito(wt, comando, ponta)
         if estado == VERDE:
             print(f"teste da main: verde em {ponta[:8]}")
             return VERDE
         if estado == INSTAVEL:
-            return quebrar(raiz, chave, f"o teste da main falhou e depois passou em {ponta[:8]}: teste instável, "
-                           "nenhum merge foi desfeito", None)
+            nomes = nomes_do_aviso(testes_que_falharam(falha))
+            print(f"instável: {nomes} (falhou e depois passou em {ponta[:8]}); a main está verde e a Onda segue")
+            registrar(raiz, chave, "instavel", f"{nomes} falhou e depois passou na main "
+                      f"({ponta[:8]}); nenhum merge foi desfeito", None)
+            return INSTAVEL
         # o ultimo ponto verde e a main de antes do primeiro squash do lote (o pai dele)
         base = git(wt, "rev-parse", f"{merges[0].sha}^").stdout.strip()
         estado, _ = veredito(wt, comando, base)

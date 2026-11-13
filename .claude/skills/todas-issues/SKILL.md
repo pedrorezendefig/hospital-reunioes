@@ -55,7 +55,7 @@ Sem argumento, vale a leitura que o PedroOS guardou nos últimos 5 minutos. Com 
 
 ## O que a saída tem
 
-- `## <Categoria>`: Pessoal, Vitta Tech, Globo e Outros, na ordem do `projetos/categorias.json` do PedroOS. Categoria sem nada para mostrar não aparece.
+- `## <Categoria>`: Pessoal, Vitta Tech, Globo e Outros, na ordem da Ala Projetos do PedroOS (a Vitta Tech vem do topic `vitta-tech` no GitHub). Categoria sem nada para mostrar não aparece.
 - `### <Projeto> (<repo>): N abertas`: os Projetos da Categoria na ordem da Ala Projetos (o de commit mais recente primeiro). Projeto sem issue aberta não aparece; Projeto que o GitHub não deixou ler aparece com o erro.
 - Uma linha por issue: número, título, `[fase]` (a régua do Coletor), Responsável (o assignee; sem assignee, ninguém) e `PRD #N` quando a issue tem a seção Pai.
 - No `--plano`, cada Projeto com Onda mostra a sessão, o `--paralelo`, as ondas, as bloqueadas, quantas ficam fora e o caminho do prompt.

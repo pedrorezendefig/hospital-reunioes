@@ -8,6 +8,7 @@ Para cada clone git de ~/PedroDev mostra:
   - commits da principal que faltam aqui (atrás)
   - outras branches locais com commits fora da principal
   - PR aberto da branch atual (gh), com estado do merge e dos checks
+  - conflito? se juntar o que está aqui (commits e arquivos mexidos) com a principal dá conflito, simulado sem mexer em nada
   - velha? sim quando a mudança mais antiga tem mais de 7 dias ou a principal recebeu commits depois dela
 
 Uso:
@@ -20,8 +21,10 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -32,16 +35,71 @@ MAX_ARQUIVOS = 25
 VELHA_DIAS = 7
 
 
-def rodar(pasta: Path, *args: str, timeout: int = 30) -> str | None:
+def rodar(pasta: Path, *args: str, timeout: int = 30, env: dict | None = None) -> str | None:
     try:
-        r = subprocess.run(args, cwd=pasta, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(args, cwd=pasta, capture_output=True, text=True, timeout=timeout, env=env)
     except (OSError, subprocess.TimeoutExpired):
         return None
     return r.stdout.rstrip() if r.returncode == 0 else None
 
 
-def git(pasta: Path, *args: str, timeout: int = 30) -> str | None:
-    return rodar(pasta, "git", *args, timeout=timeout)
+def git(pasta: Path, *args: str, timeout: int = 30, env: dict | None = None) -> str | None:
+    return rodar(pasta, "git", *args, timeout=timeout, env=env)
+
+
+def conflito(pasta: Path, principal: str, status: list[str]) -> list[str] | None:
+    """Os arquivos que dariam conflito ao juntar o que está aqui com a principal. None: não deu para simular.
+
+    Os arquivos rastreados entram por um índice temporário (cópia do real) e um commit solto, que nenhuma branch
+    aponta; o `git merge-tree --write-tree` junta esse commit com a principal sem tocar em arquivo, índice ou branch.
+    Arquivo novo não entra no commit (seria gravar no .git todo arquivo solto, até vídeo): ele só conta quando a
+    principal já tem o mesmo caminho com outro conteúdo.
+    """
+    alvo = "HEAD"
+    if any(not l.startswith("??") for l in status):
+        real = git(pasta, "rev-parse", "--git-path", "index")
+        if not real:
+            return None
+        with tempfile.TemporaryDirectory() as d:
+            indice = Path(d) / "index"
+            try:
+                shutil.copyfile(pasta / real, indice)
+            except OSError:
+                return None
+            env = {**os.environ, "GIT_INDEX_FILE": str(indice), "GIT_AUTHOR_NAME": "pendencias",
+                   "GIT_AUTHOR_EMAIL": "pendencias@local", "GIT_COMMITTER_NAME": "pendencias",
+                   "GIT_COMMITTER_EMAIL": "pendencias@local"}
+            arvore = git(pasta, "add", "-u", env=env) is not None and git(pasta, "write-tree", env=env)
+            alvo = arvore and git(pasta, "commit-tree", arvore, "-p", "HEAD", "-m", "pendencias", env=env)
+        if not alvo:
+            return None
+
+    try:
+        r = subprocess.run(["git", "merge-tree", "--write-tree", "--name-only", "--no-messages", principal, alvo],
+                           cwd=pasta, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if r.returncode not in (0, 1):
+        return None
+    arquivos: list[str] = []
+    for l in r.stdout.split("\n")[1:]:
+        if not l:
+            break
+        if l not in arquivos:
+            arquivos.append(l)
+
+    novos = [l[3:].strip('"') for l in status if l.startswith("??")]
+    if novos:
+        na_principal = {}
+        for l in (git(pasta, "ls-tree", "-r", principal, "--", *novos) or "").split("\n"):
+            if "\t" in l:
+                info, caminho = l.split("\t", 1)
+                na_principal[caminho] = info.split()[2]
+        if na_principal:
+            caminhos = list(na_principal)
+            aqui = (git(pasta, "hash-object", "--", *caminhos) or "").split("\n")
+            arquivos += [c for c, h in zip(caminhos, aqui) if h != na_principal[c] and c not in arquivos]
+    return arquivos
 
 
 def idade(segundos: float) -> str:
@@ -113,6 +171,9 @@ def ler(pasta: Path, fetch: bool) -> dict:
             lista = json.loads(saida)
             pr = lista[0] if lista else None
 
+    a_frente_principal = [c for c in a_frente_principal if c]
+    briga = conflito(pasta, principal, status) if principal and (status or a_frente_principal) else None
+
     return {
         "pasta": pasta.name,
         "branch": branch,
@@ -124,11 +185,12 @@ def ler(pasta: Path, fetch: bool) -> dict:
         "principal_depois": principal_depois,
         "upstream": upstream,
         "nao_subiram": [c for c in nao_subiram if c],
-        "a_frente_principal": [c for c in a_frente_principal if c],
+        "a_frente_principal": a_frente_principal,
         "atras": int(atras) if atras.isdigit() else 0,
         "outras": outras,
         "sumidas": sumidas,
         "pr": pr,
+        "conflito": briga,
     }
 
 
@@ -141,6 +203,16 @@ def velha(r: dict) -> str | None:
     if andou:
         texto += f", a principal recebeu {andou} commits depois"
     return f"velha? {'sim' if d > VELHA_DIAS or andou else 'não'} ({texto})"
+
+
+def texto_conflito(arquivos: list[str] | None) -> str:
+    if arquivos is None:
+        return "conflito? não deu para simular"
+    if not arquivos:
+        return "conflito? não"
+    n = len(arquivos)
+    return (f"conflito? sim, {n} {'arquivo' if n == 1 else 'arquivos'}: {', '.join(arquivos[:5])}"
+            + (f" e mais {n - 5}" if n > 5 else ""))
 
 
 def tem_algo(r: dict) -> bool:
@@ -177,6 +249,8 @@ def imprimir(r: dict) -> list[str]:
     v = velha(r)
     if v and (r["status"] or r["a_frente_principal"]):
         s.append(v)
+    if r["principal"] and (r["status"] or r["a_frente_principal"]):
+        s.append(texto_conflito(r["conflito"]))
     if r["pr"]:
         p = r["pr"]
         s.append(f"PR aberto: #{p['number']} {p['title']}  ·  mergeable={p['mergeable']}  ·  "

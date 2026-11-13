@@ -12,10 +12,13 @@ Uso (sempre da raiz do repositório do Projeto, que tem o `.claude/fluxo.json`):
                            [--descricao-valor "o que a Onda entrega, numa frase"]
     estado_onda.py issue   --sessao onda-a --onda 1 --numero 40 [--pr 77] [--status verde]
     estado_onda.py evento  --sessao onda-a --onda 1 --tipo erro --texto "..." [--pr 77]
+    estado_onda.py evento  --sessao onda-a --onda 1 --tipo pronto-para-voce --texto "..."
+                           [--espera-issue 40 ...] [--espera-pr 77 ...] [--espera-repo dono/repo]
     estado_onda.py fim     --sessao onda-a --onda 1 [--proxima 2 | --ultima] [--retro "dispensável"]
     estado_onda.py resolvido --sessao onda-a --onda 1 --texto "migration 124 aplicada"
+                             [--espera-fechada issue:dono/repo#40 pr:dono/repo#77 ...]
     estado_onda.py mergeadas --issues 40 41 [--texto "subida onda-a-onda2b"]
-    estado_onda.py retro   --sessao onda-a --onda 1 [--candidata 1 "check do semáforo" ...]
+    estado_onda.py retro   --sessao onda-a --onda 1 [--analise analise-2026-11-12] [--candidata 1 "check do semáforo" ...]
     estado_onda.py retro-dispensada --sessao onda-a --onda 1
     estado_onda.py ler     --sessao onda-a --onda 1
 
@@ -24,7 +27,9 @@ fluxo.json, imprime uma linha `push: <mensagem>`. A sessão manda essa linha, li
 pelo `PushNotification`. A mensagem termina com o comando para entrar na sessão
 (`claude attach <nome>`). Evento repetido (mesmo tipo, texto e PR) não entra de novo
 nem gera `push:`. O `revert` (a subida desfez o merge que quebrou o teste da main, issue
-#327) não muda o estado da onda: a main voltou ao verde.
+#327) não muda o estado da onda: a main voltou ao verde. O `instavel` (o teste da main falhou e
+passou ao rodar de novo, issue #531) também não muda o estado e não vai ao celular: é aviso no
+cartão, com o nome do teste.
 
 `resolvido` tira o "espera você" (e o "quebrou") quando a pendência acabou: a onda volta
 para `terminada` (já teve `fim`) ou `rodando`, com o evento `resolvido`. Enquanto alguma
@@ -32,12 +37,22 @@ issue da onda segue em `baixa`, o estado continua `pronto-para-voce`. Sem nada p
 não muda nada. `mergeadas` é o que o `fechar_onda.py` chama depois do merge: em todas as
 ondas do Projeto, a issue do lote que estava em `baixa` vira `mergeado` e a onda é resolvida.
 
+`espera` (#532) é a lista do que a Onda espera do humano no GitHub, `{tipo: issue|pr, repo, numero}`,
+gravada pelo `evento pronto-para-voce` com `--espera-issue` e `--espera-pr` (repo do `origin`, ou
+`--espera-repo`). O `pronto-para-voce` novo sem nenhuma das duas (migration, mensagem para alguém)
+esvazia a lista: o GitHub não diz quando essa pendência acaba. O PedroOS confere a lista e, quando tudo
+fechou, roda `resolvido --espera-fechada` com os itens que conferiu: se a lista no arquivo está vazia ou
+mudou desde a leitura dele, nada é gravado (saída 2); senão, a issue em `baixa` que a lista cobre (pelo número
+ou pelo PR) vira `mergeado`, a lista esvazia e a onda é resolvida. A onda que sai do "espera você" também esvazia a lista.
+
 `--descricao-valor` grava a Descrição de valor da Onda no campo `descricao_valor` (no `iniciar` novo
 ou na retomada); sem ela, o arquivo não ganha o campo.
 
 `retro` grava a Retro feita, com as Candidatas aceitas (número na Retro e título curto; nenhuma
 também vale), e `retro-dispensada` grava a dispensa. Os dois escrevem o `registro_retro` e, rodados
-de novo, substituem o que estava lá.
+de novo, substituem o que estava lá. Com `--analise <id>` (a Análise das Retros, `/retro-onda --todas`),
+cada Candidata guarda o id da análise: o número é o da Candidata comum, e a linha
+`Candidata: <id> #<n>` no PR de correção a dá por corrigida em todas as Ondas que a têm.
 
 Saída 0, ou 2 com o motivo no stderr.
 """
@@ -60,11 +75,16 @@ import fluxo as config_do_fluxo  # noqa: E402
 
 CONTRATO = 1
 ESTADOS = ("rodando", "pronto-para-voce", "erro", "terminada")
-TIPOS = ("checkpoint", "pr-pronto", "erro", "pronto-para-voce", "terminada", "revert")
+TIPOS = ("checkpoint", "pr-pronto", "erro", "pronto-para-voce", "terminada", "revert", "instavel")
 NO_CELULAR = ("erro", "pronto-para-voce", "revert")
 PENDENTES = ("pronto-para-voce", "erro")
+TIPOS_DE_ESPERA = ("issue", "pr")
 STATUS_DA_ISSUE = ("fila", "implementando", "revisao", "correcao", "verde", "baixa", "mergeado")
+REPO_VALIDO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+ITEM_DA_ESPERA = re.compile(r"^(issue|pr):([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#([1-9][0-9]*)$")
 NOME_VALIDO = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
+# O id da Análise das Retros, como o PedroOS lê na linha `Candidata: <id> #<n>` (app/server/candidatas.js).
+ANALISE = re.compile(r"analise-[A-Za-z0-9_-]{1,40}")
 
 
 def agora() -> str:
@@ -152,6 +172,7 @@ def novo_estado(cfg: dict, base: Path, sessao: str, onda: int, prd: int | None, 
         "fim": None,
         "issues": [{"numero": n, "pr": None, "status": "fila"} for n in issues],
         "eventos": [],
+        "espera": [],
         "retro": None,
         "registro_retro": None,
         "proxima": None,
@@ -181,6 +202,44 @@ def registrar_evento(estado: dict, tipo: str, texto: str, pr: int | None) -> boo
     return True
 
 
+def acrescentar_espera(estado: dict, repo: str, issues: list[int], prs: list[int]) -> None:
+    """Junta à `espera` o que a Onda espera do humano no GitHub, sem repetir."""
+    lista = estado.setdefault("espera", [])
+    for tipo, numeros in (("issue", issues), ("pr", prs)):
+        for n in numeros:
+            item = {"tipo": tipo, "repo": repo, "numero": n}
+            if item not in lista:
+                lista.append(item)
+
+
+def item_da_espera(valor: str) -> dict:
+    """`issue:dono/repo#40` ou `pr:dono/repo#77` -> o item da `espera`."""
+    m = ITEM_DA_ESPERA.match(valor)
+    if not m:
+        raise argparse.ArgumentTypeError(f"item da espera inválido: {valor!r} (use issue:dono/repo#40 ou pr:dono/repo#77)")
+    return {"tipo": m[1], "repo": m[2], "numero": int(m[3])}
+
+
+def mesma_espera(estado: dict, conferidos: list[dict]) -> bool:
+    """A `espera` do arquivo, agora, é a que o PedroOS conferiu (e não está vazia)."""
+    def chaves(itens: list[dict]) -> set:
+        return {(e.get("tipo"), str(e.get("repo", "")).lower(), e.get("numero")) for e in itens}
+    atual = chaves(estado.get("espera") or [])
+    return bool(atual) and atual == chaves(conferidos)
+
+
+def tirar_baixa_da_espera(estado: dict) -> None:
+    """A issue em `baixa` que a `espera` cobre (pelo número ou pelo PR dela) fechou: vira `mergeado`."""
+    repo = estado.get("repo")
+    do_repo = [e for e in estado.get("espera") or [] if e.get("repo") == repo]
+    issues = {e["numero"] for e in do_repo if e.get("tipo") == "issue"}
+    prs = {e["numero"] for e in do_repo if e.get("tipo") == "pr"}
+    for i in estado["issues"]:
+        if i["status"] == "baixa" and (i["numero"] in issues or (i.get("pr") is not None and i["pr"] in prs)):
+            i["status"] = "mergeado"
+    estado["espera"] = []
+
+
 def resolver(estado: dict, texto: str) -> bool:
     """Dá baixa no que esperava o humano. False se nada esperava."""
     if estado["estado"] not in PENDENTES:
@@ -190,6 +249,7 @@ def resolver(estado: dict, texto: str) -> bool:
         estado["estado"] = "pronto-para-voce"
     else:
         estado["estado"] = "terminada" if estado.get("fim") else "rodando"
+        estado["espera"] = []
     return True
 
 
@@ -236,6 +296,10 @@ def main(argv: list[str]) -> int:
     p.add_argument("--tipo", choices=TIPOS, required=True)
     p.add_argument("--texto", required=True)
     p.add_argument("--pr", type=int)
+    p.add_argument("--espera-issue", type=int, nargs="+", default=[],
+                   help="no pronto-para-voce: a issue que espera o humano (repita o número para várias)")
+    p.add_argument("--espera-pr", type=int, nargs="+", default=[], help="no pronto-para-voce: o PR que espera o humano")
+    p.add_argument("--espera-repo", help="dono/repo da issue ou do PR que espera (padrão: o da Onda)")
     p = sub.add_parser("fim", parents=[comuns])
     p.add_argument("--retro")
     seguinte = p.add_mutually_exclusive_group()
@@ -243,11 +307,14 @@ def main(argv: list[str]) -> int:
     seguinte.add_argument("--ultima", action="store_true", help="fila vazia: não há onda seguinte")
     sub.add_parser("ler", parents=[comuns])
     p = sub.add_parser("retro", parents=[comuns])
+    p.add_argument("--analise", help="id da Análise das Retros (analise-<AAAA-MM-DD>) que deu o número das Candidatas")
     p.add_argument("--candidata", nargs=2, action="append", default=[], metavar=("NUMERO", "TITULO"),
                    help="Candidata aceita: o número dela na Retro e o título curto (repita para cada uma)")
     sub.add_parser("retro-dispensada", parents=[comuns])
     p = sub.add_parser("resolvido", parents=[comuns])
     p.add_argument("--texto", required=True, help="o que resolveu, numa frase")
+    p.add_argument("--espera-fechada", type=item_da_espera, nargs="+", metavar="tipo:dono/repo#N",
+                   help="o que o PedroOS conferiu fechado no GitHub (toda a `espera`): a baixa que ela cobre vira mergeado")
     p = sub.add_parser("mergeadas")
     p.add_argument("--issues", type=int, nargs="+", required=True)
     p.add_argument("--texto", help="de onde veio o merge (a chave da subida)")
@@ -278,6 +345,10 @@ def main(argv: list[str]) -> int:
             return 0
         estado = ler(arq)
         if args.cmd == "resolvido":
+            if args.espera_fechada and estado["estado"] in PENDENTES:
+                if not mesma_espera(estado, args.espera_fechada):
+                    raise config_do_fluxo.Erro("a espera no arquivo está vazia ou mudou depois da conferência: nada gravado")
+                tirar_baixa_da_espera(estado)
             if resolver(estado, args.texto):
                 gravar(arq, estado)
             return 0
@@ -287,6 +358,10 @@ def main(argv: list[str]) -> int:
                 candidatas = [{"numero": int(n), "titulo": t} for n, t in (args.candidata if feita else [])]
             except ValueError:
                 raise config_do_fluxo.Erro("o número da Candidata precisa ser inteiro")
+            if feita and args.analise is not None:
+                if not ANALISE.fullmatch(args.analise):
+                    raise config_do_fluxo.Erro("o id da Análise das Retros tem a forma analise-<AAAA-MM-DD>")
+                candidatas = [{**c, "analise": args.analise} for c in candidatas]
             estado["registro_retro"] = {"tipo": "feita" if feita else "dispensada", "em": agora(),
                                         "candidatas": candidatas}
             gravar(arq, estado)
@@ -306,7 +381,17 @@ def main(argv: list[str]) -> int:
             gravar(arq, estado)
             return 0
         if args.cmd == "evento":
+            espera = args.espera_issue or args.espera_pr
+            if (espera or args.espera_repo) and args.tipo != "pronto-para-voce":
+                raise config_do_fluxo.Erro("--espera-issue, --espera-pr e --espera-repo só valem no pronto-para-voce")
+            repo = args.espera_repo or estado.get("repo")
+            if espera and not (repo and REPO_VALIDO.match(repo)):
+                raise config_do_fluxo.Erro(f"repo da espera inválido ou ausente: {repo!r} (use --espera-repo dono/repo)")
             novo = registrar_evento(estado, args.tipo, args.texto, args.pr)
+            if espera:
+                acrescentar_espera(estado, repo, args.espera_issue, args.espera_pr)
+            elif novo and args.tipo == "pronto-para-voce":
+                estado["espera"] = []
             gravar(arq, estado)
             if novo and args.tipo in NO_CELULAR and cfg.get("aviso_celular", True):
                 print(f"push: {mensagem_push(estado, args.texto)}")
