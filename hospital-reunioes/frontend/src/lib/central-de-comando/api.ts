@@ -23,6 +23,14 @@ export type TelaDaCentral = "visao-geral" | "dados-do-google" | "instagram" | `o
 export const PREFIXO_DA_LENTE = "objetivos/";
 
 /**
+ * O Objetivo da nota no Google, que tem lente própria (issue #1619). Mora aqui,
+ * e não no `NotaNoGoogle`, porque a página da lente roda no servidor e lê este
+ * valor: constante de um módulo "use client" chega ao servidor como referência,
+ * e a comparação com o identificador do endereço dava falso (issue #1725).
+ */
+export const OBJETIVO_NOTA_NO_GOOGLE = "google-reputacao";
+
+/**
  * O caminho da leitura de uma tela, depois da `BASE_CENTRAL`. O identificador
  * da lente vem do endereço, que é digitável, e vai codificado (issue #847): uma
  * barra, um espaço ou uma interrogação nele não mudam a rota nem a query.
