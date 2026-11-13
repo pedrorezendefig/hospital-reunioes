@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, Loader2, Mail } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Mail, ShieldAlert } from "lucide-react";
 import { AdminModal } from "@/components/admin/AdminModal";
+import { estaComONucleo } from "@/lib/ouvidoria/nucleo";
 import {
   DESFECHOS,
   LABEL_DESFECHO,
@@ -11,7 +12,7 @@ import {
 } from "@/lib/ouvidoria/validacao";
 
 interface EncerrarModalProps {
-  manifestacao: { id: string; protocolo: string } | null;
+  manifestacao: { id: string; protocolo: string; nsp_decisao?: string | null } | null;
   token: string | null;
   onClose: () => void;
   onEncerrada: () => void;
@@ -20,6 +21,32 @@ interface EncerrarModalProps {
 const CAMPO =
   "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40";
 const ROTULO = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1";
+
+interface TrechoApontado {
+  trecho: string;
+  motivo: string;
+}
+
+/**
+ * A salvaguarda da resposta (issue #1627, ADR 0087, decisão 6): os trechos que
+ * o agente aponta no texto, ou lista vazia quando ele não leu. Qualquer falha
+ * (rede, servidor, leitura que não houve) vira lista vazia, e o envio segue
+ * normalmente: a salvaguarda nunca trava o encerramento.
+ */
+async function trechosApontados(id: string, token: string, texto: string): Promise<TrechoApontado[]> {
+  try {
+    const res = await fetch(`/api/ouvidoria/manifestacoes/${id}/salvaguarda-da-resposta`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ texto }),
+    });
+    if (!res.ok) return [];
+    const corpo = await res.json();
+    return Array.isArray(corpo?.trechos) ? corpo.trechos : [];
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Encerrar com desfecho (issue #326, ADR 0034).
@@ -47,26 +74,49 @@ const ROTULO = "block text-xs font-semibold text-slate-500 uppercase tracking-wi
  * ouvidor escreve achando que é nota interna, e nome de colaborador ou medida
  * disciplinar sai por email assinado pelo domínio do hospital, que é
  * exatamente o que o ADR 0042 proíbe no corpo desses dois emails.
+ *
+ * No caso com o selo Em análise pelo NSP (issue #1627), o primeiro clique em
+ * Encerrar pede ao agente as frases que admitem ou negam falha. Se ele aponta
+ * alguma, o encerramento para e mostra os trechos; o ouvidor edita o texto
+ * (e o próximo clique lê de novo) ou envia assim mesmo. Caso sem selo não
+ * chama o agente.
  */
 export function EncerrarModal({ manifestacao, token, onClose, onEncerrada }: EncerrarModalProps) {
   const [desfecho, setDesfecho] = useState<Desfecho | "">("");
   const [descricao, setDescricao] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // Os trechos apontados para o texto que está no campo. Nulo é "ainda não
+  // lido"; mudar o texto volta a nulo, e o próximo clique lê de novo.
+  const [trechos, setTrechos] = useState<TrechoApontado[] | null>(null);
 
   useEffect(() => {
     if (!manifestacao) return;
     setDesfecho("");
     setDescricao("");
     setErro(null);
+    setTrechos(null);
   }, [manifestacao]);
 
   const pronto = Boolean(desfecho) && descricaoDeDesfechoValida(descricao) && !salvando;
+  const comAviso = Boolean(trechos?.length);
+  // Enquanto o agente lê (pode levar segundos) e o envio sai, o modal não fecha
+  // e o texto e o desfecho não mudam: o encerrar() pendente usa os valores do
+  // clique, e um Cancelar ou uma edição no meio seriam ignorados em silêncio.
+  const fechar = salvando ? () => {} : onClose;
 
   async function encerrar() {
     if (!manifestacao || !token || !desfecho) return;
     setSalvando(true);
     setErro(null);
+    if (estaComONucleo(manifestacao) && trechos === null) {
+      const apontados = await trechosApontados(manifestacao.id, token, descricao.trim());
+      setTrechos(apontados);
+      if (apontados.length > 0) {
+        setSalvando(false);
+        return;
+      }
+    }
     try {
       const res = await fetch(`/api/ouvidoria/manifestacoes/${manifestacao.id}/transicoes`, {
         method: "POST",
@@ -94,7 +144,7 @@ export function EncerrarModal({ manifestacao, token, onClose, onEncerrada }: Enc
   return (
     <AdminModal
       open={Boolean(manifestacao)}
-      onClose={onClose}
+      onClose={fechar}
       title={manifestacao ? `Encerrar ${manifestacao.protocolo}` : "Encerrar"}
       description="O caso grava o desfecho, sai da fila de tramitação e o desfecho vai por email a quem manifestou."
       icon={<CheckCircle2 className="w-5 h-5" />}
@@ -110,6 +160,7 @@ export function EncerrarModal({ manifestacao, token, onClose, onEncerrada }: Enc
                 key={opcao}
                 type="button"
                 onClick={() => setDesfecho(opcao)}
+                disabled={salvando}
                 className={`text-left px-3 py-2.5 rounded-xl border transition-colors ${
                   desfecho === opcao
                     ? "bg-primary/10 border-primary/40 text-primary"
@@ -148,10 +199,35 @@ export function EncerrarModal({ manifestacao, token, onClose, onEncerrada }: Enc
             id="encerrar-descricao"
             className={`${CAMPO} min-h-[90px]`}
             value={descricao}
-            onChange={(e) => setDescricao(e.target.value)}
+            disabled={salvando}
+            onChange={(e) => {
+              setDescricao(e.target.value);
+              setTrechos(null);
+            }}
             placeholder="O que foi apurado e como o caso terminou, dito para quem reclamou. Sem este texto o encerramento não sai."
           />
         </div>
+
+        {comAviso && (
+          <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm">
+            <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="space-y-2">
+              <p className="leading-relaxed">
+                <strong className="font-semibold">Este caso está em análise pelo Núcleo.</strong> O agente
+                apontou frases que admitem ou negam falha. A resposta acolhe, diz que o caso está em análise e
+                não antecipa a conclusão. Edite o texto ou envie assim mesmo.
+              </p>
+              <ul className="space-y-1.5">
+                {trechos!.map((t, i) => (
+                  <li key={i}>
+                    <span className="block font-medium">&quot;{t.trecho}&quot;</span>
+                    <span className="block text-xs text-amber-800">{t.motivo}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
 
         {erro && (
           <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
@@ -163,8 +239,9 @@ export function EncerrarModal({ manifestacao, token, onClose, onEncerrada }: Enc
         <div className="flex justify-end gap-2">
           <button
             type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-100 transition-colors"
+            onClick={fechar}
+            disabled={salvando}
+            className="px-4 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Cancelar
           </button>
@@ -175,7 +252,7 @@ export function EncerrarModal({ manifestacao, token, onClose, onEncerrada }: Enc
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {salvando && <Loader2 className="w-4 h-4 animate-spin" />}
-            Encerrar caso
+            {comAviso ? "Enviar assim mesmo" : "Encerrar caso"}
           </button>
         </div>
       </div>

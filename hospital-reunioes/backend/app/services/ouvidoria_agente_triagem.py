@@ -132,6 +132,40 @@ def triar_avaliacao(supabase, avaliacao: dict) -> None:
         )
 
 
+def apontar_trechos_da_resposta(texto: str) -> list[dict] | None:
+    """A salvaguarda da resposta no caso com o selo do Núcleo (issue #1627,
+    decisão 6). Devolve as frases da resposta ao manifestante que admitem ou
+    negam falha, cada uma com o motivo, ou None quando o agente não leu (sem
+    chave, falha, resposta fora do formato). Quem dispara é o clique do
+    ouvidor, então a chamada não entra no teto diário da chegada. Nunca
+    levanta: o envio não depende dela."""
+    cliente = _cliente()
+    if cliente is None:
+        return None
+    try:
+        resposta = _perguntar(cliente, "ouvidoria_salvaguarda_resposta", pseudonimizar(texto))
+        return _trechos_da_resposta(resposta)
+    except Exception as exc:
+        logger.warning("[Ouvidoria] Salvaguarda da resposta falhou (%s)", type(exc).__name__)
+        return None
+
+
+def _trechos_da_resposta(resposta: dict) -> list[dict]:
+    """Os trechos apontados, sanitizados. Trecho sem texto ou sem motivo cai:
+    o ouvidor precisa saber qual frase e por quê."""
+    brutos = resposta.get("trechos")
+    if not isinstance(brutos, list):
+        raise ValueError("a resposta veio sem a lista de trechos")
+    trechos = []
+    for item in brutos:
+        if not isinstance(item, dict):
+            continue
+        trecho, motivo = _linha(item.get("trecho")), _linha(item.get("motivo"))
+        if trecho and motivo:
+            trechos.append({"trecho": trecho, "motivo": motivo})
+    return trechos
+
+
 def _reservar(supabase) -> bool:
     """Reserva uma das chamadas do dia. Só um `true` explícito do banco libera:
     resposta em qualquer outro formato conta como teto, que é o lado seguro."""

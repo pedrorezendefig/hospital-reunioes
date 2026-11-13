@@ -45,6 +45,7 @@ from app.dependencies import (
 from app.limiter import limiter
 from app.routers.ana import _CAMPOS_PROTOCOLO_TUPLA
 from app.services import (
+    ai_processor,
     audit,
     ouvidoria_acionamentos,
     ouvidoria_acuse,
@@ -4868,6 +4869,52 @@ async def enviar_ao_nucleo(
         "setor": nucleo.setor,
         "prazo": ciencia.get("prazo"),
     }
+
+
+class PedidoSalvaguarda(BaseModel):
+    """A resposta ao manifestante que o ouvidor está para enviar."""
+
+    texto: str = Field(min_length=1, max_length=10_000)
+
+
+@router.post("/manifestacoes/{manifestacao_id}/salvaguarda-da-resposta")
+@limiter.limit("20/minute")
+async def salvaguardar_resposta(
+    request: Request,
+    manifestacao_id: str,
+    pedido: PedidoSalvaguarda,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """A salvaguarda da resposta no caso com o selo do Núcleo (issue #1627,
+    ADR 0087, decisão 6).
+
+    Antes de a resposta sair para o manifestante, o agente aponta as frases que
+    admitem ou negam falha, e o ouvidor decide se envia ou edita. Só o caso com
+    o selo Em análise pelo NSP chama o agente; nos outros a rota responde sem
+    leitura. `analisada` falso diz à tela que não houve leitura (sem selo, sem
+    chave ou falha do agente), e a tela envia normalmente: a salvaguarda nunca
+    trava o envio."""
+    try:
+        atual = (
+            supabase.table("ouvidoria_protocolos")
+            .select("id, nsp_decisao, anonimizada_em, apagamento_pedido_em")
+            .eq("id", manifestacao_id)
+            .execute()
+        )
+    except APIError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada") from exc
+    if not atual.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
+    if atual.data[0].get("nsp_decisao") != ouvidoria_nucleo.CONFIRMADO:
+        return {"analisada": False, "trechos": []}
+
+    trechos = await ai_processor.chamar_ia_fora_do_loop(
+        ouvidoria_agente_triagem.apontar_trechos_da_resposta, pedido.texto
+    )
+    if trechos is None:
+        return {"analisada": False, "trechos": []}
+    return {"analisada": True, "trechos": trechos}
 
 
 # =====================================================================
