@@ -259,6 +259,13 @@ CAMPOS_DO_INDICE = {
     # (test_ouvidoria_sigilo.py). Booleano, sem dado pessoal: diz que a pessoa
     # não se identificou, nunca quem é.
     "anonimo",
+    # O apontamento ao Núcleo de Segurança do Paciente e a decisão (issue
+    # #1621): a tela de validação aberta pela fila pergunta sobre o Núcleo
+    # quando o agente apontou e ninguém decidiu. Só a Ouvidoria os recebe na
+    # resposta (test_ouvidoria_nucleo_seguranca_paciente.py). Booleano e enum
+    # fechado, sem dado pessoal: as justificativas ficam no Dossiê.
+    "nsp_sugerido",
+    "nsp_decisao",
 }
 
 

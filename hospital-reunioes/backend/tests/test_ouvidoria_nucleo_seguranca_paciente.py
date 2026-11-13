@@ -663,6 +663,42 @@ class TestODossieEAConfiguracao:
         assert supabase.tabelas["ouvidoria_config"][0]["nsp_setor"] == NUCLEO
 
 
+class TestAFilaLevaOApontamento:
+    """A tela de validação abre também pela fila, como no anônimo da issue
+    #769. Sem o apontamento na linha, a tela aberta pela fila não pergunta
+    sobre o Núcleo e a validação volta recusada, sem o ouvidor ter onde
+    decidir. Só a Ouvidoria recebe as marcas: o caso apontado ao Núcleo é
+    incidente com o paciente, e quem está fora dela só acompanha a fila."""
+
+    @pytest.fixture(autouse=True)
+    def _sem_a_trilha(self, monkeypatch):
+        # O ponto de novidade da fila lê a trilha por uma RPC que o dublê da
+        # validação não tem; ele não é o assunto aqui.
+        monkeypatch.setattr(ouvidoria_router.ouvidoria_novidade, "ultimo_movimento_ou_degradado", lambda _sb: ({}, []))
+
+    def test_a_ouvidoria_le_o_apontamento_e_a_decisao_na_fila(self, monkeypatch):
+        client, _supabase = _client(monkeypatch, _banco(_caso_apontado()))
+
+        linha = client.get("/api/ouvidoria/protocolos").json()["protocolos"][0]
+
+        assert linha["nsp_sugerido"] is True
+        assert linha["nsp_decisao"] is None
+
+    def test_quem_esta_fora_da_ouvidoria_recebe_a_linha_sem_o_apontamento(self, monkeypatch):
+        client, _supabase = _client(monkeypatch, _banco(_caso_apontado()))
+
+        async def _secretaria(_user, _sb, fields=None):
+            return {"id": "P02", "nome_completo": "Sofia Secretaria", "access_profile": "secretaria"}
+
+        monkeypatch.setattr(ouvidoria_router, "get_participante_for_user", _secretaria)
+
+        linha = client.get("/api/ouvidoria/protocolos").json()["protocolos"][0]
+
+        assert linha["protocolo"] == "2026-0007"
+        assert "nsp_sugerido" not in linha
+        assert "nsp_decisao" not in linha
+
+
 # =====================================================================
 # 8. O kit de conhecimento diz o comportamento novo
 # =====================================================================

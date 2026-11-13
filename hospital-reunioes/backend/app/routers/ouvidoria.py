@@ -209,13 +209,20 @@ _CAMPOS_INDICE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     # anônimo, o nome de quem manifestou não vai. Sem a marca aqui, a tela
     # aberta pela fila descreveria o anônimo como caso comum.
     "anonimo",
+    # O apontamento do agente ao Núcleo de Segurança do Paciente e a decisão
+    # (issue #1621), pelo mesmo motivo: com o apontamento e sem a decisão, a
+    # validação é recusada, e a tela aberta pela fila precisa fazer a pergunta.
+    # Só as marcas: as justificativas descrevem o caso e ficam no Dossiê.
+    "nsp_sugerido",
+    "nsp_decisao",
 )
 _CAMPOS_INDICE = ", ".join(_CAMPOS_INDICE_TUPLA)
 # O índice de quem está fora da Ouvidoria: o mesmo, menos o resumo (issue
-# #753) e a marca de anônimo (issue #769). O resumo é recorte literal do
-# relato, a marca só serve a quem valida, e protocolo, setor, situação e prazo
-# bastam para quem só acompanha a fila.
-_SO_DA_OUVIDORIA_NO_INDICE = frozenset({"resumo", "anonimo"})
+# #753), a marca de anônimo (issue #769) e o apontamento ao Núcleo (issue
+# #1621). O resumo é recorte literal do relato, as marcas só servem a quem
+# valida, e protocolo, setor, situação e prazo bastam para quem só acompanha a
+# fila.
+_SO_DA_OUVIDORIA_NO_INDICE = frozenset({"resumo", "anonimo", "nsp_sugerido", "nsp_decisao"})
 _CAMPOS_INDICE_FORA_DA_OUVIDORIA = tuple(
     campo for campo in _CAMPOS_INDICE_TUPLA if campo not in _SO_DA_OUVIDORIA_NO_INDICE
 )

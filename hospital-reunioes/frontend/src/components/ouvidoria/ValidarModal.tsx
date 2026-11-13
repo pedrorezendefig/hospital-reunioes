@@ -34,8 +34,9 @@ import {
 
 interface ValidarModalProps {
   // O apontamento do agente ao Núcleo e a decisão já tomada (issue #1621)
-  // entram por `CamposDoNucleo`, opcionais: a linha da fila abre esta mesma
-  // tela sem eles, e aí a validação segue como sempre.
+  // entram por `CamposDoNucleo`, opcionais. A linha da fila traz as duas
+  // marcas e não a justificativa, que fica no Dossiê: a pergunta aparece do
+  // mesmo jeito, só sem o porquê do agente.
   manifestacao: (CamposDoNucleo & {
     id: string;
     protocolo: string;

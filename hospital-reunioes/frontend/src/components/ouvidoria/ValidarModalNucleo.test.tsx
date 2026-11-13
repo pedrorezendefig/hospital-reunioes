@@ -108,6 +108,20 @@ describe("o apontamento do agente na validação", () => {
     await waitFor(() => expect(corpoDaValidacao().nsp_decisao).toBe("confirmado"));
   });
 
+  it("aberta pela fila, que traz só as marcas, também pede a decisão", async () => {
+    // A linha da fila não carrega a justificativa (ela fica no Dossiê), e a
+    // validação é recusada do mesmo jeito sem a decisão.
+    const linhaDaFila: Record<string, unknown> = caso();
+    delete linhaDaFila.nsp_justificativa_simples;
+    montar(linhaDaFila);
+    await waitFor(() => expect((screen.getByLabelText(/Área responsável/) as HTMLSelectElement).value).toBe("Recepcao"));
+
+    expect(screen.getByText("Possível evento de segurança do paciente")).toBeTruthy();
+    expect(botaoDeValidar().disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText("Confirmar envio ao NSP"));
+    expect(botaoDeValidar().disabled).toBe(false);
+  });
+
   it("sem apontamento, a validação segue como sempre, sem perguntar do Núcleo", async () => {
     montar(caso({ nsp_sugerido: false, nsp_justificativa_simples: null }));
     await waitFor(() => expect((screen.getByLabelText(/Área responsável/) as HTMLSelectElement).value).toBe("Recepcao"));
