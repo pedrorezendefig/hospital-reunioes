@@ -176,14 +176,14 @@ class TestOClienteDizSeOPrLevaSubida:
     def test_pr_so_de_docs_nao_leva_subida(self, monkeypatch):
         pedidos = self._paginas(monkeypatch, [["docs/manual/src/content/docs/tecnologia.md", "tools/x.py"]])
 
-        assert _PR_TOCA_O_APP_DE_VERDADE(1105) is False
+        assert _PR_TOCA_O_APP_DE_VERDADE(1105, projeto="hospital") is False
         assert pedidos == [f"https://api.github.com/repos/{REPO}/pulls/1105/files?per_page=100&page=1"]
 
     def test_um_arquivo_do_app_na_segunda_pagina_leva_subida(self, monkeypatch):
         cheia = [f"docs/manual/p{i}.md" for i in range(100)]
         self._paginas(monkeypatch, [cheia, ["hospital-reunioes/backend/app/main.py"]])
 
-        assert _PR_TOCA_O_APP_DE_VERDADE(1105) is True
+        assert _PR_TOCA_O_APP_DE_VERDADE(1105, projeto="hospital") is True
 
 
 class TestAMesmaVersaoNaoRegrava:

@@ -140,7 +140,9 @@ def passada(supabase, *, aplicar: bool, kit: str) -> list[dict]:
         numero = int(demanda["github_issue_numero"])
         linha = {"demanda_id": str(demanda["id"]), "numero": numero, "bloco": None, "motivo": None}
         try:
-            issue = github_client.ler_issue(numero)
+            # A Demanda do diretor nasce do Assistente, que so cria no Hospital
+            # (issue #1713, ADR 0093, decisao 5).
+            issue = github_client.ler_issue(numero, projeto=github_client.PROJETO_HOSPITAL)
         except (github_client.GithubIndisponivelError, github_client.IssueNaoEncontradaError) as exc:
             relatorio.append({**linha, "situacao": FALHOU, "motivo": f"GitHub: {exc}"})
             continue
@@ -159,7 +161,9 @@ def passada(supabase, *, aplicar: bool, kit: str) -> list[dict]:
             relatorio.append({**linha, "situacao": PREVIA, "bloco": bloco})
             continue
         try:
-            github_client.regravar_corpo(numero, corpo=inserir_bloco_do_desenvolvedor(corpo, bloco))
+            github_client.regravar_corpo(
+                numero, projeto=github_client.PROJETO_HOSPITAL, corpo=inserir_bloco_do_desenvolvedor(corpo, bloco)
+            )
         except (github_client.GithubIndisponivelError, github_client.IssueNaoEncontradaError) as exc:
             relatorio.append({**linha, "situacao": FALHOU, "bloco": bloco, "motivo": f"GitHub: {exc}"})
             continue

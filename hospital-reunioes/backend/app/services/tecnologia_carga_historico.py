@@ -13,6 +13,10 @@ do repositorio e o `history.json` da `main`, e:
   fechamento atual que fecha a issue por PR ou a cita em `prds`). Com a versao
   gravada, a Etapa Entregue vira Em producao, como no carimbo da subida.
 
+A carga e do Hospital (issue #1713): as issues e o `history.json` sao do
+repositorio dele, e so as Demandas do Hospital entram. Da Ana, as concluidas
+antigas nao sao carregadas (ADR 0093).
+
 Idempotente: so preenche coluna vazia, e a issue que ja tem Demanda nao cria
 outra. Nao gera notificacao nem e-mail: escreve as datas direto, sem passar
 pelos caminhos que avisam.
@@ -39,6 +43,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.services import github_client
+from app.services.github_client import PROJETO_HOSPITAL
 from app.services.registro_do_deploy import subidas_de_cada_issue, versao_rotulada
 from app.services.tecnologia import ESTADOS_ABERTOS, ESTADOS_FECHADOS, TABELA_DEMANDAS
 from app.services.tecnologia_anexos import TABELA_ANEXOS, _print_venceu
@@ -118,7 +123,14 @@ def carregar(supabase, *, dry_run: bool) -> Relatorio:
     data_da_versao = {
         versao_rotulada(e.get("app_version")): e.get("at") for e in deploys if isinstance(e, dict) and e.get("at")
     }
-    linhas = supabase.table(TABELA_DEMANDAS).select("*").not_.is_("github_issue_numero", "null").execute().data
+    linhas = (
+        supabase.table(TABELA_DEMANDAS)
+        .select("*")
+        .eq("projeto", PROJETO_HOSPITAL)
+        .not_.is_("github_issue_numero", "null")
+        .execute()
+        .data
+    )
     demandas = {int(d["github_issue_numero"]): d for d in linhas or []}
 
     guardados = supabase.table(TABELA_ANEXOS).select("demanda_id, apagado_em").execute().data or []
@@ -198,17 +210,17 @@ def _nova_demanda(supabase, issue: dict[str, Any], *, dry_run: bool) -> dict[str
     if decidir(issue, None) != CRIA:
         return None
     numero = int(issue["number"])
-    relida = github_client.ler_issue(numero)
+    relida = github_client.ler_issue(numero, projeto=PROJETO_HOSPITAL)
     if decidir(relida, None) != CRIA:
         return None
     if dry_run:
         return {"etapa": ETAPA_ENTREGUE}
-    criada = criar(supabase, relida)
+    criada = criar(supabase, relida, projeto=PROJETO_HOSPITAL)
     if criada is None:
         return None
     # Sem aviso (issue #1560): o link de Demonstracao da entrega antiga nao e novidade.
     sincronizar_demanda(supabase, criada, avisar=False)
-    return demanda_vinculada(supabase, numero)
+    return demanda_vinculada(supabase, PROJETO_HOSPITAL, numero)
 
 
 def _imprimir(relatorio: Relatorio, *, dry_run: bool) -> None:

@@ -106,22 +106,24 @@ class _GithubQueEscreve(_GithubFalso):
         self.erro_ao_escrever = erro_ao_escrever
         self.escritas: list[tuple] = []
 
-    def _escrever(self, *escrita):
+    def _escrever(self, *escrita, projeto: str):
+        # A Revisao continua presa ao Hospital (issue #1713).
+        assert projeto == "hospital", f"o Atualizar o card escreveu no Projeto {projeto!r}"
         if self.erro_ao_escrever is not None:
             raise self.erro_ao_escrever
         self.escritas.append(escrita)
 
-    def comentar(self, numero: int, corpo: str) -> None:
-        self._escrever("comentou", numero, corpo)
+    def comentar(self, numero: int, corpo: str, *, projeto: str) -> None:
+        self._escrever("comentou", numero, corpo, projeto=projeto)
 
-    def fechar_como_nao_planejada(self, numero: int, *, comentario: str) -> None:
-        self._escrever("fechou", numero, comentario)
+    def fechar_como_nao_planejada(self, numero: int, *, projeto: str, comentario: str) -> None:
+        self._escrever("fechou", numero, comentario, projeto=projeto)
         for parte in self.sub_issues.get(900, []):
             if parte["number"] == numero:
                 parte.update(state="closed", state_reason="not_planned")
 
-    def regravar(self, numero: int, *, corpo: str, labels: list[str]) -> dict:
-        self._escrever("regravou", numero, corpo, list(labels))
+    def regravar(self, numero: int, *, projeto: str, corpo: str, labels: list[str]) -> dict:
+        self._escrever("regravou", numero, corpo, list(labels), projeto=projeto)
         self.issues[numero] = {**self.issues[numero], "body": corpo, "labels": [{"name": n} for n in labels]}
         return self.issues[numero]
 
@@ -347,8 +349,8 @@ class TestFalhaDoGithub:
 
         monkeypatch.setattr(github_client.httpx, "request", _rede)
 
-        github_client.comentar(900, "o que mudou")
-        github_client.regravar(900, corpo="PRD", labels=["needs-triage"])
+        github_client.comentar(900, "o que mudou", projeto="hospital")
+        github_client.regravar(900, projeto="hospital", corpo="PRD", labels=["needs-triage"])
 
         issue = "https://api.github.com/repos/pedrorezendefig/hospital-reunioes/issues/900"
         assert chamadas == [

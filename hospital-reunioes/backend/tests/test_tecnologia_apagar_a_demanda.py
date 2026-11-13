@@ -93,7 +93,9 @@ class _GithubQueFecha(_GithubFalso):
         self.erro_ao_fechar = erro_ao_fechar
         self.fechadas: list[tuple[int, str, str]] = []
 
-    def fechar_como_nao_planejada(self, numero: int, *, comentario: str) -> None:
+    def fechar_como_nao_planejada(self, numero: int, *, projeto: str, comentario: str) -> None:
+        # O Apagar continua preso ao Hospital (issue #1713).
+        assert projeto == "hospital", f"o Apagar fechou no Projeto {projeto!r}"
         if self.erro_ao_fechar is not None:
             raise self.erro_ao_fechar
         self.fechadas.append((numero, "not_planned", comentario))
@@ -360,7 +362,7 @@ class TestNoGithub:
 
         monkeypatch.setattr(github_client.httpx, "request", _rede)
 
-        github_client.fechar_como_nao_planejada(900, comentario="motivo")
+        github_client.fechar_como_nao_planejada(900, projeto="hospital", comentario="motivo")
 
         issue = "https://api.github.com/repos/pedrorezendefig/hospital-reunioes/issues/900"
         assert chamadas == [

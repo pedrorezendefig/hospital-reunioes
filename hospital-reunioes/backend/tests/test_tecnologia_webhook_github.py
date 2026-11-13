@@ -97,7 +97,7 @@ def _sem_pr_aberto(monkeypatch):
     """O lote da reconciliacao le os PRs abertos uma vez (issue #1064). Por
     padrao nao ha nenhum: quem quer PR aberto, ou a leitura falhando, troca este
     duble no proprio teste."""
-    monkeypatch.setattr(github_client, "ler_prs_abertos", lambda: [])
+    monkeypatch.setattr(github_client, "ler_prs_abertos", lambda *, projeto: [])
 
 
 @pytest.fixture(autouse=True)
@@ -105,7 +105,7 @@ def _pr_do_app(monkeypatch):
     """O PR mergeado toca no app e leva uma subida (revisao do PR #1100). Quem
     quer o PR de ferramenta, ou a leitura falhando, troca este duble no proprio
     teste."""
-    monkeypatch.setattr(github_client, "pr_toca_o_app", lambda numero: True)
+    monkeypatch.setattr(github_client, "pr_toca_o_app", lambda numero, *, projeto: True)
 
 
 @pytest.fixture(autouse=True)
@@ -331,7 +331,7 @@ class _GithubFalso:
         self.erro = erro
         self.leituras: list[int] = []
 
-    def ler_issue(self, numero: int, *, projeto: str = "hospital") -> dict:
+    def ler_issue(self, numero: int, *, projeto: str) -> dict:
         self.leituras.append(numero)
         if self.erro is not None:
             raise self.erro
@@ -339,7 +339,7 @@ class _GithubFalso:
             raise github_client.IssueNaoEncontradaError(str(numero))
         return self.issues[numero]
 
-    def ler_sub_issues(self, numero: int, *, projeto: str = "hospital") -> list[dict]:
+    def ler_sub_issues(self, numero: int, *, projeto: str) -> list[dict]:
         return self.sub_issues.get(numero, [])
 
 
@@ -584,7 +584,7 @@ class TestATravaDeRedeContinuaDePe:
         monkeypatch.setattr(settings, "github_integracao_token", "token-de-teste")
         monkeypatch.setattr(settings, "github_integracao_repo", "dono/repo")
         with pytest.raises(AssertionError, match="de verdade"):
-            github_client.ler_issue(673)
+            github_client.ler_issue(673, projeto="hospital")
 
 
 class TestAssinatura:
@@ -1190,7 +1190,7 @@ class TestALapideDoApagar:
         gh = _GithubFalso({673: _issue(673, estado="closed", motivo="not_planned")})
         lapide = _demanda("D1", github_issue_numero=673, etapa=ETAPA_PLANEJADA, apagada_em="2026-11-11T10:00:00+00:00")
         _, sb, _ = _montar(demandas=[lapide], github=gh, monkeypatch=monkeypatch)
-        monkeypatch.setattr(github_client, "ler_prs_abertos", lambda: [])
+        monkeypatch.setattr(github_client, "ler_prs_abertos", lambda *, projeto: [])
 
         tecnologia_sincronizacao.reconciliar_vinculos(sb)
 
@@ -1225,17 +1225,22 @@ class TestRepositorioDaEntrega:
         assert resposta.json() == {"ignorado": "outro_repositorio"}
         assert _fio(sb) == []
 
-    def test_sem_repositorio_configurado_a_guarda_nao_bloqueia(self, monkeypatch):
-        """Sem `GITHUB_INTEGRACAO_REPO` nao ha com o que comparar, e recusar aqui
-        trocaria uma falha honesta adiante (o cliente exige a variavel) por um
-        silencio que ninguem liga a causa."""
+    def test_sem_repositorio_configurado_a_entrega_e_descartada(self, monkeypatch, caplog):
+        """Desde a issue #1713 o repositorio da entrega vira o Projeto da
+        Demanda, e sem `GITHUB_INTEGRACAO_REPO` nenhum nome vira Projeto: a
+        entrega sai como de outro repositorio, com a linha no log, em vez de
+        reler a issue de um repositorio que ninguem configurou."""
         monkeypatch.setattr(settings, "github_integracao_repo", "")
-        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], monkeypatch=monkeypatch)
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
 
-        resposta = _entregar(cliente, _corpo(repo="qualquer/coisa"))
+        with caplog.at_level(logging.WARNING, logger="app.routers.webhooks"):
+            resposta = _entregar(cliente, _corpo(repo="qualquer/coisa"))
 
-        assert resposta.json() != {"ignorado": "outro_repositorio"}
-        assert _fio(sb) == []
+        assert resposta.json() == {"ignorado": "outro_repositorio"}
+        assert "outro repositório" in caplog.text
+        assert gh.leituras == []
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_ANALISE
 
 
 # ─── 3. A sincronizacao ──────────────────────────────────────────────────────
@@ -1559,9 +1564,9 @@ class TestOEventLoopNaoFicaBloqueado:
         buscar = tecnologia_sincronizacao.demanda_vinculada
         sincronizar = tecnologia_sincronizacao.sincronizar_demanda
 
-        def _espiao_do_loop(supabase, numero):
+        def _espiao_do_loop(supabase, projeto, numero):
             do_event_loop.append(threading.get_ident())
-            return buscar(supabase, numero)
+            return buscar(supabase, projeto, numero)
 
         def _espiao_da_rotina(supabase, demanda):
             da_rotina.append(threading.get_ident())
@@ -1805,14 +1810,14 @@ class TestReconciliacao:
     def test_uma_falha_do_github_tambem_nao_derruba_o_lote(self, monkeypatch):
         chamadas: list[int] = []
 
-        def _ler(numero: int) -> dict:
+        def _ler(numero: int, *, projeto: str) -> dict:
             chamadas.append(numero)
             if numero == 678:
                 raise github_client.GithubIndisponivelError("502")
             return _issue(numero, labels=("in-progress",))
 
         monkeypatch.setattr(github_client, "ler_issue", _ler)
-        monkeypatch.setattr(github_client, "ler_sub_issues", lambda numero: [])
+        monkeypatch.setattr(github_client, "ler_sub_issues", lambda numero, *, projeto: [])
         sb = _SupabaseMock(
             {
                 "tecnologia_demandas": [
@@ -1876,8 +1881,10 @@ class TestReconciliacao:
     def test_falha_de_verdade_continua_com_stack(self, monkeypatch, caplog):
         """O par do teste acima: tirar o `exc_info` de TODAS as falhas apagaria a
         unica pista das que sao mesmo defeito."""
-        monkeypatch.setattr(github_client, "ler_issue", lambda numero: _issue(numero, labels=("in-progress",)))
-        monkeypatch.setattr(github_client, "ler_sub_issues", lambda numero: [])
+        monkeypatch.setattr(
+            github_client, "ler_issue", lambda numero, *, projeto: _issue(numero, labels=("in-progress",))
+        )
+        monkeypatch.setattr(github_client, "ler_sub_issues", lambda numero, *, projeto: [])
         sb = _SupabaseMock(
             {"tecnologia_demandas": [_demanda("D1", github_issue_numero=673)], "tecnologia_conversas": []},
             falhas={"D1": RuntimeError("PostgREST fora do ar")},
@@ -2233,7 +2240,7 @@ class TestIssuesQueOCorpoFecha:
         ),
     )
     def test_as_palavras_de_fechamento_do_github(self, corpo, esperado):
-        assert github_client.issues_que_o_corpo_fecha(corpo) == esperado
+        assert github_client.issues_que_o_corpo_fecha(corpo, projeto="hospital") == esperado
 
     def test_a_leitura_dos_prs_abertos_traz_as_issues_que_cada_um_fecha(self, monkeypatch):
         """O cliente de verdade, com o transporte dublado: o caminho pedido e
@@ -2248,7 +2255,7 @@ class TestIssuesQueOCorpoFecha:
 
         monkeypatch.setattr(github_client.httpx, "request", _transporte)
 
-        prs = _LER_PRS_ABERTOS_DE_VERDADE()
+        prs = _LER_PRS_ABERTOS_DE_VERDADE(projeto="hospital")
 
         assert pedidos == [f"GET https://api.github.com/repos/{REPO}/pulls?state=open&per_page=100"]
         assert prs == [{"numero": 1100, "fecha": [673]}, {"numero": 1101, "fecha": []}]
@@ -2269,7 +2276,7 @@ class TestAReconciliacaoRecuperaOPrAberto:
             monkeypatch,
             gh,
             _ja_sincronizada(gh, 673, etapa=ETAPA_PLANEJADA),
-            lambda: [{"numero": 1100, "fecha": [673]}, {"numero": 1101, "fecha": [999]}],
+            lambda *, projeto: [{"numero": 1100, "fecha": [673]}, {"numero": 1101, "fecha": [999]}],
         )
 
         contagem = tecnologia_sincronizacao.reconciliar_vinculos(sb)
@@ -2283,7 +2290,7 @@ class TestAReconciliacaoRecuperaOPrAberto:
         gh = _GithubFalso({673: _issue(673, labels=("ready-for-agent",))})
         foto = {**_foto_guardada(gh, 673), "prs_abertos": [1100]}
         demanda = _demanda("D1", github_issue_numero=673, etapa=ETAPA_EM_DESENVOLVIMENTO, github_foto=foto)
-        sb = self._lote(monkeypatch, gh, demanda, lambda: [])
+        sb = self._lote(monkeypatch, gh, demanda, lambda *, projeto: [])
 
         tecnologia_sincronizacao.reconciliar_vinculos(sb)
 
@@ -2297,7 +2304,7 @@ class TestAReconciliacaoRecuperaOPrAberto:
         foto = {**_foto_guardada(gh, 673), "prs_abertos": [1100]}
         demanda = _demanda("D1", github_issue_numero=673, etapa=ETAPA_PLANEJADA, github_foto=foto)
 
-        def _fora_do_ar():
+        def _fora_do_ar(*, projeto):
             raise github_client.GithubIndisponivelError("timeout")
 
         sb = self._lote(monkeypatch, gh, demanda, _fora_do_ar)

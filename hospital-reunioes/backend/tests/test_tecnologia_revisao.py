@@ -150,7 +150,9 @@ def _montar_revisao(monkeypatch, *, logado=DIRETOR, demanda: dict | None = None,
         }
     ]
     monkeypatch.setattr(github_client, "ler_historico_de_deploys", lambda: [dict(h) for h in HISTORICO])
-    monkeypatch.setattr(github_client, "ler_comentarios", lambda numero: [dict(c) for c in COMENTARIOS], raising=False)
+    monkeypatch.setattr(
+        github_client, "ler_comentarios", lambda numero, *, projeto: [dict(c) for c in COMENTARIOS], raising=False
+    )
     return client, sb, gh
 
 

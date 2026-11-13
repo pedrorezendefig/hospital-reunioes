@@ -470,6 +470,8 @@ def abrir_pedido(supabase, *, conta: dict[str, Any], atendimento: dict[str, Any]
         if relido and relido[0].get("issue_numero"):
             raise PedidoRecusadoError(MENSAGEM_PEDIDO_JA_ABERTO)
         dados = github_client.criar_issue(
+            # O pedido e de Contas medicas, do app: sempre no Hospital (issue #1713).
+            projeto=github_client.PROJETO_HOSPITAL,
             titulo=titulo_do_pedido(apontamento, conta, atendimento),
             corpo=corpo_do_pedido(apontamento, conta, atendimento, trecho_da_pagina(supabase, conta, apontamento)),
             labels=LABELS_DO_BUG,

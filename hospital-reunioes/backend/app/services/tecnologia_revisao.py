@@ -420,8 +420,11 @@ def atualizar_no_github(
     `GithubIndisponivelError`; o clique seguinte refaz o que faltou, e a parte
     ja fechada nao fecha de novo.
     """
-    dados = github_client.ler_issue(numero)
-    partes = [p for p in github_client.ler_sub_issues(numero) if isinstance(p, dict)]
+    # A Revisao e do Hospital (issue #1713): so a melhoria do chat se revisa,
+    # e o Assistente so cria card no Hospital (ADR 0093, decisao 5).
+    hospital = github_client.PROJETO_HOSPITAL
+    dados = github_client.ler_issue(numero, projeto=hospital)
+    partes = [p for p in github_client.ler_sub_issues(numero, projeto=hospital) if isinstance(p, dict)]
     abertas = [p for p in partes if p.get("state") == "open" and isinstance(p.get("number"), int)]
     if any(LABEL_EM_ANDAMENTO in {n.lower() for n in _labels_da_issue(p)} for p in [dados, *abertas]):
         raise ParteJaComecouError(numero)
@@ -437,8 +440,13 @@ def atualizar_no_github(
             partes_fechadas=fechadas,
             versao_base=versao_base,
         ),
+        projeto=hospital,
     )
     for parte in fechadas:
-        github_client.fechar_como_nao_planejada(parte, comentario=COMENTARIO_DA_PARTE_FECHADA.format(raiz=numero))
-    github_client.regravar(numero, corpo=corpo, labels=labels_da_raiz_revisada(_labels_da_issue(dados)))
+        github_client.fechar_como_nao_planejada(
+            parte, projeto=hospital, comentario=COMENTARIO_DA_PARTE_FECHADA.format(raiz=numero)
+        )
+    github_client.regravar(
+        numero, projeto=hospital, corpo=corpo, labels=labels_da_raiz_revisada(_labels_da_issue(dados))
+    )
     return fechadas
