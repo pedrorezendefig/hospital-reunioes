@@ -85,6 +85,7 @@
  */
 
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ArrowLeft, Loader2, Maximize2, MessageSquare, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -1353,7 +1354,11 @@ export function ConversasDaTecnologia({
         )}
       </div>
 
-      {painelAberto && aberta && (
+      {/* Portal no body: o wrapper .animate-fade-in-up do módulo deixa um transform
+          aplicado, e ele prenderia o `fixed` à caixa do módulo em vez da janela. */}
+      {painelAberto &&
+        aberta &&
+        createPortal(
         <aside
           ref={painelRef}
           aria-label="Pedido aberto"
@@ -1402,8 +1407,9 @@ export function ConversasDaTecnologia({
           {acoesDaDemanda}
           <Acompanhamento key={chave} demanda={aberta} token={token} />
           <ConversaDaDemanda key={`conversa-${chave}`} demandaId={aberta.id} token={token} focar={focarConversa} />
-        </aside>
-      )}
+        </aside>,
+          document.body,
+        )}
     </div>
   );
 }

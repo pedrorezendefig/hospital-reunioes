@@ -1770,6 +1770,19 @@ describe("O card do Quadro abre num painel à direita (issue #1643, ADR 0090, de
     expect(screen.getByRole("region", { name: "Quadro" })).toBeTruthy();
   });
 
+  it("o painel nasce no body, fora do módulo, para se prender à janela mesmo sob o fade-in-up", async () => {
+    comOQuadro();
+    const quadroNaTela = await screen.findByRole("region", { name: "Quadro" });
+    fireEvent.click(cardDe(/Aviso da ata por e-mail/));
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+
+    // O wrapper .animate-fade-in-up do módulo deixa um transform aplicado, e um ancestral
+    // com transform vira o bloco de contenção do `fixed`; o jsdom não calcula layout,
+    // então a prova é o painel ser filho direto do body.
+    expect(painel.parentElement).toBe(document.body);
+    expect(quadroNaTela.contains(painel)).toBe(false);
+  });
+
   it("o botão de fechar fecha o painel e devolve o foco ao card", async () => {
     comOQuadro();
     await screen.findByRole("region", { name: "Quadro" });
