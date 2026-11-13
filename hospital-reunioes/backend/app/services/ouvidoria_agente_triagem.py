@@ -118,7 +118,9 @@ def triar_avaliacao(supabase, avaliacao: dict) -> None:
         return
     try:
         if not _reservar(supabase):
-            logger.warning("[Ouvidoria] Agente de triagem: teto diário atingido, avaliação %s não lida", avaliacao.get("id"))
+            logger.warning(
+                "[Ouvidoria] Agente de triagem: teto diário atingido, avaliação %s não lida", avaliacao.get("id")
+            )
             return
         resposta = _perguntar(cliente, "ouvidoria_agente_triagem_avaliacao", pseudonimizar(comentario))
         marca = _marca_da_avaliacao(resposta)

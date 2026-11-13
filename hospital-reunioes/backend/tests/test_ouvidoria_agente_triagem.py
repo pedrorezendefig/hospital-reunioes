@@ -22,7 +22,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from anthropic_apoio import ClienteFalso  # noqa: E402
-from test_ouvidoria_avaliacao import CODIGO, ROTA_AVALIACAO, _BancoComAvaliacoes, _QueryComAvaliacoes  # noqa: E402
+from test_ouvidoria_avaliacao import ROTA_AVALIACAO, _BancoComAvaliacoes, _QueryComAvaliacoes  # noqa: E402
 from test_ouvidoria_formulario_publico import _make_app  # noqa: E402
 
 from app.dependencies import get_supabase_client  # noqa: E402
