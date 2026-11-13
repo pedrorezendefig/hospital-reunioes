@@ -2,6 +2,7 @@
 status: accepted
 supersedes: 0057, 0072, 0076
 amends: 0068, 0071, 0077
+amended_by: 0094
 ---
 
 # Manual do usuário aposentado

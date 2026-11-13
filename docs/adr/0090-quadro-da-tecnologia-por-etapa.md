@@ -1,7 +1,7 @@
 ---
 status: accepted
 amends: 0077, 0083, 0084
-amended_by: 0091, 0092
+amended_by: 0091, 0092, 0093
 ---
 
 # Quadro da Tecnologia por Etapa

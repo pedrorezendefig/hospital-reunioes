@@ -2,6 +2,7 @@
 status: accepted
 supersedes: 0091
 amends: 0054, 0084, 0090
+amended_by: 0093
 ---
 
 # Entregas como ritmo semanal, com Tamanho da entrega e o que cada entrega fez
