@@ -22,7 +22,7 @@
  * uma segunda condição escrita aqui, que divergiria dele na primeira mudança.
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   BlocoDoTextoSimples,
@@ -49,6 +49,10 @@ export const TITULO_DATAS = "Datas";
 export const TITULO_DEMONSTRACAO = "Demonstração";
 export const ASSISTIR_A_DEMONSTRACAO = "Assistir à demonstração";
 export const VER_TUDO = "Ver tudo";
+export const COPIAR_LINK = "Copiar link";
+export const LINK_COPIADO = "Link copiado";
+export const NAO_COPIOU_O_LINK =
+  "O navegador não liberou a cópia automática. O texto está na caixa abaixo, já selecionado: copie com Ctrl+C (ou Cmd+C).";
 
 /** Quantos tópicos de O que muda aparecem antes do "Ver tudo" (ADR 0084). */
 export const TOPICOS_VISIVEIS = 5;
@@ -172,6 +176,72 @@ function Topo({ demanda }: { demanda: Demanda }) {
   );
 }
 
+/**
+ * O texto que o Copiar link põe na área de transferência (issue #1588): o
+ * Número e o título numa linha, o endereço que abre a Demanda na outra. É o
+ * mesmo `?demanda=<id>` do sino, que a página já sabe abrir.
+ */
+function textoDoLink(demanda: Demanda): string {
+  const nome = nomeDoNumero(demanda);
+  const titulo = nome ? `${nome}: ${demanda.titulo}` : demanda.titulo;
+  return `${titulo}\n${window.location.origin}/admin/tecnologia?demanda=${encodeURIComponent(demanda.id)}`;
+}
+
+/**
+ * O Copiar link (issue #1588), no padrão de copiar de Contas médicas: o aviso
+ * quando copia e, se o navegador recusa, o texto numa caixa já selecionada.
+ */
+function CopiarLink({ demanda }: { demanda: Demanda }) {
+  const [copiou, setCopiou] = useState(false);
+  const [paraPegarAMao, setParaPegarAMao] = useState<string | null>(null);
+  const caixa = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (paraPegarAMao) caixa.current?.select();
+  }, [paraPegarAMao]);
+
+  async function copiar() {
+    const texto = textoDoLink(demanda);
+    setCopiou(false);
+    setParaPegarAMao(null);
+    try {
+      await navigator.clipboard.writeText(texto);
+      setCopiou(true);
+    } catch (e) {
+      console.error("[tecnologia] o navegador não copiou o link", e);
+      setParaPegarAMao(texto);
+    }
+  }
+
+  return (
+    <div className="space-y-1">
+      <button type="button" onClick={copiar} className="text-xs font-semibold text-primary underline">
+        {COPIAR_LINK}
+      </button>
+      {copiou && (
+        <p role="status" className="text-xs text-emerald-700">
+          {LINK_COPIADO}
+        </p>
+      )}
+      {paraPegarAMao && (
+        <>
+          <p role="status" className="text-xs text-amber-800">
+            {NAO_COPIOU_O_LINK}
+          </p>
+          <textarea
+            ref={caixa}
+            readOnly
+            value={paraPegarAMao}
+            rows={2}
+            aria-label="Link da Demanda"
+            className="w-full rounded-lg border border-border bg-white px-3 py-2 text-xs text-slate-800"
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
 function Topicos({ topicos }: { topicos: PedacoForte[][] }) {
   const [tudo, setTudo] = useState(false);
   const visiveis = tudo ? topicos : topicos.slice(0, TOPICOS_VISIVEIS);
@@ -266,6 +336,8 @@ export function DocumentoDoCard({ demanda }: { demanda: Demanda }) {
       className="md:col-span-2 px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2"
     >
       <Topo demanda={demanda} />
+
+      <CopiarLink demanda={demanda} />
 
       <FraseEOQueMuda texto={demanda.o_que_muda} chave={demanda.id} />
 
