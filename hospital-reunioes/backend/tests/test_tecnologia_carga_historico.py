@@ -22,6 +22,7 @@ from test_tecnologia_webhook_github import (  # noqa: E402
 
 from app.services import email_service, github_client, tecnologia_carga_historico, tecnologia_email  # noqa: E402
 from app.services.tecnologia_carga_historico import carregar  # noqa: E402
+from app.services.tecnologia_sincronizacao import sincronizar_demanda  # noqa: E402
 from app.services.tecnologia_vinculo import ETAPA_EM_PRODUCAO, ETAPA_ENTREGUE  # noqa: E402
 
 PRODUTO = {"id": "prod-1", "nome": "App do Hospital", "ativo": True, "ordem": 1}
@@ -461,6 +462,27 @@ class TestDryRun:
         assert "issue #1600 tem anexo guardado: o cron apagaria os prints" in impresso
         assert "issue #1800 tem anexo" not in impresso
         assert "1 com anexo que o cron apagaria" in impresso
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# A data do pedido: `criada_em` na foto (issue #1702, PRD #1689)
+# ═══════════════════════════════════════════════════════════════════════════
+
+CRIADA_EM = "2026-08-03T11:20:00Z"
+
+
+class TestDataDoPedido:
+    """O pedido da Origem Vitta conta na semana em que a issue-raiz nasceu: a
+    foto guarda a data de criacao dela, e a carga a preenche onde falta."""
+
+    def test_sincronizacao_guarda_na_foto_a_criacao_da_issue_raiz(self, monkeypatch):
+        issue = _fechada(1600, fechada_em="2026-10-08T15:00:00Z", created_at=CRIADA_EM)
+        existente = _demanda("D1", github_issue_numero=1600, etapa=ETAPA_ENTREGUE, origem="vitta")
+        cenario = _Cenario(monkeypatch, fechadas=[issue], demandas=[existente])
+
+        sincronizar_demanda(cenario.sb, cenario.demanda(1600), avisar=False)
+
+        assert cenario.demanda(1600)["github_foto"]["criada_em"] == CRIADA_EM
 
 
 # ═══════════════════════════════════════════════════════════════════════════
