@@ -8,6 +8,12 @@ extensão bloqueada fora das pastas que existem para isso. A extensão é
 comparada em minúscula (`.PDF` também trava). Renomear conta como adicionar no
 caminho novo; editar arquivo que a base já tem não conta.
 
+As pastas liberadas também têm trava (issue #1653): na pasta das tabelas de
+preço de Contas médicas, um arquivo com o nome de uma operadora real no
+caminho é recusado (a fixture usa operadora inventada, ALFA, BETA, GAMA), e os
+POPs reais do Centro Cirúrgico não entram mais em `docs/pops/`: vivem em
+`local/`, fora do git.
+
 Roda no CI de todo pull request. Só usa `git`.
 
 Uso: python3 tools/checar_arquivo_sensivel.py [--base origin/main] [--head HEAD]
@@ -16,6 +22,7 @@ Uso: python3 tools/checar_arquivo_sensivel.py [--base origin/main] [--head HEAD]
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import PurePosixPath
@@ -29,11 +36,25 @@ PASTAS_LIBERADAS = (
     "hospital-reunioes/supabase/migrations/",
     "docs/comunicacao/",
     "hospital-reunioes/backend/tests/fixtures/",
-    "docs/pops/materiais-reais/",
 )
+
+PASTA_DAS_TABELAS = "hospital-reunioes/backend/tests/fixtures/contas_medicas/tabelas/"
+
+# Operadoras reais com contrato carregado em Contas médicas: o nome delas no
+# caminho de uma tabela de preço indica arquivo de contrato real.
+OPERADORAS_REAIS = {"assim", "leve", "unimed"}
+
+
+def tabela_de_operadora_real(caminho: str) -> bool:
+    if not caminho.startswith(PASTA_DAS_TABELAS):
+        return False
+    palavras = re.split(r"[^a-z0-9]+", caminho[len(PASTA_DAS_TABELAS):].lower())
+    return not OPERADORAS_REAIS.isdisjoint(palavras)
 
 
 def bloqueado(caminho: str) -> bool:
+    if tabela_de_operadora_real(caminho):
+        return True
     if caminho.startswith(PASTAS_LIBERADAS):
         return False
     nome = PurePosixPath(caminho).name.lower()
@@ -69,8 +90,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"arquivo sensível adicionado: {caminho}")
         print(
             "O repositório é público e não aceita dado real. Tire o arquivo do PR;"
-            " se for fixture sintética, ponha numa pasta liberada: "
+            " se for fixture sintética, ponha numa pasta liberada ("
             + ", ".join(PASTAS_LIBERADAS)
+            + "), com operadora inventada (ALFA, BETA, GAMA) no nome da tabela de preço."
+            " O dado real vai para local/, fora do git."
         )
         return 1
     print(f"arquivos: nenhum arquivo sensível adicionado contra {args.base}.")

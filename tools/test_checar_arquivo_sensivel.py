@@ -3,7 +3,8 @@
 O repositório é público: PDF, planilha, dump ou `.env` que entra por engano
 fica no histórico para sempre. A trava olha só o que o PR ADICIONA e recusa as
 extensões de arquivo de dado fora das pastas que existem para isso (migration,
-comunicação, fixture de teste, materiais reais dos POPs). Os testes
+comunicação, fixture de teste). Desde a issue #1653, POP real e tabela de
+preço com o nome de uma operadora real também travam. Os testes
 montam um repositório `git` de verdade em `tmp_path`, com uma `main` de base e
 uma branch por cima, e rodam o script como o CI roda.
 """
@@ -112,7 +113,7 @@ def test_pastas_liberadas_passam(tmp_path):
         "hospital-reunioes/supabase/migrations/200_nova.sql",
         "docs/comunicacao/central/folheto.PDF",
         "hospital-reunioes/backend/tests/fixtures/contas_medicas/tabela.csv",
-        "docs/pops/materiais-reais/pop.docx",
+        "hospital-reunioes/backend/tests/fixtures/contas_medicas/tabelas/alfa-materiais.csv",
     ]:
         escrever(repo, caminho)
     commitar(repo, "liberadas")
@@ -120,6 +121,38 @@ def test_pastas_liberadas_passam(tmp_path):
     proc = rodar(repo)
 
     assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def test_pr_que_adiciona_pop_real_em_materiais_reais_e_recusado(tmp_path):
+    """Issue #1653: os POPs reais do Centro Cirúrgico vivem em `local/`."""
+    repo = repo_com_base(tmp_path)
+    escrever(repo, "docs/pops/materiais-reais/011-novo-pop.docx")
+    commitar(repo, "pop real")
+
+    proc = rodar(repo)
+
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "docs/pops/materiais-reais/011-novo-pop.docx" in proc.stdout
+
+
+def test_pr_que_adiciona_tabela_de_preco_com_nome_de_operadora_real_e_recusado(tmp_path):
+    """Issue #1653: a fixture de tabela usa operadora inventada (ALFA, BETA,
+    GAMA); o nome de uma operadora real no caminho trava, em qualquer caixa."""
+    repo = repo_com_base(tmp_path)
+    pasta = "hospital-reunioes/backend/tests/fixtures/contas_medicas/tabelas"
+    reais = [f"{pasta}/{nome}" for nome in ("unimed-pacotes.csv", "Assim_materiais.csv", "LEVE-diarias.csv")]
+    for caminho in reais:
+        escrever(repo, caminho)
+    # A palavra dentro de outra (relevante, assimetria) não é o nome da operadora.
+    escrever(repo, f"{pasta}/alfa-relevante-assimetria.csv")
+    commitar(repo, "tabela real")
+
+    proc = rodar(repo)
+
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    for caminho in reais:
+        assert caminho in proc.stdout, caminho
+    assert "alfa-relevante-assimetria.csv" not in proc.stdout
 
 
 def test_pasta_com_nome_parecido_com_a_liberada_nao_passa(tmp_path):
