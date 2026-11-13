@@ -435,6 +435,22 @@ class TestOTextoDaAbaContaATelaDeHoje:
         decidido = _secao(texto, "O que já foi decidido")
         assert "30 dias depois de Em produção" in decidido
 
+    def test_o_quadro_diz_como_ver_as_que_nao_serao_feitas_e_onde_esta_o_historico(self, texto):
+        """Issue #1644 (ADR 0090, decisões 2 e 8): o diretor pergunta ao
+        Assistente onde foram parar os pedidos que não serão feitos e as
+        entregas antigas, e a resposta tem que estar no kit."""
+        abertura = texto.split("\n## ", 1)[0]
+        for termo in (
+            "**Mostrar as que não serão feitas**",
+            "coluna Não será feita",
+            "**Ver todos nas Entregas**",
+            "abre a aba Entregas, que guarda o histórico inteiro",
+        ):
+            assert termo in abertura, termo
+        decidido = _secao(texto, "O que já foi decidido")
+        assert "o histórico completo das entregas fica na aba Entregas" in decidido
+        assert "não serão feitos aparecem só com o interruptor" in decidido
+
     def test_a_etapa_tem_as_sete_e_nunca_se_digita(self, texto):
         etapa = _secao(texto, "A Etapa")
         for termo in (
