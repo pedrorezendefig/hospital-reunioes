@@ -31,10 +31,40 @@ vi.mock("@/hooks/useCurrentParticipante", () => ({
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/manual" }));
 
+vi.mock("@/lib/supabase/client", () => ({
+  createClient: () => ({
+    auth: {
+      getSession: async () => ({ data: { session: { access_token: "token-de-teste" } } }),
+    },
+  }),
+}));
+
 afterEach(() => {
   cleanup();
   sessao.participante = null;
+  vi.unstubAllGlobals();
 });
+
+/**
+ * A rota do Retrato no backend: com `status` 200 entrega uma página mínima do
+ * Retrato e os dados; com outro status, recusa tudo. Devolve os pedidos feitos.
+ */
+function retratoNoBackend(status: number): { url: string; autorizacao: string | null }[] {
+  const pedidos: { url: string; autorizacao: string | null }[] = [];
+  const arquivos: Record<string, string> = {
+    "/api/admin/manual/ana/retrato/index.html": "<!doctype html><html><head></head><body>Retrato</body></html>",
+    "/api/admin/manual/ana/retrato/dados/retrato.json": "{}",
+  };
+  vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+    pedidos.push({ url, autorizacao: new Headers(init?.headers).get("Authorization") });
+    if (status !== 200 || !(url in arquivos)) {
+      return new Response(JSON.stringify({ detail: "O Retrato da Ana ainda não está ligado" }), { status });
+    }
+    return new Response(arquivos[url], { status: 200 });
+  });
+  vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:retrato-de-teste", revokeObjectURL: () => {} }));
+  return pedidos;
+}
 
 function pessoa(papeis: Partial<CurrentParticipante>): CurrentParticipante {
   return { id: "p1", nome_completo: "Fulana de Tal", email: "fulana@hsm", ...papeis };
@@ -107,19 +137,44 @@ describe("a aba Ana", () => {
     expect(abas).toEqual(["Aplicativo do Hospital"]);
   });
 
-  it("o Super admin vê a aba Ana, que por ora diz Em preparação", () => {
+  it("o Super admin abre a aba Ana e vê o Retrato num quadro isolado da página do app", async () => {
     sessao.participante = pessoa({ access_profile: "super_admin" });
+    const pedidos = retratoNoBackend(200);
 
     render(<Manual paginas={PAGINAS} />);
 
     const abas = screen.getAllByRole("tab").map((aba) => aba.textContent?.trim());
     expect(abas).toEqual(["Aplicativo do Hospital", "Ana"]);
-    expect(screen.queryByText("Em preparação")).toBeNull();
+    expect(screen.queryByTitle("Retrato da Ana")).toBeNull();
 
     fireEvent.click(screen.getByRole("tab", { name: "Ana" }));
 
-    expect(screen.getByText("Em preparação")).toBeTruthy();
+    const quadro = await screen.findByTitle("Retrato da Ana");
+    expect(quadro.tagName).toBe("IFRAME");
+    expect(quadro.getAttribute("src")).toBe("blob:retrato-de-teste");
+    // Isolado: roda o script do Retrato, mas sem a origem do app, então não
+    // lê o login, o armazenamento nem o DOM da página do manual.
+    expect(quadro.getAttribute("sandbox")?.split(/\s+/)).toEqual(["allow-scripts"]);
+    expect(quadro.className.split(/\s+/)).toContain("w-full");
     expect(screen.queryByText("Texto de Reuniões.")).toBeNull();
+
+    expect(pedidos[0]).toEqual({
+      url: "/api/admin/manual/ana/retrato/index.html",
+      autorizacao: "Bearer token-de-teste",
+    });
+    expect(pedidos.map((p) => p.url)).toContain("/api/admin/manual/ana/retrato/dados/retrato.json");
+  });
+
+  it("sem o Retrato ligado, a aba Ana diz que ele ainda não está ligado, sem erro técnico", async () => {
+    sessao.participante = pessoa({ access_profile: "super_admin" });
+    retratoNoBackend(503);
+
+    render(<Manual paginas={PAGINAS} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Ana" }));
+
+    expect(await screen.findByText("O Retrato da Ana ainda não está ligado")).toBeTruthy();
+    expect(screen.queryByTitle("Retrato da Ana")).toBeNull();
+    expect(screen.queryByText(/503/)).toBeNull();
   });
 });
 
