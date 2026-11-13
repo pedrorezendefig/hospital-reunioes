@@ -186,9 +186,8 @@ export function chaveDaLigacao(l: Ligacao): string {
 
 const LARGURA_DA_COLUNA = 240;
 const ALTURA_DA_LINHA = 140;
+/** A ligação que passa por fora da coluna corre dentro da folga dela, entre os passos. */
 const MARGEM = 24;
-/** Folga à direita, para a ligação que volta por fora da coluna. */
-const FOLGA_DA_VOLTA = 40;
 
 const TAMANHO: Record<Forma, { w: number; h: number }> = {
   inicio: { w: 184, h: 52 },
@@ -262,10 +261,17 @@ export function desenharFluxo(fluxo: Fluxo, umaColuna = false): Desenho {
   const colunas = Math.max(...passos.map((p) => p.coluna));
   const linhas = Math.max(...passos.map((p) => p.linha));
 
+  /** Quantas ligações já correm por fora de cada lado de cada coluna: cada uma ganha a sua faixa. */
+  const faixas = new Map<string, number>();
   const ligacoes = fluxo.ligacoes.map((l): LigacaoDesenhada => {
     const o = porId.get(l.de)!;
     const d = porId.get(l.para)!;
-    const pontos = rota(o, d, passos);
+    const pontos = rota(o, d, passos, (lado) => {
+      const chave = `${o.coluna}:${lado}`;
+      const faixa = faixas.get(chave) ?? 0;
+      faixas.set(chave, faixa + 1);
+      return faixa;
+    });
     const comprimento = pontos
       .slice(1)
       .reduce((soma, [x, y], i) => soma + Math.abs(x - pontos[i][0]) + Math.abs(y - pontos[i][1]), 0);
@@ -273,7 +279,7 @@ export function desenharFluxo(fluxo: Fluxo, umaColuna = false): Desenho {
   });
 
   return {
-    largura: MARGEM * 2 + colunas * LARGURA_DA_COLUNA + FOLGA_DA_VOLTA,
+    largura: MARGEM * 2 + colunas * LARGURA_DA_COLUNA,
     altura: MARGEM * 2 + linhas * ALTURA_DA_LINHA,
     passos,
     ligacoes,
@@ -281,16 +287,25 @@ export function desenharFluxo(fluxo: Fluxo, umaColuna = false): Desenho {
 }
 
 /** A rota em ângulo reto entre dois passos. */
-function rota(o: PassoDesenhado, d: PassoDesenhado, todos: PassoDesenhado[]): [number, number][] {
+function rota(
+  o: PassoDesenhado,
+  d: PassoDesenhado,
+  todos: PassoDesenhado[],
+  proximaFaixa: (lado: "direita" | "esquerda") => number,
+): [number, number][] {
   const topo = (p: PassoDesenhado): [number, number] => [p.x, p.y - p.h / 2];
   const base = (p: PassoDesenhado): [number, number] => [p.x, p.y + p.h / 2];
   const esquerda = (p: PassoDesenhado): [number, number] => [p.x - p.w / 2, p.y];
   const direita = (p: PassoDesenhado): [number, number] => [p.x + p.w / 2, p.y];
   const ladoRumoA = (p: PassoDesenhado, alvo: PassoDesenhado) => (alvo.x > p.x ? direita(p) : esquerda(p));
-  /** Volta por fora, pela direita da coluna. */
+  /** Por fora da coluna: o salto que desce vai pela direita, a volta que sobe, pela esquerda. */
   const porFora = (): [number, number][] => {
-    const xFora = o.x + LARGURA_DA_COLUNA / 2 - 8;
-    return [direita(o), [xFora, o.y], [xFora, d.y], direita(d)];
+    if (d.linha > o.linha) {
+      const xFora = o.x + 100 + proximaFaixa("direita") * 10;
+      return [direita(o), [xFora, o.y], [xFora, d.y], direita(d)];
+    }
+    const xFora = o.x - 100 - proximaFaixa("esquerda") * 10;
+    return [esquerda(o), [xFora, o.y], [xFora, d.y], esquerda(d)];
   };
 
   if (o.coluna === d.coluna) {
@@ -308,7 +323,8 @@ function rota(o: PassoDesenhado, d: PassoDesenhado, todos: PassoDesenhado[]): [n
     const meio = by + (ty - by) / 2;
     return [[bx, by], [bx, meio], [d.x, meio], topo(d)];
   }
-  return [ladoRumoA(o, d), [d.x, o.y], base(d)];
+  // Sobe para outra coluna: sai pelo topo e entra pelo lado do destino.
+  return [topo(o), [o.x, d.y], ladoRumoA(d, o)];
 }
 
 /** O rótulo da ligação ("sim", "não") fica logo na saída da origem. */

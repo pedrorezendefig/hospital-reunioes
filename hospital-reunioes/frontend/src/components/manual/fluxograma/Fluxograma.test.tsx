@@ -248,3 +248,32 @@ describe("o leitor de tela", () => {
     ]);
   });
 });
+
+describe("o bloco com erro", () => {
+  function erroDo(fonte: string): string {
+    const { container } = desenhar(fonte);
+    expect(container.querySelector("svg")).toBeNull();
+    const alerta = screen.getByRole("alert");
+    expect(alerta.textContent).toContain("Este fluxograma tem erro");
+    return alerta.textContent!;
+  }
+
+  it("passo repetido vira mensagem de erro", () => {
+    const fonte = REUNIAO.replace("passo remarcar 3,2:", "passo pauta 3,2:");
+    expect(erroDo(fonte)).toContain('Linha 5: o passo "pauta" já foi declarado.');
+  });
+
+  it("ligação para passo que não existe vira mensagem de erro", () => {
+    const fonte = REUNIAO.replace("quorum -> ata: sim", "quorum -> assinar: sim");
+    expect(erroDo(fonte)).toContain('Linha 8: a ligação quorum -> assinar cita o passo "assinar", que não existe.');
+  });
+
+  it("posição ocupada vira mensagem de erro", () => {
+    const fonte = REUNIAO.replace("passo remarcar 3,2:", "passo remarcar 3,1:");
+    expect(erroDo(fonte)).toContain('Linha 5: a posição 3,1 já é do passo "quorum".');
+  });
+
+  it("linha que não se entende vira mensagem de erro", () => {
+    expect(erroDo(`${REUNIAO}\nlosango x 9,9: Forma que não existe`)).toContain("Linha 10: não entendi");
+  });
+});
