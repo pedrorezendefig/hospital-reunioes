@@ -68,6 +68,13 @@ def test_conta_os_usos_e_so_olha_os_climas_pedidos(tmp_path):
     assert _rodar(musica, raiz, "--climas", "calma").stdout.strip() == str(musica / "calma" / "piano.mp3")
 
 
+def test_no_empate_total_vence_o_primeiro_clima_pedido_e_nao_a_ordem_alfabetica(tmp_path):
+    # "animada" vem antes de "tecnologia" no alfabeto; o padrão pede tecnologia primeiro.
+    musica = _biblioteca(tmp_path, {"tecnologia": ["z.mp3"], "animada": ["a.mp3"]})
+    assert _rodar(musica, tmp_path / "repo").stdout.strip() == str(musica / "tecnologia" / "z.mp3")
+    assert _rodar(musica, tmp_path / "repo", "--climas", "animada,tecnologia").stdout.strip() == str(musica / "animada" / "a.mp3")
+
+
 def test_sem_faixa_nos_climas_sai_com_erro(tmp_path):
     musica = _biblioteca(tmp_path, {"calma": ["piano.mp3"]})
     saida = _rodar(musica, tmp_path / "repo")
