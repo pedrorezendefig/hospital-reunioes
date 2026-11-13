@@ -242,6 +242,20 @@ function CopiarLink({ demanda }: { demanda: Demanda }) {
   );
 }
 
+/**
+ * O topo e o Copiar link juntos, o cabeçalho de toda Demanda aberta: o do
+ * Documento do card e o do chat, quando a Demanda abre nele (a conversa
+ * Registrada do autor e o card em revisão, issue #1669).
+ */
+export function CabecalhoDaDemanda({ demanda }: { demanda: Demanda }) {
+  return (
+    <>
+      <Topo demanda={demanda} />
+      <CopiarLink demanda={demanda} />
+    </>
+  );
+}
+
 function Topicos({ topicos }: { topicos: PedacoForte[][] }) {
   const [tudo, setTudo] = useState(false);
   const visiveis = tudo ? topicos : topicos.slice(0, TOPICOS_VISIVEIS);
@@ -335,9 +349,7 @@ export function DocumentoDoCard({ demanda }: { demanda: Demanda }) {
       aria-label={TITULO_DOCUMENTO}
       className="md:col-span-2 px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2"
     >
-      <Topo demanda={demanda} />
-
-      <CopiarLink demanda={demanda} />
+      <CabecalhoDaDemanda demanda={demanda} />
 
       <FraseEOQueMuda texto={demanda.o_que_muda} chave={demanda.id} />
 
