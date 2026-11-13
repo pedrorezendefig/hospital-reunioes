@@ -1385,7 +1385,7 @@ export function ConversasDaTecnologia({
                     {/* A Demanda que abre no chat tem o mesmo cabeçalho do Documento (issue #1669). */}
                     {aberta && (
                       <div className="px-4 py-3 rounded-2xl border border-border bg-white space-y-2">
-                        <CabecalhoDaDemanda demanda={aberta} />
+                        <CabecalhoDaDemanda key={chave} demanda={aberta} />
                       </div>
                     )}
                     <ChatDaTecnologia key={chave} token={token} demandaId={aberta?.id ?? null} onMudou={aoMudar} />

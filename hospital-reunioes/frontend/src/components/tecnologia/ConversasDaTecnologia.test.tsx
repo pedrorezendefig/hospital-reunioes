@@ -2032,6 +2032,38 @@ describe("O Número e o Copiar link no chat (issue #1669)", () => {
     );
   });
 
+  it("trocar de Demanda depois de copiar não leva o Link copiado para a outra", async () => {
+    areaDeTransferencia();
+    const OUTRA = demanda("r-3", "Senha do ponto expira", { numero: 42, minha: true });
+    comAs([REGISTRADA_DO_AUTOR, OUTRA]);
+
+    const aberta = await abrirNoChat(/Escala some no domingo/);
+    fireEvent.click(within(aberta).getByRole("button", { name: "Copiar link" }));
+    expect(await within(aberta).findByText("Link copiado")).toBeTruthy();
+
+    await abrirNoChat(/Senha do ponto expira/);
+    const outra = screen.getByRole("region", { name: "Conversa aberta" });
+    expect(within(outra).getByText("Demanda 42")).toBeTruthy();
+    expect(within(outra).queryByText("Link copiado")).toBeNull();
+  });
+
+  it("trocar de Demanda depois de o navegador recusar a cópia não mostra o link da anterior", async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error("negado"));
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const OUTRA = demanda("r-3", "Senha do ponto expira", { numero: 42, minha: true });
+    comAs([REGISTRADA_DO_AUTOR, OUTRA]);
+
+    const aberta = await abrirNoChat(/Escala some no domingo/);
+    fireEvent.click(within(aberta).getByRole("button", { name: "Copiar link" }));
+    expect(await within(aberta).findByRole("textbox", { name: "Link da Demanda" })).toBeTruthy();
+
+    await abrirNoChat(/Senha do ponto expira/);
+    const outra = screen.getByRole("region", { name: "Conversa aberta" });
+    expect(within(outra).getByText("Demanda 42")).toBeTruthy();
+    expect(within(outra).queryByRole("textbox", { name: "Link da Demanda" })).toBeNull();
+  });
+
   it("a conversa nova, que ainda não é Demanda, segue sem o cabeçalho", async () => {
     comAs([REGISTRADA_DO_AUTOR]);
     await within(lista()).findByText("Escala some no domingo");
