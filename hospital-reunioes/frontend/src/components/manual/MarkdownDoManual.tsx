@@ -1,10 +1,9 @@
 "use client";
 
-import { isValidElement, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 
 import { enderecoDaImagem } from "@/lib/manual/paginas";
-import { Fluxograma } from "./fluxograma/Fluxograma";
+import { PreDoManual } from "./fluxograma/PreDoManual";
 
 /**
  * O Markdown de uma página do manual no visual do app (issue #1718, ADR 0094):
@@ -13,8 +12,8 @@ import { Fluxograma } from "./fluxograma/Fluxograma";
  * `uppercase`, porque a regra base só alcança `h1`, `h2` e `h3`. O texto
  * corrido fica como foi escrito.
  *
- * O bloco `fluxograma` vira o Fluxograma do app (emenda da ADR 0094, issue
- * #1719), ligado aqui pela primeira página que traz um (issue #1723).
+ * O bloco `fluxograma` vira o desenho do Fluxograma (emenda da ADR 0094), pelo
+ * `PreDoManual`; qualquer outro bloco de código continua código.
  */
 function componentes(pasta: string): Components {
   return {
@@ -45,19 +44,12 @@ function componentes(pasta: string): Components {
         className="block max-w-full h-auto my-4 rounded-xl border border-border shadow-premium"
       />
     ),
-    pre: ({ children }) => {
-      const bloco = isValidElement<{ className?: string; children?: ReactNode }>(children)
-        ? children.props
-        : null;
-      if (bloco?.className === "language-fluxograma") {
-        return <Fluxograma fonte={String(bloco.children ?? "")} />;
-      }
-      return (
-        <pre className="my-4 overflow-x-auto rounded-xl border border-border bg-bg px-4 py-3 text-[13px] font-mono text-text-secondary">
-          {children}
-        </pre>
-      );
-    },
+    pre: (props) => (
+      <PreDoManual
+        {...props}
+        className="my-4 overflow-x-auto rounded-xl border border-border bg-bg px-4 py-3 text-[13px] font-mono text-text-secondary"
+      />
+    ),
     code: ({ children }) => (
       <code className="rounded bg-primary/5 px-1.5 py-0.5 text-[13px] font-mono text-text">{children}</code>
     ),

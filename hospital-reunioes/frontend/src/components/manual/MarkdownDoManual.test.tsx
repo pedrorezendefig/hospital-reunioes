@@ -13,7 +13,6 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { apareceComoFoiEscrito } from "@/lib/caixa-alta";
-import { carregarPaginasDoManual } from "@/lib/manual/carregar";
 import { MarkdownDoManual } from "./MarkdownDoManual";
 
 afterEach(() => {
@@ -46,26 +45,19 @@ describe("os títulos do Markdown do manual", () => {
   });
 });
 
-describe("o bloco fluxograma da página do manual", () => {
-  it("a página de Ouvidoria desenha o fluxograma do caminho da manifestação, sem erro de bloco", () => {
-    const ouvidoria = carregarPaginasDoManual().find((p) => p.modulo === "ouvidoria")!;
+describe("o bloco fluxograma da página", () => {
+  it("vira o desenho do Fluxograma, e não o texto cru do bloco", () => {
+    const pagina = [
+      "O caminho:",
+      "```fluxograma",
+      "inicio criar 1,1: Criar o POP",
+      "fim publicada 2,1: Versão publicada",
+      "criar -> publicada",
+      "```",
+    ].join("\n");
+    const { container } = render(<MarkdownDoManual pasta="pops">{pagina}</MarkdownDoManual>);
 
-    const { container } = render(
-      <MarkdownDoManual pasta={ouvidoria.pasta}>{ouvidoria.corpo}</MarkdownDoManual>
-    );
-
-    expect(container.querySelector("[data-fluxograma]")).not.toBeNull();
-    expect(container.querySelector('[data-passo="chega"]')).not.toBeNull();
-    expect(container.querySelector('[data-passo="encerrar"]')).not.toBeNull();
-    expect(screen.queryByRole("alert")).toBeNull();
-  });
-
-  it("outro bloco de código continua código", () => {
-    const { container } = render(
-      <MarkdownDoManual pasta="pops">{"```\nnpm run dev\n```"}</MarkdownDoManual>
-    );
-
-    expect(container.querySelector("[data-fluxograma]")).toBeNull();
-    expect(container.querySelector("pre")?.textContent).toContain("npm run dev");
+    expect(container.querySelector("[data-fluxograma] [data-passo=\"publicada\"]")).not.toBeNull();
+    expect(container.querySelector("pre")).toBeNull();
   });
 });

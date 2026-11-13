@@ -145,13 +145,13 @@ describe("o desenho da página", () => {
     );
   });
 
-  it("o bloco fluxograma vira o desenho do Fluxograma, e não código cru", () => {
+  it("o bloco fluxograma da página vira o desenho do Fluxograma", () => {
     sessao.participante = pessoa({ access_profile: null, perfil_pop: "coordenador" });
 
     const { container } = render(<Manual paginas={PAGINAS} />);
 
-    expect(container.querySelector('[data-passo="abrir"]')?.textContent).toContain("Abrir o POP");
-    expect(container.querySelector("pre")).toBeNull();
+    const passo = container.querySelector('[data-fluxograma] [data-passo="abrir"]');
+    expect(passo?.textContent).toContain("Abrir o POP");
   });
 
   it("o título da página e os títulos das tarefas saem como títulos", () => {
