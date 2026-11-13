@@ -194,6 +194,21 @@ describe("a lista com os filtros", () => {
     expect(card.getByText(/Relata desrespeito grave/)).toBeTruthy();
   });
 
+  it("cada nota é o card padrão: nota, ponto e data em cima, o comentário no meio (issue #1628)", async () => {
+    // Seção 4.5 do anexo da Demanda #1527: a lista usa o card padrão da seção
+    // 4.12, o mesmo da fila e do Painel.
+    await abrir();
+
+    const card = screen.getByRole("article", { name: /avaliação nota 1/i });
+    expect(card.getAttribute("data-card")).toBe("padrao");
+    const cabeca = card.firstElementChild!;
+    expect(within(cabeca as HTMLElement).getByText("Nota 1")).toBeTruthy();
+    expect(within(cabeca as HTMLElement).getByText("Emergência adulta")).toBeTruthy();
+    expect(within(cabeca as HTMLElement).getByText("12/11/2026, 10:00")).toBeTruthy();
+    expect(within(cabeca as HTMLElement).queryByText("A recepcionista gritou comigo.")).toBeNull();
+    expect(within(card).getByText("A recepcionista gritou comigo.")).toBeTruthy();
+  });
+
   it("cada filtro vai no endereço da lista", async () => {
     await abrir();
 
