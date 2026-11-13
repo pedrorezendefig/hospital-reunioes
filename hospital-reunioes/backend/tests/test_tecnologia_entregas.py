@@ -25,7 +25,7 @@ from app.limiter import limiter  # noqa: E402
 from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
 from app.services import tecnologia_envio  # noqa: E402
 from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
-from app.services.tecnologia_entregas import ritmo, tamanho_da_entrega  # noqa: E402
+from app.services.tecnologia_entregas import Filtros, lista_por_semana, ritmo, tamanho_da_entrega  # noqa: E402
 
 ENTREGAS = f"{BASE}/entregas"
 
@@ -299,6 +299,55 @@ class TestRitmo:
         assert resultado["topo"]["entregas"]["total"] == 0
         assert _semana(resultado, "2026-11-09")["entregas"] == []
         assert _semana(resultado, "2026-11-09")["pedidos"] == 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 0c. A lista por semana, na regra pura (issue #1703, ADR 0092, decisao 5)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _semanas_da_lista(grupos) -> list[tuple[str, list[str]]]:
+    return [(inicio.isoformat(), [d["id"] for d in demandas]) for inicio, demandas in grupos]
+
+
+class TestListaPorSemana:
+    def test_as_entregas_vem_por_semana_a_mais_nova_em_cima(self):
+        """As mesmas semanas do grafico: a segunda pelo fuso do hospital, so as
+        12 do grafico, so as que tem entrega, e dentro da semana a entrega mais
+        nova primeiro. O que nao foi entregue fica fora."""
+        grupos = lista_por_semana(
+            [
+                _fechado("terca", "2026-11-10T12:00:00Z"),
+                _fechado("quinta", "2026-11-12T12:00:00Z"),
+                # Domingo 08/11 as 22h no hospital: semana de 02/11.
+                _fechado("domingo", "2026-11-09T01:00:00Z"),
+                _fechado("ultima-do-grafico", "2026-08-24T12:00:00Z"),
+                _fechado("antes-do-grafico", "2026-08-23T12:00:00Z"),
+                _fechado("recusado", "2026-11-11T12:00:00Z", etapa="nao_sera_feita"),
+                _card("aberto", etapa="em_desenvolvimento"),
+            ],
+            agora=AGORA,
+        )
+
+        assert _semanas_da_lista(grupos) == [
+            ("2026-11-09", ["quinta", "terca"]),
+            ("2026-11-02", ["domingo"]),
+            ("2026-08-24", ["ultima-do-grafico"]),
+        ]
+
+    def test_os_filtros_valem_para_os_grupos(self):
+        grupos = lista_por_semana(
+            [
+                _fechado("bug", "2026-11-10T12:00:00Z", tipo="defeito"),
+                _fechado("melhoria", "2026-11-11T12:00:00Z", tipo="novo"),
+                _fechado("bug-antigo", "2026-10-01T12:00:00Z", tipo="defeito"),
+                _fechado("melhoria-antiga", "2026-10-02T12:00:00Z", tipo="novo"),
+            ],
+            agora=AGORA,
+            filtros=Filtros(tipo="melhoria"),
+        )
+
+        assert _semanas_da_lista(grupos) == [("2026-11-09", ["melhoria"]), ("2026-09-28", ["melhoria-antiga"])]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
