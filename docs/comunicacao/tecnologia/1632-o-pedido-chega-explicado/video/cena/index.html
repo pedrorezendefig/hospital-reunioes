@@ -1,0 +1,656 @@
+<!doctype html>
+<!-- O pedido chega explicado: o vídeo de percepção de valor do PRD #1632 do Hospital São Matheus.
+     Contrato do estúdio: seek(t) pinta o quadro t do zero (DOM com transform), sem rAF, timer ou transição CSS,
+     acaso só com semente, movimento só com molas (lib/motion.js). Todo evento preso a uma palavra do tempos.js.
+     As telas do app são capturas reais (assets/0*.png, 2x). O email é o template do app gerado pelo código do app;
+     o corpo do card é o texto da função do app, mostrado como o GitHub mostra. Pessoas e pedidos fictícios. -->
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: 'HPS'; font-weight: 400; src: url(assets/HPSimplified_Rg.ttf) format('truetype'); }
+  * { transition: none !important; animation: none !important; box-sizing: border-box; }
+  html, body { margin: 0; background: #000; overflow: hidden; }
+  #palco { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: #14163F;
+    font-family: 'HPS', system-ui, sans-serif; font-weight: 400; color: #EEF2FA; -webkit-font-smoothing: antialiased; }
+  #fundo { position: absolute; inset: 0; }
+  .camada { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden; display: none; transform-origin: 50% 50%; }
+
+  /* Painel com captura do app */
+  .painel { position: absolute; overflow: hidden; border-radius: 22px; background: #fff; box-shadow: 0 40px 110px rgba(0, 0, 0, 0.45); transform-origin: 50% 50%; }
+  .painel.cheio { border-radius: 0; box-shadow: none; }
+  .mundo { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  .mundo > img { position: absolute; left: 0; top: 0; }
+  .remendo { position: absolute; background: #fff; }
+  .realce { position: absolute; border: 3px solid #3B6FB6; border-radius: 10px; box-shadow: 0 0 0 6px rgba(59, 111, 182, 0.2);
+    overflow: hidden; display: none; }
+  .realce i { position: absolute; inset: 0; background: linear-gradient(105deg, transparent 35%, rgba(143, 178, 234, 0.45) 50%, transparent 65%); background-size: 260% 100%; }
+  .marca { position: absolute; display: none; border-radius: 6px; background: rgba(59, 111, 182, 0.13); overflow: hidden; }
+  .marca b { position: absolute; left: 0; top: 0; bottom: 0; background: #3B6FB6; }
+  .marca i { position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(143, 178, 234, 0.55) 50%, transparent 70%); background-size: 260% 100%; }
+  .foco { position: absolute; border-radius: 14px; display: none; }
+  .cursor { position: absolute; left: 0; top: 0; width: 30px; height: 42px; transform-origin: 0 0; display: none; z-index: 9; }
+  .anel { position: absolute; left: 0; top: 0; border: 3px solid #3B6FB6; border-radius: 50%; display: none; z-index: 8; }
+
+  /* Selos e avisos */
+  .selo { position: absolute; display: none; white-space: nowrap; background: #3B6FB6; color: #fff; font-size: 32px; border-radius: 999px;
+    padding: 14px 30px 15px 22px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35); transform-origin: 50% 50%; z-index: 12; }
+  .selo svg { vertical-align: -7px; margin-right: 12px; }
+  .selo.escuro { background: #1A1C4E; border: 2px solid rgba(238, 242, 250, 0.28); }
+  .num { position: absolute; display: none; width: 52px; height: 52px; border-radius: 50%; background: #3B6FB6; color: #fff; font-size: 30px;
+    text-align: center; line-height: 52px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); z-index: 12; }
+  .etiqueta { position: absolute; display: none; white-space: nowrap; background: #2B2E7E; color: #fff; font-size: 25px; border-radius: 12px;
+    padding: 9px 18px 10px 14px; box-shadow: 0 12px 34px rgba(26, 28, 78, 0.35); transform-origin: 0 0; z-index: 12; }
+  .etiqueta em { font-style: normal; color: #9DBBEF; margin-right: 8px; }
+  .envelope { position: absolute; display: none; width: 300px; height: 190px; background: #fff; border-radius: 22px; border: 2px solid #DCE4F2;
+    box-shadow: 0 24px 60px rgba(26, 28, 78, 0.28); transform-origin: 50% 50%; z-index: 12; }
+  .envelope svg { position: absolute; left: 50%; top: 30px; transform: translateX(-50%); }
+  .envelope .t1 { position: absolute; left: 0; right: 0; top: 118px; text-align: center; font-size: 30px; color: #1A1C4E; }
+  .envelope .t2 { position: absolute; left: 0; right: 0; top: 118px; text-align: center; font-size: 30px; color: #64748B; }
+  .envelope .risco { position: absolute; left: 40px; right: 40px; top: 56px; height: 5px; border-radius: 3px; background: #64748B; transform-origin: 0 50%; }
+
+  /* Fim: os dois lados */
+  .rot { position: absolute; display: none; white-space: nowrap; font-size: 36px; color: #A9BCE3; transform: translate(-50%, 0); z-index: 12; }
+  #fio { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; display: none; z-index: 11; overflow: visible; }
+
+  /* Legenda */
+  .leg { position: absolute; left: 960px; top: 1018px; display: none; white-space: nowrap; background: rgba(13, 14, 40, 0.9);
+    border: 1px solid rgba(238, 242, 250, 0.14); border-radius: 999px; padding: 13px 34px 15px; font-size: 38px; color: #EEF2FA;
+    box-shadow: 0 16px 50px rgba(0, 0, 0, 0.35); z-index: 92; }
+  .leg span { display: inline-block; margin-right: 0.24em; }
+  .leg span:last-child { margin-right: 0; }
+
+  /* Transições e assinatura */
+  .tira { position: absolute; left: 0; width: 1920px; background: #14163F; display: none; z-index: 90; }
+  #borda { position: absolute; left: 0; width: 1920px; height: 4px; background: #8FB2EA; box-shadow: 0 0 30px 6px rgba(143, 178, 234, 0.55); display: none; z-index: 91; }
+  #cortina { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: #fff; display: none; z-index: 95; }
+  #logo { position: absolute; left: 50%; top: 50%; width: 600px; display: none; z-index: 96; }
+</style>
+<script src="../../lib/motion.js"></script>
+<script src="assets/tempos.js"></script>
+</head>
+<body>
+<div id="palco"><div id="fundo"></div></div>
+<script>
+const { spring, track, MOLA, clamp } = Motion;
+const S = (t, m = MOLA.padrao) => spring(t, ...m);
+const TR = (t, keys, m = MOLA.padrao) => track(t, keys, ...m);
+const lerp = (a, b, p) => a + (b - a) * p;
+const px = (v) => `${v}px`;
+const palco = document.getElementById('palco');
+const fundo = document.getElementById('fundo');
+function el(tag, cls, css, html, parent) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (css) Object.assign(e.style, css);
+  if (html != null) e.innerHTML = html;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+// ---------- Tempo: cada evento preso a uma palavra da narração ----------
+const norm = (x) => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+function W(n, txt, k = 0) {
+  const alvo = norm(txt);
+  for (const w of TEMPOS.cenas[n - 1].palavras) if (norm(w.p) === alvo && k-- === 0) return w.a;
+  throw new Error(`palavra ${txt} não está no trecho ${n}`);
+}
+const C1 = W(2, 'até') - 0.45, C2 = W(3, 'a') - 0.5, C3 = W(4, 'no') - 0.5, C4 = W(5, 'sua') - 0.6;
+const C5 = W(9, 'na') - 0.6, C6 = W(10, 'se') - 0.44, C7 = W(11, 'no') - 0.5, C8 = W(12, 'os') - 0.5, C9 = W(13, 'você') - 0.5;
+const C10 = TEMPOS.cenas[12].fim_s + 0.35;
+const DUR = +(C10 + 3.6).toFixed(2);
+window.FILM = { fps: 30, duration: DUR, formatos: ['16x9'] };
+
+const CUES = [];
+const cue = (t, type, extra = {}) => CUES.push({ t: +t.toFixed(3), type, ...extra });
+
+// ---------- Ícones ----------
+const SETA = `<svg width="30" height="42" viewBox="0 0 30 42"><path d="M2 2 L2 33 L10 25.5 L15.5 38.5 L21 36.2 L15.6 23.6 L26 23.6 Z" fill="#fff" stroke="#1A1C4E" stroke-width="2.4" stroke-linejoin="round"/></svg>`;
+const CHECK = (c = '#fff', s = 32) => `<svg width="${s}" height="${s}" viewBox="0 0 30 30"><circle cx="15" cy="15" r="13" fill="none" stroke="${c}" stroke-width="2.4"/><path d="M9 15.5 L13.3 19.6 L21.2 11" fill="none" stroke="${c}" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const SINO = (c = '#fff', s = 34) => `<svg width="${s}" height="${s}" viewBox="0 0 34 34"><path d="M9 24 V15.5 a8 8 0 0 1 16 0 V24 l2.5 3 h-21 z" fill="none" stroke="${c}" stroke-width="2.4" stroke-linejoin="round"/><path d="M14 30 a3 3 0 0 0 6 0" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round"/><path d="M5 5 L29 29" stroke="${c}" stroke-width="2.6" stroke-linecap="round"/></svg>`;
+const CARTA = (c = '#2B2E7E', s = 74) => `<svg width="${s}" height="${s * 0.72}" viewBox="0 0 74 53"><rect x="3" y="3" width="68" height="47" rx="7" fill="none" stroke="${c}" stroke-width="4"/><path d="M5 7 L37 31 L69 7" fill="none" stroke="${c}" stroke-width="4" stroke-linejoin="round"/></svg>`;
+const SEM_CARTA = (c = '#fff', s = 36) => `<svg width="${s}" height="${s}" viewBox="0 0 36 36"><rect x="4" y="9" width="28" height="19" rx="3.5" fill="none" stroke="${c}" stroke-width="2.4"/><path d="M5 11 L18 20 L31 11" fill="none" stroke="${c}" stroke-width="2.4" stroke-linejoin="round"/><path d="M4 4 L32 32" stroke="${c}" stroke-width="2.6" stroke-linecap="round"/></svg>`;
+const PESSOA = (c = '#fff', s = 32) => `<svg width="${s}" height="${s}" viewBox="0 0 32 32"><circle cx="16" cy="11" r="6" fill="none" stroke="${c}" stroke-width="2.4"/><path d="M5 28 a11 9 0 0 1 22 0" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+
+// ---------- Fundo: azul-marinho com uma luz que anda devagar ----------
+const gradFundo = (t) => { const x = 420 + 15 * t, y = 280 + 4 * t; return `radial-gradient(1000px 760px at ${x}px ${y}px, rgba(59,111,182,0.30), transparent 70%),
+    radial-gradient(900px 700px at ${1650 - 11 * t}px ${880 - 3 * t}px, rgba(43,46,126,0.55), transparent 70%),
+    linear-gradient(160deg, #1E1D57 0%, #15174A 55%, #101233 100%)`; };
+function pintaFundo(t) { fundo.style.background = gradFundo(t); }
+
+// ---------- Painéis com as capturas ----------
+function camada(z) { return el('div', 'camada', { zIndex: z }, null, palco); }
+function painel(parent, src, iw, ih, w, h, x, y, cheio = false) {
+  const box = el('div', 'painel' + (cheio ? ' cheio' : ''), { width: px(w), height: px(h), left: px(x), top: px(y) }, null, parent);
+  const mundo = el('div', 'mundo', { width: px(iw), height: px(ih) }, null, box);
+  const img = el('img', null, { width: px(iw), height: px(ih) }, null, mundo); img.src = src;
+  return { box, mundo, img, w, h, iw, ih, x, y, s: 1, x0: 0, y0: 0 };
+}
+const cheio = (parent, src, ih = 1080) => painel(parent, src, 1920, ih, 1920, 1080, 0, 0, true);
+function vista(p, x0, y0, s) {
+  p.s = s; p.x0 = x0; p.y0 = y0;
+  p.mundo.style.transform = `translate(${(-x0 * s).toFixed(2)}px, ${(-y0 * s).toFixed(2)}px) scale(${s.toFixed(4)})`;
+}
+// Câmera dentro do painel: o ponto (fx, fy) da captura no centro, com escala s. yMin corta o que fica acima.
+function foco(p, fx, fy, s, yMin = 0) {
+  const hw = p.w / (2 * s), hh = p.h / (2 * s);
+  fx = clamp(fx, hw, Math.max(hw, p.iw - hw)); fy = clamp(fy, yMin + hh, Math.max(yMin + hh, p.ih - hh));
+  vista(p, fx - hw, fy - hh, s);
+}
+// Onde um ponto da captura cai no palco (dentro da mesma camada).
+const naTela = (p, x, y) => [p.x + (x - p.x0) * p.s, p.y + (y - p.y0) * p.s];
+// O canto do rodapé das capturas mostra a versão do build de desenvolvimento: coberto com o branco da tela.
+const remendo = (p, x, y, w, h) => el('div', 'remendo', { left: px(x), top: px(y), width: px(w), height: px(h) }, null, p.mundo);
+const vivo = (t, a = 1) => [4 * a * Math.sin(t * 0.7), 3 * a * Math.sin(t * 0.5 + 1), 1 + 0.008 * a * Math.sin(t * 0.4)];
+
+function realce(p) { return el('div', 'realce', null, '<i></i>', p.mundo); }
+function pintaRealce(r, caixa, s, t, t0, t1 = 1e9) {
+  if (t < t0 || t > t1 + 0.3) { r.style.display = 'none'; return; }
+  const p = clamp(S(t - t0, MOLA.ui), 0, 1.05), q = t > t1 ? clamp(S(t - t1, MOLA.ui), 0, 1) : 0;
+  const pad = (8 + 6 * (1 - p)) / s;
+  const [x, y, w, h] = caixa;
+  Object.assign(r.style, { display: 'block', left: px(x - pad), top: px(y - pad), width: px(w + 2 * pad), height: px(h + 2 * pad),
+    borderWidth: px(3 / s), borderRadius: px(10 / s), boxShadow: `0 0 0 ${6 / s}px rgba(59,111,182,0.2)`, opacity: clamp(p * 1.4, 0, 1) * (1 - q) });
+  r.firstChild.style.backgroundPosition = `${lerp(130, -40, clamp(S(t - t0 - 0.05, [60, 15.5]), 0, 1))}% 0`;
+}
+function marca(p) { return el('div', 'marca', null, '<b></b><i></i>', p.mundo); }
+function pintaMarca(m, caixa, s, t, t0, t1 = 1e9) {
+  if (t < t0 || t > t1 + 0.4) { m.style.display = 'none'; return; }
+  const p = clamp(S(t - t0, MOLA.ui), 0, 1), q = t > t1 ? clamp(S(t - t1, MOLA.padrao), 0, 1) : 0;
+  const [x, y, w, h] = caixa, pad = 6 / s;
+  Object.assign(m.style, { display: 'block', left: px(x - 2 * pad), top: px(y - pad), width: px((w + 3 * pad) * p), height: px(h + 2 * pad),
+    borderRadius: px(6 / s), opacity: 1 - q });
+  m.firstChild.style.width = px(5 / s);
+  m.lastChild.style.backgroundPosition = `${lerp(130, -40, clamp(S(t - t0 - 0.05, [60, 15.5]), 0, 1))}% 0`;
+}
+function holofote(p) { return el('div', 'foco', null, null, p.mundo); }
+function pintaHolofote(f, caixa, s, t, t0, t1 = 1e9, escuro = 0.6) {
+  if (t < t0 || t > t1 + 0.5) { f.style.display = 'none'; return; }
+  const a = clamp(S(t - t0, MOLA.padrao), 0, 1) * (t > t1 ? 1 - clamp(S(t - t1, MOLA.padrao), 0, 1) : 1);
+  const [x, y, w, h] = caixa, pad = 12 / s;
+  Object.assign(f.style, { display: 'block', left: px(x - pad), top: px(y - pad), width: px(w + 2 * pad), height: px(h + 2 * pad),
+    borderRadius: px(14 / s), boxShadow: `0 0 0 ${4000 / s}px rgba(16,18,51,${(escuro * a).toFixed(3)}), 0 0 0 ${3 / s}px rgba(59,111,182,${a.toFixed(3)})` });
+}
+function cursor(p) { return { c: el('div', 'cursor', null, SETA, p.mundo), a: el('div', 'anel', null, null, p.mundo) }; }
+function pintaCursor(k, s, t, keys, cliques, vis = true) {
+  if (!vis || t < keys[0][0]) { k.c.style.display = 'none'; k.a.style.display = 'none'; return; }
+  const x = TR(t, keys.map(([tt, xx]) => [tt, xx])), y = TR(t, keys.map(([tt, , yy]) => [tt, yy]));
+  const ap = clamp(S(t - keys[0][0], MOLA.ui), 0, 1);
+  let esc = 1, anel = null;
+  for (const tc of cliques) {
+    esc -= 0.18 * (S(t - tc, [600, 40]) - S(t - tc - 0.09, [600, 40]));
+    if (t >= tc && t - tc <= 0.6) anel = tc;
+  }
+  Object.assign(k.c.style, { display: 'block', opacity: ap, transform: `translate(${x}px, ${y}px) scale(${(esc * 1.25) / s})` });
+  if (anel == null) { k.a.style.display = 'none'; return; }
+  const d = t - anel, r = (12 + 46 * S(d, [200, 24])) / s;
+  Object.assign(k.a.style, { display: 'block', width: px(2 * r), height: px(2 * r), borderWidth: px(3 / s), transform: `translate(${x - r}px, ${y - r}px)`, opacity: 1 - S(d, [60, 15.5]) });
+}
+function selo(parent, html, cls = '') { return el('div', 'selo ' + cls, null, html, parent); }
+function pintaSelo(e, t, t0, t1, x, y, esc = 1) {
+  if (t < t0 || t > t1 + 0.3) { e.style.display = 'none'; return; }
+  const p = S(t - t0, MOLA.brincalhona), q = t > t1 ? clamp(S(t - t1, MOLA.ui), 0, 1) : 0;
+  Object.assign(e.style, { display: 'block', left: px(x), top: px(y), opacity: clamp(S(t - t0, MOLA.ui) * 2, 0, 1) * (1 - q),
+    transform: `translate(-50%, -50%) scale(${(esc * (0.6 + 0.4 * p) * (1 - 0.15 * q)).toFixed(4)}) rotate(${(-4 * (1 - p)).toFixed(2)}deg)` });
+}
+const mostra = (e, v) => { e.style.display = v ? 'block' : 'none'; return v; };
+
+// =====================================================================================
+// Cena 1 (gancho): o clique em Criar o card e o email chegando.
+const L1 = camada(20);
+const F03 = cheio(L1, 'assets/03-resumo-escolhido.png');
+remendo(F03, 1790, 1058, 120, 22);
+const K1 = cursor(F03);
+const R1b = realce(F03);
+const E1 = painel(L1, 'assets/07-email-card-novo.png', 1920, 1080, 820, 560, 1040, 250);
+const R1s = realce(E1);
+function camL1(t) {
+  const [dx, dy, ds] = vivo(t);
+  const tq = W(1, 'quem') - 0.15;
+  return { fx: TR(t, [[0, 520], [tq, 775]]) + dx, fy: TR(t, [[0, 830], [tq, 712]]) + dy, s: TR(t, [[0, 2.3], [tq, 1.42], [W(1, 'sabe'), 1.48]]) * ds };
+}
+function pintaL1(t) {
+  if (!mostra(L1, t < C1 + 0.7)) return;
+  const q = clamp(S(t - C1, MOLA.padrao), 0, 1.02);
+  L1.style.transform = `scale(${(1 - 0.16 * q).toFixed(4)})`;
+  L1.style.filter = `grayscale(${q.toFixed(3)}) brightness(${(1 - 0.3 * q).toFixed(3)})`;
+  L1.style.opacity = 1 - clamp(S(t - C1 - 0.12, MOLA.ui), 0, 1);
+  const c = camL1(t); foco(F03, c.fx, c.fy, c.s);
+  pintaCursor(K1, F03.s, t, [[-1, 430, 905], [0, 404, 872]], [0.1]);
+  pintaRealce(R1b, [332.5, 843.5, 122, 40.5], F03.s, t, 0.12, 1.1);
+  // O email sobe do canto, inclinado, e assenta.
+  const te = W(1, 'quem'), p = S(t - te, MOLA.padrao);
+  mostra(E1.box, t >= te);
+  E1.box.style.opacity = clamp(S(t - te, MOLA.ui) * 2, 0, 1);
+  E1.box.style.transform = `translate(${(160 * (1 - p)).toFixed(1)}px, ${(720 * (1 - p)).toFixed(1)}px) rotate(${lerp(9, -2.5, p).toFixed(2)}deg)`;
+  const [dx, dy] = vivo(t, 0.6);
+  foco(E1, 960 + dx, 320 + dy, 0.9);
+  pintaRealce(R1s, [546, 68, 600, 31], E1.s, t, W(1, 'sabe'));
+}
+cue(0.1, 'click', { g: 0.6 });
+cue(W(1, 'quem'), 'notification', { g: 0.55 });
+
+// =====================================================================================
+// Cena 2: até agora, o card nascia em silêncio (o Quadro desbotado).
+const L2 = camada(10);
+const F06a = cheio(L2, 'assets/06b-lista-de-pedidos-so-do-diretor.png');
+remendo(F06a, 1790, 833, 120, 24);
+const veu2 = el('div', null, { position: 'absolute', inset: '0', background: '#14163F', opacity: 0.32 }, null, L2);
+const R2 = realce(F06a);
+const AV2 = selo(L2, `${SINO('#fff', 36)}ninguém era avisado`, 'escuro');
+function pintaL2(t) {
+  if (!mostra(L2, t >= C1 - 0.05 && t < C2 + 0.8)) return;
+  const e = S(t - C1, MOLA.padrao);
+  L2.style.transform = `scale(${(1.08 - 0.08 * e).toFixed(4)})`;
+  F06a.box.style.filter = 'grayscale(0.85) brightness(0.97)';
+  const [dx, dy, ds] = vivo(t);
+  foco(F06a, TR(t, [[C1, 880], [C2, 940]], [30, 11]) + dx, 650 + dy, TR(t, [[C1, 1.26], [C2, 1.36]], [30, 11]) * ds);
+  pintaRealce(R2, [625, 576, 302.5, 109.5], F06a.s, t, W(2, 'card'));
+  const [x, y] = naTela(F06a, 927.5, 630);
+  pintaSelo(AV2, t, W(2, 'silêncio'), 1e9, x + 250, y + 150);
+}
+cue(C1, 'whoosh', { len: 0.4, g: 0.45 });
+cue(W(2, 'silêncio'), 'pop', { g: 0.4 });
+
+// =====================================================================================
+// Cena 3: a conversa com o assistente continua igual.
+const L3 = camada(30);
+const F01 = cheio(L3, 'assets/01-conversa-melhoria.png');
+remendo(F01, 1790, 1008, 120, 24);
+const R3a = realce(F01), R3b = realce(F01), H3 = holofote(F01);
+const SE3 = selo(L3, `${CHECK('#fff', 34)}a conversa de sempre`);
+const borda = el('div', null, null, null, palco); borda.id = 'borda';
+function pintaL3(t) {
+  if (!mostra(L3, t >= C2 && t < C3 + 0.9)) { borda.style.display = 'none'; return; }
+  const p = clamp(S(t - C2, MOLA.padrao), 0, 1);
+  L3.style.clipPath = p < 0.999 ? `inset(${((1 - p) * 100).toFixed(2)}% 0 0 0)` : 'none';
+  // Empurrão lateral: o resumo (cena 4) entra pela direita e empurra a conversa para a esquerda.
+  L3.style.transform = `translateX(${(-1920 * S(t - C3, MOLA.padrao)).toFixed(1)}px)`;
+  const yb = (1 - p) * 1080;
+  mostra(borda, p > 0.01 && p < 0.995);
+  borda.style.top = px(yb - 2); borda.style.opacity = clamp((1 - p) * 4, 0, 1);
+  const [dx, dy, ds] = vivo(t);
+  foco(F01, 727 + dx, TR(t, [[C2, 590], [W(3, 'escreve') - 0.1, 650]]) + dy, TR(t, [[C2, 1.24], [W(3, 'igual'), 1.32]], [40, 12]) * ds);
+  pintaRealce(R3a, [505, 323.5, 568, 43], F01.s, t, W(3, 'conversa'), W(3, 'igual') - 0.1);
+  pintaRealce(R3b, [346.5, 689, 709, 78], F01.s, t, W(3, 'igual'), W(3, 'escreve') - 0.1);
+  pintaHolofote(H3, [329, 926, 587, 38], F01.s, t, W(3, 'escreve'), C3, 0.5);
+  pintaSelo(SE3, t, W(3, 'igual'), C3 - 0.15, 1600, 660);
+}
+cue(C2, 'whoosh', { len: 0.4, g: 0.45 });
+cue(W(3, 'igual'), 'pop', { g: 0.45 });
+
+// =====================================================================================
+// Cena 4: no resumo, escolhe quem cuida disto e clica em Criar o card.
+const L4 = camada(40);
+const F02 = cheio(L4, 'assets/02-resumo-melhoria.png');
+remendo(F02, 1790, 1058, 120, 22);
+const troca = el('div', null, { position: 'absolute', left: '455px', top: '767px', width: '314px', height: '46px', overflow: 'hidden', borderRadius: '6px' }, null, F02.mundo);
+const trocaImg = el('img', null, { position: 'absolute', left: '-455px', top: '-767px', width: '1920px', height: '1080px' }, null, troca); trocaImg.src = 'assets/03-resumo-escolhido.png';
+const K4 = cursor(F02);
+const R4 = realce(F02);
+const TC_SEL = W(4, 'quem'), TC_CARD = W(4, 'criar');
+function camL4(t) {
+  const [dx, dy, ds] = vivo(t);
+  return { fx: TR(t, [[C3, 900], [W(4, 'escolhe') - 0.3, 660]]) + dx, fy: TR(t, [[C3, 600], [W(4, 'escolhe') - 0.3, 730]]) + dy,
+    s: TR(t, [[C3, 1.16], [W(4, 'escolhe') - 0.3, 1.55]]) * ds };
+}
+function pintaL4(t) {
+  if (!mostra(L4, t >= C3 && t < C4 + 0.9)) return;
+  const p = S(t - C3, MOLA.padrao);
+  L4.style.transform = `translateX(${(1920 * (1 - p)).toFixed(1)}px)`;
+  const c = camL4(t); foco(F02, c.fx, c.fy, c.s);
+  troca.style.opacity = clamp(S(t - W(4, 'cuida'), MOLA.ui), 0, 1);
+  pintaCursor(K4, F02.s, t, [[W(4, 'escolhe') - 0.25, 780, 1010], [TC_SEL - 0.06, 650, 793], [W(4, 'clica') - 0.05, 650, 796], [TC_CARD - 0.1, 405, 868]], [TC_SEL, TC_CARD]);
+  pintaRealce(R4, [459, 771.5, 306, 38], F02.s, t, W(4, 'cuida'), W(4, 'clica'));
+}
+cue(C3, 'whoosh', { len: 0.4, g: 0.45 });
+cue(TC_SEL, 'click', { g: 0.55 });
+cue(TC_CARD, 'click', { g: 0.65 });
+
+// =====================================================================================
+// Cenas 5 a 8: o corpo do card. A parte do diretor no topo e, logo abaixo, as seis partes de quem programa.
+const L5f = camada(49);
+const L5 = camada(50);
+const P08 = painel(L5, 'assets/08b-card-corpo-inteiro.png', 1920, 2298, 1260, 900, 330, 44);
+const H5 = holofote(P08), R5 = realce(P08);
+const PARTES_Y = [549.5, 589.5, 629.5, 669.5, 709.5, 749.5];
+const PARTES_T = [W(7, 'quer'), W(7, 'pediu'), W(8, 'decidido'), W(8, 'mexer'), W(8, 'cuidados'), W(8, 'pronto')];
+const MARCAS5 = PARTES_Y.map(() => marca(P08));
+const NUMS5 = PARTES_Y.map((_, i) => el('div', 'num', null, String(i + 1), L5));
+const SE5a = selo(L5, `${PESSOA('#fff', 34)}a sua parte`);
+const SE5b = selo(L5, 'não aparece na sua tela', 'escuro');
+function camL5(t) {
+  const [dx, dy, ds] = vivo(t, 0.8);
+  const fy = TR(t, [[C4, 480], [W(6, 'logo') - 0.1, 640], [W(8, 'depois'), 668]]);
+  const s = TR(t, [[C4, 1.27], [W(7, 'ela') - 0.2, 1.33]], [60, 15.5]);
+  return { fx: 945 + dx, fy: fy + dy, s: s * ds };
+}
+const PIVO5 = [960, 494];
+// O fundo azul das cenas do card e do email: abre na mesma íris e não gira com o cartão.
+function pintaL5f(t) {
+  if (!mostra(L5f, t >= C4 && t < C6 + 0.9)) return;
+  const c4 = camL4(C4);
+  const ix = 960 + (393 - c4.fx) * c4.s, iy = 540 + (864 - c4.fy) * c4.s;
+  const r = 2300 * clamp(S(t - C4, [110, 21]), 0, 1);
+  L5f.style.clipPath = r < 2290 ? `circle(${r.toFixed(1)}px at ${ix.toFixed(1)}px ${iy.toFixed(1)}px)` : 'none';
+  L5f.style.background = gradFundo(t);
+}
+function pintaL5(t) {
+  // Entrada: íris que abre a partir do botão Criar o card. Saída: o card gira e o verso é o email.
+  const giro = 180 * clamp(S(t - C5, [140, 24]), 0, 1);
+  if (!mostra(L5, t >= C4 && giro < 90)) return;
+  const c4 = camL4(C4);
+  const ix = 960 + (393 - c4.fx) * c4.s, iy = 540 + (864 - c4.fy) * c4.s;
+  const r = 2300 * clamp(S(t - C4, [110, 21]), 0, 1);
+  L5.style.clipPath = r < 2290 ? `circle(${r.toFixed(1)}px at ${ix.toFixed(1)}px ${iy.toFixed(1)}px)` : 'none';
+  L5.style.transformOrigin = `${PIVO5[0]}px ${PIVO5[1]}px`;
+  L5.style.transform = giro > 0.01 ? `perspective(2600px) rotateY(${giro.toFixed(2)}deg)` : 'none';
+  const c = camL5(t); foco(P08, c.fx, c.fy, c.s, 125);
+  pintaHolofote(H5, [487, 229, 946, 242], P08.s, t, W(5, 'parte'), W(6, 'logo'), 0.45);
+  pintaRealce(R5, [487, 495, 946, 278], P08.s, t, W(6, 'nova'), W(7, 'ela') - 0.1);
+  const [xa, ya] = naTela(P08, 487, 350);
+  pintaSelo(SE5a, t, W(5, 'topo'), W(6, 'logo'), 190, ya);
+  const [, yb] = naTela(P08, 487, 495);
+  pintaSelo(SE5b, t, W(6, 'só'), W(7, 'ela') - 0.1, 1560, yb - 18);
+  PARTES_Y.forEach((y, i) => {
+    pintaMarca(MARCAS5[i], [487, y, 946, 24], P08.s, t, PARTES_T[i]);
+    const [, yn] = naTela(P08, 487, y + 12);
+    const e = NUMS5[i];
+    if (!mostra(e, t >= PARTES_T[i] - 0.05)) return;
+    const p = S(t - PARTES_T[i] + 0.05, MOLA.brincalhona);
+    Object.assign(e.style, { left: px(272), top: px(yn - 26), opacity: clamp(p * 2, 0, 1), transform: `scale(${(0.4 + 0.6 * p).toFixed(4)})` });
+  });
+}
+cue(C4, 'whoosh', { len: 0.45, g: 0.45 });
+cue(W(5, 'topo'), 'pop', { g: 0.45 });
+cue(W(6, 'nova'), 'pop', { g: 0.4 });
+[0, 2, 5].forEach((i) => cue(PARTES_T[i], 'pop', { g: 0.32 }));
+
+// =====================================================================================
+// Cena 9: o email que a pessoa escolhida recebe (o verso do card).
+const L6 = camada(60);
+const P07 = painel(L6, 'assets/07b-email-card-novo-inteiro.png', 1920, 1239, 1260, 900, 330, 44);
+P07.box.style.background = '#E9EDF2';
+const R6a = realce(P07), R6b = realce(P07), H6 = holofote(P07), R6c = realce(P07), R6d = realce(P07);
+function camL6(t) {
+  const [dx, dy, ds] = vivo(t, 0.8);
+  return { fx: 960 + dx, fy: TR(t, [[C5, 450], [W(9, 'tudo') - 0.15, 700], [W(9, 'link') - 0.1, 880]]) + dy,
+    s: TR(t, [[C5, 1.0], [W(9, 'tudo') - 0.15, 1.22], [W(9, 'link') - 0.1, 1.3]]) * ds };
+}
+function pintaL6(t) {
+  const giro = 180 * clamp(S(t - C5, [140, 24]), 0, 1);
+  if (!mostra(L6, giro >= 90 && t < C6 + 0.9)) return;
+  // Zoom através: a câmera atravessa o botão do email.
+  const c6 = camL6(C6); foco(P07, c6.fx, c6.fy, c6.s);
+  const [bx, by] = naTela(P07, 960, 957);
+  const z = 1 + 7 * clamp(S(t - C6, [90, 19]), 0, 1.02);
+  L6.style.transformOrigin = `${PIVO5[0]}px ${PIVO5[1]}px`;
+  const rot = `perspective(2600px) rotateY(${(giro - 180).toFixed(2)}deg)`;
+  L6.style.transform = t >= C6 ? `translate(${bx}px, ${by}px) scale(${z.toFixed(4)}) translate(${-bx}px, ${-by}px)` : rot;
+  L6.style.transformOrigin = t >= C6 ? '0 0' : `${PIVO5[0]}px ${PIVO5[1]}px`;
+  L6.style.opacity = 1 - clamp(S(t - C6 - 0.18, MOLA.ui), 0, 1);
+  const c = camL6(t); foco(P07, c.fx, c.fy, c.s);
+  pintaRealce(R6a, [546, 68, 600, 31], P07.s, t, W(9, 'recebe'), W(9, 'tudo') - 0.1);
+  pintaRealce(R6b, [540, 112, 330, 42], P07.s, t, W(9, 'recebe') + 0.12, W(9, 'tudo') - 0.1);
+  pintaHolofote(H6, [720, 489.5, 480, 422], P07.s, t, W(9, 'tudo'), W(9, 'link') - 0.05, 0.42);
+  pintaRealce(R6c, [836, 936, 247.5, 42], P07.s, t, W(9, 'link'));
+  pintaRealce(R6d, [846, 1028, 228, 16], P07.s, t, W(9, 'link') + 0.14);
+}
+cue(C5, 'whoosh', { len: 0.5, g: 0.45 });
+cue(W(9, 'email'), 'notification', { g: 0.55 });
+cue(W(9, 'link'), 'pop', { g: 0.4 });
+
+// =====================================================================================
+// Cena 10: se o email falhar, o card nasce assim mesmo.
+const L7 = camada(55);
+const F04 = cheio(L7, 'assets/04b-card-criado-confirmacao.png');
+remendo(F04, 1790, 563, 120, 24);
+const R7 = realce(F04);
+const ENV = el('div', 'envelope', null, `${CARTA()}<div class="t1">email</div><div class="t2">não saiu</div><div class="risco"></div>`, L7);
+const ENV_T1 = ENV.querySelector('.t1'), ENV_T2 = ENV.querySelector('.t2'), ENV_R = ENV.querySelector('.risco');
+const SE7 = selo(L7, `${CHECK('#fff', 34)}card criado`);
+function pintaL7(t) {
+  if (!mostra(L7, t >= C6 && t < C7 + 0.6)) return;
+  const e = S(t - C6 - 0.08, MOLA.padrao);
+  L7.style.opacity = clamp(S(t - C6 - 0.1, MOLA.ui) * 1.4, 0, 1);
+  L7.style.transform = `scale(${(1.22 - 0.22 * e).toFixed(4)})`;
+  const [dx, dy, ds] = vivo(t);
+  foco(F04, 860 + dx, TR(t, [[C6, 460], [W(10, 'card'), 470]]) + dy, TR(t, [[C6, 1.5], [W(10, 'card'), 1.58]]) * ds);
+  // O envelope entra, tomba e fica cinza quando a fala diz "falhar".
+  const te = W(10, 'email'), tf = W(10, 'falhar');
+  if (mostra(ENV, t >= te)) {
+    const p = S(t - te, MOLA.brincalhona), f = clamp(S(t - tf, MOLA.padrao), 0, 1);
+    Object.assign(ENV.style, { left: px(1290), top: px(640), opacity: clamp(S(t - te, MOLA.ui) * 2, 0, 1),
+      transform: `translate(${(-30 * f).toFixed(1)}px, ${(40 * f).toFixed(1)}px) scale(${(0.6 + 0.4 * p).toFixed(4)}) rotate(${(12 * f).toFixed(2)}deg)`,
+      filter: `grayscale(${f.toFixed(3)})`, background: f > 0.5 ? '#F1F3F7' : '#fff' });
+    ENV_T1.style.opacity = 1 - clamp(f * 2.5, 0, 1); ENV_T2.style.opacity = clamp(f * 2.5 - 1.2, 0, 1);
+    ENV_R.style.transform = `scaleX(${clamp(S(t - tf - 0.05, MOLA.ui), 0, 1).toFixed(4)})`;
+  }
+  pintaRealce(R7, [306, 329, 1146.5, 142], F04.s, t, W(10, 'card'));
+  pintaSelo(SE7, t, W(10, 'nasce'), 1e9, 720, 720);
+}
+cue(C6, 'whoosh', { len: 0.45, g: 0.45 });
+cue(W(10, 'email'), 'pop', { g: 0.4 });
+cue(W(10, 'nasce'), 'pop', { g: 0.5 });
+
+// =====================================================================================
+// Cena 11: no bug, as perguntas não mudam, e o card ganha a mesma parte.
+const L8 = camada(70);
+const F05 = cheio(L8, 'assets/05-resumo-bug.png');
+remendo(F05, 1790, 1058, 120, 22);
+const R8a = realce(F05), H8 = holofote(F05);
+const veu8 = el('div', null, { position: 'absolute', inset: '0', background: '#101233', opacity: 0, zIndex: 20 }, null, L8);
+const SE8 = selo(L8, 'no máximo cinco', 'escuro');
+const P09 = painel(L8, 'assets/09b-card-bug-corpo-inteiro.png', 1920, 1349, 1020, 860, 860, 70);
+const R8b = realce(P09);
+function pintaL8(t) {
+  if (!mostra(L8, t >= C7 && t < C8 + 0.8)) return;
+  const tc = W(11, 'card');
+  veu8.style.opacity = (0.7 * clamp(S(t - C8, MOLA.padrao), 0, 1)).toFixed(3);
+  const [dx, dy, ds] = vivo(t);
+  foco(F05, TR(t, [[C7, 880], [tc - 0.1, 1090]]) + dx, TR(t, [[C7, 600], [tc - 0.1, 620]]) + dy, 1.22 * ds);
+  pintaRealce(R8a, [330, 352, 214, 36], F05.s, t, W(11, 'bug'), W(11, 'perguntas') - 0.1);
+  pintaHolofote(H8, [332.5, 452, 1093.5, 263.5], F05.s, t, W(11, 'perguntas'), tc + 0.2, 0.5);
+  const [, yr] = naTela(F05, 332.5, 452);
+  pintaSelo(SE8, t, W(11, 'perguntas') + 0.15, tc + 0.3, 1480, yr - 60);
+  // O card do bug entra pela direita.
+  const p = S(t - tc, MOLA.padrao);
+  if (mostra(P09.box, t >= tc - 0.02)) {
+    P09.box.style.transform = `translateX(${(1150 * (1 - p)).toFixed(1)}px) rotate(${(3 * (1 - p)).toFixed(2)}deg)`;
+    const [ex, ey, es] = vivo(t, 0.6);
+    foco(P09, 965 + ex, 560 + ey, 1.0 * es, 125);
+    pintaRealce(R8b, [487, 411, 946, 278], P09.s, t, W(11, 'parte'));
+  }
+}
+const TIRAS = Array.from({ length: 9 }, (_, i) => el('div', 'tira', { top: px(i * 120), height: '121px' }, null, palco));
+function pintaTiras(t) {
+  const a = C7 - 0.34, b = C7 + 0.06;
+  TIRAS.forEach((e, i) => {
+    let v = 0;
+    if (t >= a && t < b) { e.style.transformOrigin = '50% 0'; v = clamp(S(t - a - 0.022 * i, MOLA.ui), 0, 1); }
+    else if (t >= b && t < b + 0.8) { e.style.transformOrigin = '50% 100%'; v = 1 - clamp(S(t - b - 0.022 * i, MOLA.ui), 0, 1); }
+    if (!mostra(e, v > 0.002)) return;
+    e.style.transform = `scaleY(${v.toFixed(4)})`;
+  });
+}
+cue(C7 - 0.3, 'whoosh', { len: 0.45, g: 0.45 });
+cue(W(11, 'perguntas') + 0.15, 'pop', { g: 0.4 });
+cue(W(11, 'card'), 'whoosh', { len: 0.35, g: 0.3 });
+cue(W(11, 'parte'), 'pop', { g: 0.4 });
+
+// =====================================================================================
+// Cena 12: os pedidos que já estão na fila também vão ganhar a parte, sem email para ninguém.
+const L9 = camada(80);
+const F06 = cheio(L9, 'assets/06b-lista-de-pedidos-so-do-diretor.png');
+remendo(F06, 1790, 833, 120, 24);
+// Os três pedidos que já tinham card e ainda não têm a parte: CME, Lote e Planilha.
+const FILA = [[625, 696, 302.5, 108.5], [944.5, 576, 301.5, 155.5], [1264.5, 576, 302.5, 134.5]];
+const R9 = FILA.map(() => realce(F06));
+const ETQ = FILA.map(() => el('div', 'etiqueta', null, '<em>+</em>parte de quem programa', L9));
+const SE9 = selo(L9, `${SEM_CARTA('#fff', 36)}sem email`, 'escuro');
+function pintaL9(t) {
+  if (!mostra(L9, t >= C8 && t < C9 + 0.8)) return;
+  const p = clamp(S(t - C8, MOLA.padrao), 0, 1);
+  const hw = lerp(170, 960, p), hh = lerp(96, 540, p), rr = lerp(40, 0, p);
+  L9.style.clipPath = p < 0.999 ? `inset(${(540 - hh).toFixed(1)}px ${(960 - hw).toFixed(1)}px ${(540 - hh).toFixed(1)}px ${(960 - hw).toFixed(1)}px round ${rr.toFixed(1)}px)` : 'none';
+  const sai = clamp(S(t - C9, MOLA.padrao), 0, 1);
+  L9.style.opacity = 1 - sai;
+  L9.style.transform = `scale(${(1.06 - 0.06 * p - 0.06 * sai).toFixed(4)})`;
+  const [dx, dy, ds] = vivo(t);
+  foco(F06, TR(t, [[C8, 1060], [W(12, 'fila'), 1090]], [30, 11]) + dx, 700 + dy, TR(t, [[C8, 1.5], [W(12, 'você'), 1.62]], [30, 11]) * ds);
+  FILA.forEach((cx, i) => {
+    pintaRealce(R9[i], cx, F06.s, t, W(12, 'fila') + 0.12 * i, W(12, 'ganhar') + 0.25 * i + 0.4);
+    const te = W(12, 'ganhar') + 0.25 * i, e = ETQ[i];
+    if (!mostra(e, t >= te)) return;
+    const k = S(t - te, MOLA.brincalhona);
+    const [x, y] = naTela(F06, cx[0] + 8, cx[1] + cx[3] + 6);
+    Object.assign(e.style, { left: px(x), top: px(y), opacity: clamp(S(t - te, MOLA.ui) * 2, 0, 1),
+      transform: `translateY(${(-26 * (1 - k)).toFixed(1)}px) scale(${(0.7 + 0.3 * k).toFixed(4)})` });
+  });
+  pintaSelo(SE9, t, W(12, 'ninguém'), 1e9, 1340, 905);
+}
+cue(C8, 'whoosh', { len: 0.4, g: 0.45 });
+cue(W(12, 'ganhar'), 'pop', { g: 0.4 });
+cue(W(12, 'ninguém'), 'pop', { g: 0.45 });
+
+// =====================================================================================
+// Cena 13 (virada): você explica uma vez; quem programa começa já sabendo.
+const L10 = camada(85);
+const PL = painel(L10, 'assets/03-resumo-escolhido.png', 1920, 1080, 860, 480, 60, 215);
+const PR = painel(L10, 'assets/07-email-card-novo.png', 1920, 1080, 680, 580, 1180, 170);
+const ROT_L = el('div', 'rot', null, 'você', L10), ROT_R = el('div', 'rot', null, 'quem programa', L10);
+const fio = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); fio.id = 'fio'; L10.appendChild(fio);
+fio.innerHTML = `<path id="fioP" d="M 925 455 C 1010 380, 1090 540, 1175 460" fill="none" stroke="#8FB2EA" stroke-width="4" stroke-linecap="round"/>
+  <circle id="fioL" r="11" fill="#EEF2FA"/>`;
+const fioP = fio.querySelector('#fioP'), fioL = fio.querySelector('#fioL');
+function pintaL10(t) {
+  if (!mostra(L10, t >= C9)) return;
+  const tl = W(13, 'explica'), tr = W(13, 'quem'), tf = W(13, 'programa'), ts = W(13, 'sabendo');
+  const [dx, dy, ds] = vivo(t, 0.5);
+  const pl = S(t - tl + 0.15, MOLA.padrao), pr = S(t - tr + 0.15, MOLA.padrao);
+  mostra(PL.box, t >= tl - 0.2);
+  PL.box.style.transform = `translateX(${(-1000 * (1 - pl)).toFixed(1)}px) rotate(${(-2 * (1 - pl) - 1).toFixed(2)}deg)`;
+  foco(PL, 879 + dx, 634 + dy, 0.75 * ds);
+  mostra(PR.box, t >= tr - 0.2);
+  PR.box.style.transform = `translateX(${(1000 * (1 - pr)).toFixed(1)}px) rotate(${(2 * (1 - pr) + 1).toFixed(2)}deg)`;
+  foco(PR, 960 - dx, 700 - dy, 1.25 * ds);
+  const brilho = clamp(S(t - ts, MOLA.padrao), 0, 1);
+  PR.box.style.boxShadow = `0 40px 110px rgba(0,0,0,0.45), 0 0 0 ${(5 * brilho).toFixed(2)}px rgba(143,178,234,${(0.9 * brilho).toFixed(3)}), 0 0 ${(70 * brilho).toFixed(1)}px rgba(143,178,234,${(0.5 * brilho).toFixed(3)})`;
+  if (mostra(ROT_L, t >= tl)) { ROT_L.style.left = px(490); ROT_L.style.top = px(722); ROT_L.style.opacity = clamp(S(t - tl - 0.1, MOLA.ui), 0, 1); }
+  if (mostra(ROT_R, t >= tr)) { ROT_R.style.left = px(1520); ROT_R.style.top = px(776); ROT_R.style.opacity = clamp(S(t - tr - 0.1, MOLA.ui), 0, 1); }
+  if (mostra(fio, t >= tf - 0.05)) {
+    const L = fioP.getTotalLength(), d = clamp(S(t - tf, [120, 22]), 0, 1);
+    fioP.style.strokeDasharray = `${L}`; fioP.style.strokeDashoffset = `${(L * (1 - d)).toFixed(1)}`;
+    const k = ((t - tf) * 0.55) % 1, pt = fioP.getPointAtLength(L * clamp(k, 0, 1) * d);
+    fioL.setAttribute('cx', pt.x.toFixed(1)); fioL.setAttribute('cy', pt.y.toFixed(1));
+    fioL.setAttribute('opacity', (d * 0.95).toFixed(3));
+  }
+}
+cue(C9, 'whoosh', { len: 0.4, g: 0.45 });
+cue(W(13, 'quem'), 'whoosh', { len: 0.35, g: 0.3 });
+cue(W(13, 'sabendo'), 'pop', { g: 0.45 });
+
+// ---------- Assinatura ----------
+const cortina = el('div', null, null, null, palco); cortina.id = 'cortina';
+const logo = el('img', null, null, null, palco); logo.id = 'logo'; logo.src = 'assets/logo-hsm.png';
+function pintaAssinatura(t) {
+  const p = S(t - C10, MOLA.pesada);
+  cortina.style.display = t >= C10 ? 'block' : 'none';
+  cortina.style.transform = `translateY(${((1 - clamp(p, 0, 1)) * 1080).toFixed(2)}px)`;
+  const tl = C10 + 0.3;
+  logo.style.display = t >= tl ? 'block' : 'none';
+  const k = clamp(S(t - tl, MOLA.pesada), 0, 1);
+  logo.style.opacity = clamp(S(t - tl, MOLA.pesada) * 1.2, 0, 1);
+  logo.style.transform = `translate(-50%, -50%) scale(${(0.96 + 0.04 * k).toFixed(4)})`;
+}
+cue(C10, 'whoosh', { len: 0.5, g: 0.4 });
+cue(C10 + 0.3, 'chime', { g: 0.55 });
+
+// ---------- Legenda: a fala na tela, palavra por palavra ----------
+const LEG = [];
+for (const c of TEMPOS.cenas) {
+  let atual = [];
+  const fecha = () => { if (atual.length) LEG.push({ n: c.n, ws: atual }); atual = []; };
+  c.palavras.forEach((w, i) => {
+    atual.push(w);
+    const fim = /[.?!:]$/.test(w.p) || (/,$/.test(w.p) && atual.length >= 4) || atual.length >= 7;
+    if (fim || i === c.palavras.length - 1) fecha();
+  });
+}
+LEG.forEach((L, i) => {
+  L.t0 = L.ws[0].a - 0.12;
+  const prox = LEG[i + 1];
+  const fimCena = TEMPOS.cenas[L.n - 1].fim_s + 0.45;
+  L.t1 = prox && prox.n === L.n ? prox.ws[0].a - 0.12 : prox ? Math.min(fimCena, prox.ws[0].a - 0.2) : Math.min(fimCena, C10 - 0.05);
+  L.el = el('div', 'leg', null, null, palco);
+  L.spans = L.ws.map((w) => el('span', null, null, w.p, L.el));
+});
+function pintaLegenda(t) {
+  for (const L of LEG) {
+    const on = t >= L.t0 && t < L.t1 + 0.12;
+    L.el.style.display = on ? 'block' : 'none';
+    if (!on) continue;
+    const p = clamp(S(t - L.t0, MOLA.ui), 0, 1.05), q = t > L.t1 ? clamp(S(t - L.t1, [500, 45]), 0, 1) : 0;
+    L.el.style.opacity = clamp(p * 2, 0, 1) * (1 - q);
+    L.el.style.transform = `translate(-50%, -50%) translateY(${((1 - p) * 18 + q * 14).toFixed(2)}px)`;
+    let ultima = -1;
+    L.ws.forEach((w, i) => { if (t >= w.a - 0.02) ultima = i; });
+    L.spans.forEach((sp, i) => {
+      const w = S(t - L.ws[i].a + 0.04, MOLA.ui);
+      sp.style.opacity = clamp(w * 1.6, 0, 1);
+      sp.style.transform = `translateY(${((1 - clamp(w, 0, 1.1)) * 20).toFixed(2)}px)`;
+      sp.style.color = i === ultima ? '#9DBBEF' : '#EEF2FA';
+    });
+  }
+}
+
+// ---------- Sons ----------
+const PESO = { hit: 6, notification: 5, chime: 5, click: 4, pop: 3, whoosh: 3, key: 2 };
+function poda(lista) {
+  const ok = [];
+  for (const c of [...lista].sort((a, b) => (PESO[b.type] - PESO[a.type]) || (a.t - b.t))) {
+    if (ok.some((o) => Math.abs(o.t - c.t) < 0.12)) continue;
+    ok.push(c);
+  }
+  return ok.sort((a, b) => a.t - b.t);
+}
+window.CUES = poda(CUES.filter((c) => c.t >= 0 && c.t < DUR));
+
+// ---------- Carregar e pintar ----------
+const PRONTO = (async () => {
+  await document.fonts.load('40px HPS');
+  await document.fonts.ready;
+  await Promise.all([...palco.querySelectorAll('img')].map((i) => (i.decode ? i.decode().catch(() => {}) : null)));
+})();
+
+window.seek = async (t) => {
+  await PRONTO;
+  pintaFundo(t);
+  pintaL1(t);
+  pintaL2(t);
+  pintaL3(t);
+  pintaL4(t);
+  pintaL5f(t);
+  pintaL5(t);
+  pintaL6(t);
+  pintaL7(t);
+  pintaL8(t);
+  pintaTiras(t);
+  pintaL9(t);
+  pintaL10(t);
+  pintaLegenda(t);
+  pintaAssinatura(t);
+};
+
+if (!window.RENDER) {
+  const q = new URLSearchParams(location.search);
+  const t0 = performance.now(), ini = +(q.get('t') || 0);
+  let ocupado = false;
+  const tocar = async (agora) => { if (!ocupado) { ocupado = true; await seek((ini + (agora - t0) / 1000) % DUR); ocupado = false; } requestAnimationFrame(tocar); };
+  requestAnimationFrame(tocar);
+} else {
+  seek(0);
+}
+</script>
+</body>
+</html>
