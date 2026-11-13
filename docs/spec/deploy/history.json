@@ -2,6 +2,55 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-12T23:32:39-03:00",
+      "sha": "11ee65463f469acd9e45eee3d1e186365833d649",
+      "app_version": "0.264.0",
+      "subject": "Onda hsm-quadro-onda1: Tecnologia volta ao card depois do login; Quadro por Etapa na tela larga, com o Novo pedido",
+      "raw_subject": "chore(deploy): registro da onda hsm-quadro-onda1 (#1661 #1665)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1584,
+        1641
+      ],
+      "result": "healthy",
+      "duration_seconds": 273,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-quadro-onda1: PR #1661 (issue #1587), PR #1665 (issue #1642), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 5,
+        "build_s": {
+          "backend": 215,
+          "frontend": 193
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-12T21:14:54-03:00",
       "sha": "4772f343b5e7fc98ab13fcc076cc448999f3949d",
       "app_version": "0.263.1",
