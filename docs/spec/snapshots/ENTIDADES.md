@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T04:28+0000 -->
+<!-- last_update: 2026-11-13T04:37+0000 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -1830,6 +1830,33 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `atualizada_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
 | `nsp_setor` | `TEXT` | NOT NULL | `''` | — |
 
+## ouvidoria_avaliacoes
+
+> Origem: `140_ouvidoria_avaliacao_do_qr.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `ponto_id` | `UUID` | — | — | `ouvidoria_pontos.id` |
+| `canal` | `TEXT` | NOT NULL | `'qr'` | — |
+| `nota` | `SMALLINT` | NOT NULL | — | — |
+| `motivos` | `TEXT[]` | NOT NULL | `'{}'` | — |
+| `comentario` | `TEXT` | — | — | — |
+| `criada_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `convite_google_exibido` | `BOOLEAN` | NOT NULL | `FALSE` | — |
+| `convite_google_clicado` | `BOOLEAN` | NOT NULL | `FALSE` | — |
+| `pediu_retorno` | `BOOLEAN` | NOT NULL | `FALSE` | — |
+| `revisar` | `BOOLEAN` | NOT NULL | `FALSE` | — |
+| `revisar_motivo` | `TEXT` | — | — | — |
+| `revisao_desfecho` | `TEXT` | — | — | — |
+| `revisada_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `revisada_em` | `TIMESTAMPTZ` | — | — | — |
+| `e` | `um` | — | — | — |
+
+**Indexes:**
+- `idx_ouvidoria_avaliacoes_ponto` em `(ponto_id, criada_em)` (de `140_ouvidoria_avaliacao_do_qr.sql`)
+- `idx_ouvidoria_avaliacoes_comentario` em `(criada_em)` (de `140_ouvidoria_avaliacao_do_qr.sql`)
+
 ---
 
-**Resumo:** 89 tabelas vivas.
+**Resumo:** 90 tabelas vivas.

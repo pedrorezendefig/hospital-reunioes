@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T04:28+0000 -->
+<!-- last_update: 2026-11-13T04:37+0000 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -62,6 +62,7 @@ erDiagram
     cm_tabela_preco ||--o{ cm_operadora_tabela : "tabela_id"
     cm_tabela_preco ||--o{ cm_tabela_preco_item : "tabela_id"
     cm_validacao_tema ||--o{ cm_validacao_tema_linha : "tema_id"
+    ouvidoria_pontos ||--o{ ouvidoria_avaliacoes : "ponto_id"
     participantes ||--o{ audit_log : "actor_id"
     participantes ||--o{ bulk_jobs : "actor_id"
     participantes ||--o{ cm_cenario : "autor_id"
@@ -88,6 +89,7 @@ erDiagram
     participantes ||--o{ notificacoes : "destinatario_id"
     participantes ||--o{ ouvidoria_acessos : "ator_id"
     participantes ||--o{ ouvidoria_anexos : "enviado_por"
+    participantes ||--o{ ouvidoria_avaliacoes : "revisada_por"
     participantes ||--o{ ouvidoria_movimentos : "autor_id"
     participantes ||--o{ ouvidoria_nota_externa : "e"
     participantes ||--o{ ouvidoria_pontos : "criado_por"
@@ -976,6 +978,17 @@ erDiagram
         TIMESTAMPTZ atualizada_em
         TEXT nsp_setor
     }
+    ouvidoria_avaliacoes {
+        UUID id PK
+        UUID ponto_id FK
+        TEXT canal
+        SMALLINT nota
+        TEXT[] motivos
+        TEXT comentario
+        TIMESTAMPTZ criada_em
+        BOOLEAN convite_google_exibido
+        _ mais_colunas "+8"
+    }
 ```
 
 ## Indexes principais
@@ -1131,6 +1144,8 @@ erDiagram
 | `ouvidoria_acionamentos` | `idx_ouvidoria_acionamentos_caso` | `manifestacao_id, criado_em` | `136_ouvidoria_acionamento_de_ciencia.sql` |
 | `ouvidoria_acionamentos` | `idx_ouvidoria_acionamentos_pendentes` | `enviado_em` | `136_ouvidoria_acionamento_de_ciencia.sql` |
 | `ouvidoria_acionamentos` | `idx_ouvidoria_acionamentos_um_nucleo_por_caso` | `manifestacao_id` | `139_ouvidoria_envio_ao_nucleo.sql` |
+| `ouvidoria_avaliacoes` | `idx_ouvidoria_avaliacoes_ponto` | `ponto_id, criada_em` | `140_ouvidoria_avaliacao_do_qr.sql` |
+| `ouvidoria_avaliacoes` | `idx_ouvidoria_avaliacoes_comentario` | `criada_em` | `140_ouvidoria_avaliacao_do_qr.sql` |
 
 ---
-**Resumo:** 89 tabelas · 130 relacionamentos FK detectados.
+**Resumo:** 90 tabelas · 132 relacionamentos FK detectados.
