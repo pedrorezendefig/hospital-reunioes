@@ -9,7 +9,6 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  areasComVencidas,
   atrasosDaOuvidoria,
   atrasosDasAreas,
   avisosDeDegradacao,
@@ -17,7 +16,6 @@ import {
   casosDoNumero,
   classificarFalha,
   classificarJanela,
-  contarPorStatus,
   criticosAbertos,
   diaNoHospital,
   diaSeguinte,
@@ -38,7 +36,6 @@ import {
   type CasoDoPainel,
   type PendenciaDeArea,
 } from "./painel";
-import { agruparPorStatus, ORDEM_DA_FILA } from "./fila";
 import type { StatusManifestacao } from "./prazo";
 
 // Quarta-feira, 26/08/2026. Os vencimentos são carimbados às 17h de Brasília
@@ -348,64 +345,6 @@ describe("a marca de sigilo", () => {
   });
 });
 
-describe("a fila por status", () => {
-  it("conta na ordem do trabalho do ouvidor e não esconde estado vazio", () => {
-    const contagem = contarPorStatus([
-      caso({ status: "novo" }),
-      caso({ status: "novo" }),
-      caso({ status: "aguardando_area" }),
-      caso({ status: "encerrado" }),
-    ]);
-
-    expect(contagem.map((linha) => [linha.status, linha.total])).toEqual([
-      ["novo", 2],
-      ["em_classificacao", 0],
-      ["aguardando_area", 1],
-      ["aguardando_manifestante", 0],
-      ["respondido", 0],
-      ["encerrado", 1],
-    ]);
-  });
-
-  it("carrega o rótulo que a listagem já usa, para painel e fila falarem igual", () => {
-    expect(contarPorStatus([]).map((linha) => linha.label)).toContain("Aguardando área");
-  });
-
-  it("é a mesma régua do agrupamento da fila, e não uma segunda contagem", () => {
-    // Duas réguas divergem na primeira mudança: quem mexer na ordem ou no
-    // tratamento de estado desconhecido de `agruparPorStatus` precisa ver o
-    // painel mudar junto, e não descobrir a divergência em produção.
-    const casos = [
-      caso({ status: "novo" }),
-      caso({ status: "aguardando_area" }),
-      caso({ status: "em_recurso" as StatusManifestacao }),
-    ];
-
-    expect(contarPorStatus(casos).map((linha) => [linha.status, linha.total])).toEqual(
-      agruparPorStatus(casos).map((grupo) => [grupo.status, grupo.itens.length])
-    );
-  });
-});
-
-describe("as áreas com caso vencido", () => {
-  it("deixa de fora a área que tem pendência mas nenhuma vencida", () => {
-    const emDia = pendencia({ setor: "Farmacia", vencidas: 0, dias_uteis_de_atraso: 0 });
-    const atrasada = pendencia();
-
-    expect(areasComVencidas([atrasada, emDia])).toEqual([atrasada]);
-  });
-
-  it("preserva a ordem que o módulo de métricas já devolve, sem impor uma sua", () => {
-    // A fixture entra FORA da ordem do módulo de propósito: se este módulo
-    // ordenasse por conta própria, o painel discordaria do relatório sobre onde
-    // apertar, e um teste que entrasse já ordenado não pegaria isso.
-    const pior = pendencia({ setor: "Recepcao", dias_uteis_de_atraso: 4.2 });
-    const menos = pendencia({ setor: "Farmacia", dias_uteis_de_atraso: 1.1 });
-
-    expect(areasComVencidas([menos, pior]).map((linha) => linha.setor)).toEqual(["Farmacia", "Recepcao"]);
-  });
-});
-
 describe("o que o painel pode afirmar quando uma leitura falhou", () => {
   it("sem degradação nenhuma, não inventa aviso", () => {
     expect(avisosDeDegradacao([])).toEqual([]);
@@ -528,48 +467,6 @@ describe("quando a leitura nem chega", () => {
     expect(intervaloDeAtualizacao(2)).toBe(4 * INTERVALO_BASE_MS);
     expect(intervaloDeAtualizacao(50)).toBe(INTERVALO_MAXIMO_MS);
     expect(intervaloDeAtualizacao(3)).toBeLessThanOrEqual(INTERVALO_MAXIMO_MS);
-  });
-});
-
-describe("estado que a tela ainda não conhece, no painel (issue #375, item 15)", () => {
-  // Mesmo caso do `agruparPorStatus`: backend novo com tela velha, ou migration
-  // antes do deploy. O item corrigiu a lista do ouvidor; o painel em tempo real
-  // tem a sua própria contagem e a sua própria classificação de janela.
-  const DESCONHECIDO = "em_recurso" as StatusManifestacao;
-
-  it("a contagem por status mostra o estado desconhecido, em vez de perdê-lo", () => {
-    const casos = [
-      caso({ status: "aguardando_area" }),
-      caso({ status: DESCONHECIDO }),
-    ];
-
-    const contagem = contarPorStatus(casos);
-    const linha = contagem.find((c) => c.status === DESCONHECIDO);
-
-    expect(linha?.total).toBe(1);
-    // E o rótulo não sai vazio.
-    expect(linha?.label).toBe("em_recurso");
-  });
-
-  it("os totais da contagem fecham com o total de casos", () => {
-    // A prova de que nada some no caminho: era isso que quebrava quando o
-    // estado desconhecido caía fora da ORDEM_DA_FILA.
-    const casos = [
-      caso({ status: "novo" }),
-      caso({ status: DESCONHECIDO }),
-      caso({ status: DESCONHECIDO }),
-    ];
-
-    const somados = contarPorStatus(casos).reduce((soma, linha) => soma + linha.total, 0);
-
-    expect(somados).toBe(casos.length);
-  });
-
-  it("estado conhecido sem caso continua virando zero explícito", () => {
-    const contagem = contarPorStatus([caso({ status: "novo" })]);
-
-    expect(contagem.map((c) => c.status)).toEqual(ORDEM_DA_FILA);
-    expect(contagem.find((c) => c.status === "encerrado")?.total).toBe(0);
   });
 });
 

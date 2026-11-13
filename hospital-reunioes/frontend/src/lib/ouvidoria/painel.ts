@@ -5,22 +5,24 @@
  * misturam, porque respondem perguntas diferentes:
  *
  * * a listagem (`/api/ouvidoria/protocolos`) responde "quais casos", e é dela
- *   que saem a fila por status, o que já venceu, o que vence hoje e amanhã e os
- *   críticos abertos;
+ *   que saem os críticos, as duas faixas de atraso, os números do agora e os
+ *   próximos vencimentos (issue #1628);
  * * o módulo de métricas (`/api/ouvidoria/metricas`) responde "quanto cada área
  *   deve AGORA", pelo bloco `pendencias_por_area`, que tem universo próprio e
- *   nenhum recorte de data (contrato da issue #341).
+ *   nenhum recorte de data (contrato da issue #341), e quanto ela respondeu no
+ *   prazo no mês, pelo `prazo_por_area`.
  *
  * Somar os dois é somar universos diferentes: `pendencias_por_area[].pendentes`
- * conta só o que está com a área, e a fila por status conta todos os estados.
- * Por isso este módulo nunca cruza contagem de um lado com a do outro.
+ * conta só o que está com a área, e a listagem conta todos os estados. Por isso
+ * este módulo nunca cruza contagem de um lado com a do outro.
  *
- * Nenhuma conta de calendário útil acontece aqui. O vencimento chega calculado
- * pelo motor do servidor, e o veredito de estouro também: o que esta camada faz
- * é ler em que DIA o vencimento cai.
+ * Nenhuma conta de calendário útil acontece aqui, com uma exceção escrita: o
+ * prazo da triagem, que é data civil, conta dias de semana para o número
+ * "Vencem em até 2 dias úteis". O vencimento da área chega calculado pelo
+ * motor do servidor, e o veredito de estouro também.
  */
 
-import { agruparPorStatus, ORDEM_DA_FILA, rotuloDoStatus } from "./fila";
+import { ORDEM_DA_FILA } from "./fila";
 import {
   diaNoHospital,
   EM_ANDAMENTO,
@@ -449,35 +451,6 @@ export function precisaDaMarcaDeSigilo(caso: CasoDoPainel): boolean {
   return caso.sigilo_reforcado === true;
 }
 
-export interface ContagemDeStatus {
-  status: StatusManifestacao;
-  label: string;
-  total: number;
-}
-
-/**
- * A fila por status, na ordem do trabalho do ouvidor. Estado sem caso vira zero
- * explícito, e não sumiço: coluna que desaparece esconde que a fila esvaziou.
- *
- * Estado que esta tela ainda não conhece entra no fim, com o próprio código de
- * rótulo (issue #375, item 15). Sem isso, o caso sumia da contagem e os totais
- * deixavam de fechar com o total de casos: o painel fica aberto e projetado
- * numa sala de reunião, e uma soma que não bate ali é pior que uma linha com
- * nome estranho.
- *
- * A régua é uma só: quem agrupa é o `agruparPorStatus` da fila, e aqui só se
- * conta o que ele agrupou (issue #437). A contagem própria que existia aqui era
- * uma segunda régua com as mesmas duas decisões (a ordem e o estado
- * desconhecido) para manter em dois lugares.
- */
-export function contarPorStatus(casos: CasoDoPainel[]): ContagemDeStatus[] {
-  return agruparPorStatus(casos).map((grupo) => ({
-    status: grupo.status,
-    label: rotuloDoStatus(grupo.status),
-    total: grupo.itens.length,
-  }));
-}
-
 /**
  * Uma linha de `pendencias_por_area` do módulo de métricas (contrato da #341).
  * Nenhum caso é identificado aqui: só contagem, o nome de quem responde pelo
@@ -489,15 +462,6 @@ export interface PendenciaDeArea {
   pendentes: number;
   vencidas: number;
   dias_uteis_de_atraso: number;
-}
-
-/**
- * As áreas com caso vencido (PRD #319, história 13). A ordem chega pronta do
- * módulo (da mais atrasada para a menos) e é preservada: reordenar aqui faria o
- * painel discordar do relatório sobre onde apertar.
- */
-export function areasComVencidas(pendencias: PendenciaDeArea[]): PendenciaDeArea[] {
-  return pendencias.filter((linha) => linha.vencidas > 0);
 }
 
 export interface AvisoDeDegradacao {
