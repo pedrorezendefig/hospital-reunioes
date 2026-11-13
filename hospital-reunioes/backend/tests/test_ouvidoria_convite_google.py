@@ -11,7 +11,6 @@ Os testes sobem as rotas reais com um banco falso em memória.
 
 from __future__ import annotations
 
-import datetime as dt
 import os
 import sys
 
@@ -301,3 +300,126 @@ class TestOCliqueEContadoAntesDeRedirecionar:
         )
 
         assert r.status_code == 404
+
+
+def _admin(monkeypatch, participante: dict, banco: _Banco) -> TestClient:
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(RequestContextMiddleware)
+    app.include_router(ouvidoria_router.router, prefix="/api")
+
+    async def _fake_participante(_user, _sb, fields=None):
+        return participante
+
+    monkeypatch.setattr(ouvidoria_router, "get_participante_for_user", _fake_participante)
+    app.dependency_overrides[get_current_user] = lambda: {"id": "u1", "email": "u@hsm.br"}
+    app.dependency_overrides[get_supabase_client] = lambda: banco
+    return TestClient(app)
+
+
+class TestSoADiretoriaLigaEDesliga:
+    """CA: só a diretoria executiva liga e desliga; ouvidor recebe 403; cada
+    mudança grava de/para."""
+
+    def test_a_diretoria_liga_a_chave_geral_e_a_auditoria_grava_de_para(self, monkeypatch):
+        banco = _Banco()
+        client = _admin(monkeypatch, DIRETORIA, banco)
+
+        r = client.put("/api/ouvidoria/convite-google", json={"ligado": True})
+
+        assert r.status_code == 200, r.text
+        config = banco.tabelas["ouvidoria_config"][0]
+        assert config["google_teste_global"] is True
+        assert config["google_teste_ligado_em"]
+        assert r.json()["global"] is True
+        [registro] = banco.auditoria
+        assert registro["chave"] == "global"
+        assert registro["ponto_id"] is None
+        assert (registro["valor_anterior"], registro["valor_novo"]) == (False, True)
+        assert registro["alterado_por"] == "P11"
+        assert registro["alterado_por_nome"] == "Dr. Diretor"
+
+    def test_a_diretoria_liga_a_chave_do_ponto_e_a_auditoria_grava_de_para(self, monkeypatch):
+        banco = _Banco()
+        client = _admin(monkeypatch, DIRETORIA, banco)
+
+        r = client.put(f"/api/ouvidoria/pontos/ponto-{CODIGO}/convite-google", json={"ligado": True})
+
+        assert r.status_code == 200, r.text
+        pontos = {p["id"]: p for p in banco.tabelas["ouvidoria_pontos"]}
+        assert pontos[f"ponto-{CODIGO}"]["google_teste_ativo"] is True
+        assert pontos[f"ponto-{OUTRO}"]["google_teste_ativo"] is False
+        [registro] = banco.auditoria
+        assert registro["chave"] == "ponto"
+        assert registro["ponto_id"] == f"ponto-{CODIGO}"
+        assert (registro["valor_anterior"], registro["valor_novo"]) == (False, True)
+        assert registro["alterado_por"] == "P11"
+
+    def test_desligar_grava_de_ligado_para_desligado(self, monkeypatch):
+        banco = _Banco(pontos=[_ponto(CODIGO, convite=True)], global_ligado=True, ligado_em="2026-09-01T12:00:00+00:00")
+        client = _admin(monkeypatch, DIRETORIA, banco)
+
+        client.put("/api/ouvidoria/convite-google", json={"ligado": False})
+        client.put(f"/api/ouvidoria/pontos/ponto-{CODIGO}/convite-google", json={"ligado": False})
+
+        assert [(a["chave"], a["valor_anterior"], a["valor_novo"]) for a in banco.auditoria] == [
+            ("global", True, False),
+            ("ponto", True, False),
+        ]
+        assert banco.tabelas["ouvidoria_config"][0]["google_teste_global"] is False
+
+    def test_salvar_o_mesmo_valor_nao_e_mudanca(self, monkeypatch):
+        banco = _Banco(global_ligado=True, ligado_em="2026-09-01T12:00:00+00:00")
+        client = _admin(monkeypatch, DIRETORIA, banco)
+
+        r = client.put("/api/ouvidoria/convite-google", json={"ligado": True})
+
+        assert r.status_code == 200
+        assert banco.auditoria == []
+        # Religar o que já estava ligado não recomeça os 60 dias.
+        assert banco.tabelas["ouvidoria_config"][0]["google_teste_ligado_em"] == "2026-09-01T12:00:00+00:00"
+
+    @pytest.mark.parametrize(
+        "rota",
+        ["/api/ouvidoria/convite-google", f"/api/ouvidoria/pontos/ponto-{CODIGO}/convite-google"],
+    )
+    def test_o_ouvidor_recebe_403_e_nada_muda(self, monkeypatch, rota):
+        banco = _Banco()
+        client = _admin(monkeypatch, OUVIDOR, banco)
+
+        r = client.put(rota, json={"ligado": True})
+
+        assert r.status_code == 403
+        assert banco.auditoria == []
+        assert banco.tabelas["ouvidoria_config"][0]["google_teste_global"] is False
+        assert all(p["google_teste_ativo"] is False for p in banco.tabelas["ouvidoria_pontos"])
+
+    def test_a_edicao_do_ponto_nao_liga_a_chave_por_tras(self, monkeypatch):
+        """O PATCH do cartaz é dos dois perfis: a chave não pode passar por ele."""
+        banco = _Banco()
+        client = _admin(monkeypatch, OUVIDOR, banco)
+
+        r = client.patch(f"/api/ouvidoria/pontos/ponto-{CODIGO}", json={"ponto": "Hall", "google_teste_ativo": True})
+
+        assert r.status_code == 200, r.text
+        assert banco.tabelas["ouvidoria_pontos"][0]["google_teste_ativo"] is False
+
+    def test_ponto_que_nao_existe_e_404(self, monkeypatch):
+        banco = _Banco()
+        client = _admin(monkeypatch, DIRETORIA, banco)
+
+        r = client.put("/api/ouvidoria/pontos/ponto-nenhum/convite-google", json={"ligado": True})
+
+        assert r.status_code == 404
+        assert banco.auditoria == []
+
+    def test_a_tela_de_pontos_le_a_chave_geral_e_a_de_cada_ponto(self, monkeypatch):
+        banco = _Banco(pontos=[_ponto(CODIGO, convite=True)], global_ligado=True, ligado_em="2026-09-01T12:00:00+00:00")
+        client = _admin(monkeypatch, OUVIDOR, banco)
+
+        r = client.get("/api/ouvidoria/pontos")
+
+        assert r.status_code == 200, r.text
+        assert r.json()["convite_google"] == {"global": True, "ligado_em": "2026-09-01T12:00:00+00:00"}
+        assert r.json()["pontos"][0]["google_teste_ativo"] is True

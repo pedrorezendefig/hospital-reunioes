@@ -84,6 +84,46 @@ def registrar_clique(supabase, avaliacao_id: str) -> None:
         logger.warning("[Ouvidoria] Falha ao contar o clique no convite ao Google")
 
 
+def _auditar(supabase, me: dict, chave: str, ponto_id: str | None, anterior: bool, novo: bool) -> None:
+    """A linha de quem mudou a chave (decisão 6). Escrita depois da mudança
+    valer, para não registrar mudança que não aconteceu (como nos prazos)."""
+    supabase.table(TABELA_AUDITORIA).insert(
+        {
+            "chave": chave,
+            "ponto_id": ponto_id,
+            "valor_anterior": anterior,
+            "valor_novo": novo,
+            "alterado_por": me["id"],
+            "alterado_por_nome": me.get("nome_completo") or me["id"],
+        }
+    ).execute()
+
+
+def mudar_chave_geral(supabase, ligado: bool, me: dict, agora: dt.datetime) -> dict:
+    """Liga ou desliga a chave geral e devolve o estado. Ligar marca o começo
+    dos 60 dias; salvar o mesmo valor não é mudança, não audita e não
+    recomeça o prazo."""
+    anterior = ler_config(supabase)
+    if anterior["global"] == ligado:
+        return {"global": anterior["global"], "ligado_em": anterior["ligado_em"]}
+    mudanca: dict = {"google_teste_global": ligado}
+    if ligado:
+        mudanca["google_teste_ligado_em"] = agora.isoformat()
+    supabase.table(TABELA_CONFIG).update(mudanca).eq("id", True).execute()
+    _auditar(supabase, me, "global", None, anterior["global"], ligado)
+    return {"global": ligado, "ligado_em": mudanca.get("google_teste_ligado_em", anterior["ligado_em"])}
+
+
+def mudar_chave_do_ponto(supabase, ponto: dict, ligado: bool, me: dict) -> bool:
+    """Liga ou desliga a chave de um cartaz e devolve o valor novo."""
+    anterior = bool(ponto.get("google_teste_ativo"))
+    if anterior == ligado:
+        return ligado
+    supabase.table(TABELA_PONTOS).update({"google_teste_ativo": ligado}).eq("id", ponto["id"]).execute()
+    _auditar(supabase, me, "ponto", ponto["id"], anterior, ligado)
+    return ligado
+
+
 def link_de_avaliacao(supabase) -> str | None:
     """O link de avaliação da configuração, ou None quando não é um https (o
     destino do redirecionamento nunca sai do pedido)."""
