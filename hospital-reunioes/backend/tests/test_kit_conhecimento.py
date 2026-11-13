@@ -482,6 +482,20 @@ class TestOTextoDaAbaContaATelaDeHoje:
         assert "depois do login, a tela abre no pedido do link" in _secao(texto, "Quem vê")
         assert "volta para ele depois do login" in _secao(texto, "O que já foi decidido")
 
+    def test_o_copiar_link_diz_o_que_copia_e_o_que_fazer_se_nao_copiar(self, texto):
+        """Issue #1588: o diretor pergunta ao Assistente como mandar um pedido
+        para a Vitta, e a resposta tem que estar no kit."""
+        demanda = _secao(texto, "O que é uma Demanda")
+        for termo in (
+            "**Copiar link**",
+            '"Demanda 42: Levar o selo ao card"',
+            "o link que abre aquele pedido",
+            '"Link copiado"',
+            "para você copiar à mão",
+        ):
+            assert termo in demanda, termo
+        assert "Copiar link" in _secao(texto, "O que já foi decidido")
+
     def test_os_pedidos_ao_hospital_voltaram_para_o_whatsapp(self, texto):
         """ADR 0077, decisao 3: a aba e so de um sentido, o diretor relata."""
         assert "WhatsApp" in _secao(texto, "O que é uma Demanda")

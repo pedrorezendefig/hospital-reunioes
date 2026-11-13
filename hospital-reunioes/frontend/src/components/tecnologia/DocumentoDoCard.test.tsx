@@ -16,12 +16,15 @@
  * escrever o número.
  */
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   ASSISTIR_A_DEMONSTRACAO,
+  COPIAR_LINK,
   DocumentoDoCard,
+  LINK_COPIADO,
+  NAO_COPIOU_O_LINK,
   SEM_O_QUE_MUDA,
   TITULO_DATAS,
   TITULO_DEMONSTRACAO,
@@ -31,7 +34,7 @@ import {
   TITULO_PARTES,
   VER_TUDO,
 } from "./DocumentoDoCard";
-import { Demanda, ETAPA_ROTULO, ParteDaEntrega } from "./demandas";
+import { Demanda, ETAPA_ROTULO, EtapaDemanda, ParteDaEntrega } from "./demandas";
 
 const PARTES: ParteDaEntrega[] = [
   // Como o backend as manda ao diretor: sem número.
@@ -72,6 +75,7 @@ const VINCULADA = demanda({
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
 });
 
 function montar(d: Demanda) {
@@ -246,5 +250,77 @@ describe("O Documento do card", () => {
     montar(demanda());
 
     expect(screen.queryByRole("region", { name: TITULO_DOCUMENTO })).toBeNull();
+  });
+});
+
+/**
+ * O botão Copiar link (issue #1588): o texto que vai para o WhatsApp.
+ *
+ * A área de transferência é simulada; o que se cobra é o texto que chegou
+ * nela, escrito à mão a partir do critério de aceite, e não recomposto do
+ * jeito que o componente o compõe.
+ */
+describe("O Copiar link do Documento do card", () => {
+  function areaDeTransferencia(writeText: (texto: string) => Promise<void>) {
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  }
+
+  function copiarLink() {
+    fireEvent.click(within(documento()).getByRole("button", { name: COPIAR_LINK }));
+  }
+
+  it("copia o Número e o título na primeira linha e o endereço da Demanda na segunda", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    areaDeTransferencia(writeText);
+    montar({ ...VINCULADA, id: "d-77", numero: 42 });
+
+    copiarLink();
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    // A origem do jsdom é a do app no teste; em produção é a do endereço aberto.
+    expect(writeText).toHaveBeenCalledWith(
+      "Demanda 42: Levar o selo ao card\nhttp://localhost:3000/admin/tecnologia?demanda=d-77",
+    );
+  });
+
+  it("depois de copiar aparece Link copiado", async () => {
+    areaDeTransferencia(vi.fn().mockResolvedValue(undefined));
+    montar({ ...VINCULADA, numero: 42 });
+
+    copiarLink();
+
+    expect((await within(documento()).findByRole("status")).textContent).toBe(LINK_COPIADO);
+  });
+
+  it("com a cópia recusada, o texto aparece numa caixa para copiar à mão", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    areaDeTransferencia(vi.fn().mockRejectedValue(new Error("NotAllowedError")));
+    montar({ ...VINCULADA, id: "d-77", numero: 42 });
+
+    copiarLink();
+
+    const caixa = (await within(documento()).findByRole("textbox")) as HTMLTextAreaElement;
+    expect(caixa.value).toBe("Demanda 42: Levar o selo ao card\nhttp://localhost:3000/admin/tecnologia?demanda=d-77");
+    expect(within(documento()).getByRole("status").textContent).toBe(NAO_COPIOU_O_LINK);
+    expect(within(documento()).queryByText(LINK_COPIADO)).toBeNull();
+  });
+
+  it("o botão aparece para o diretor e para o Desenvolvedor, em toda Etapa do card", () => {
+    const etapas: EtapaDemanda[] = [
+      "em_analise",
+      "planejada",
+      "em_desenvolvimento",
+      "entregue",
+      "em_producao",
+      "nao_sera_feita",
+    ];
+    const doDesenvolvedor = { issue_numero: 912, issue_url: "https://github.com/pedrorezendefig/hospital-reunioes/issues/912" };
+    for (const etapa of etapas) {
+      for (const extra of [{}, doDesenvolvedor]) {
+        montar({ ...VINCULADA, ...extra, etapa, numero: 42 });
+        expect(within(documento()).getByRole("button", { name: COPIAR_LINK })).toBeTruthy();
+        cleanup();
+      }
+    }
   });
 });
