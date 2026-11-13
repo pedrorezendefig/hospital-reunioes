@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS ouvidoria_avaliacoes (
   revisar                  BOOLEAN NOT NULL DEFAULT FALSE,
   revisar_motivo           TEXT,
   revisao_desfecho         TEXT CHECK (revisao_desfecho IN ('convertida', 'arquivada')),
-  revisada_por             UUID REFERENCES participantes(id) ON DELETE SET NULL,
+  revisada_por             VARCHAR(10) REFERENCES participantes(id) ON DELETE SET NULL,
   revisada_em              TIMESTAMPTZ,
   -- Os oito motivos da tela N2. A lista vive aqui e em
   -- app/services/ouvidoria_avaliacoes.py, e um teste confere que batem.
