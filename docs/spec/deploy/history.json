@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T15:00:44-03:00",
+      "sha": "1ae865fb57bf3c195b5554328ec651624aab1fec",
+      "app_version": "0.289.0",
+      "subject": "Onda manual-onda4: A aba Ana mostra o Retrato servido do repositório privado da Ana; A fatia de manual volta ao /to-prd e ao /to-issues, sem vídeo",
+      "raw_subject": "chore(deploy): registro da onda manual-onda4 (#1749 #1748)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1711
+      ],
+      "result": "healthy",
+      "duration_seconds": 935,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta manual-onda4: PR #1749 (issue #1720), PR #1748 (issue #1728), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 5,
+        "build_s": {
+          "backend": 22,
+          "frontend": 187
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T14:49:51-03:00",
       "sha": "29edca41b7e882def11b684eb3bb0aae5080b182",
       "app_version": "0.288.0",
