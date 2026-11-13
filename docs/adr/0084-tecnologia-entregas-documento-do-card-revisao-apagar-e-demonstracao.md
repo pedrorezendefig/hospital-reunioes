@@ -1,7 +1,7 @@
 ---
 status: accepted
 amends: 0050, 0054, 0077, 0083
-amended_by: 0090, 0091, 0092
+amended_by: 0090, 0091, 0092, 0093
 ---
 
 # Tecnologia: Entregas, documento do card, revisão com o código de hoje, apagar e demonstração

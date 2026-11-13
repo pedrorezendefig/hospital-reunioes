@@ -95,6 +95,10 @@ _Evitar_: assinatura interna, aceite manual, ciência.
 A agente de IA de atendimento e agendamento de pacientes do mesmo hospital: produto irmão, com repo e roadmap próprios (`~/PedroDev/Ana`). **Ainda não atende no WhatsApp oficial do hospital**: aquele número segue no Kommo, com atendimento humano, e o canal vivo dela é um Telegram de teste, mais uma inbox de API (ADR 0034). Consome dados deste app pela [API da Ana]; não loga, não tem conta, não é usuária.
 _Evitar_: tratar a Ana como feature deste app (é cliente de serviço).
 
+**Retrato da Ana**:
+A página que explica a [Ana] para quem decide, gerada no repositório dela: o que ela faz (as capacidades), as regras (o mapa do prompt e o texto de cada seção), onde ela busca a resposta (ferramentas e integração) e o que a Global Health dá e não dá. É regenerada sempre que o prompt muda e aparece na aba Ana do [Manual do usuário], só para Super admin (ADR 0094).
+_Evitar_: publicar o Retrato em site aberto; copiar o Retrato para o repositório deste app, que é público; Retrato com o prompt de uma versão velha.
+
 **Dados do Atendimento**:
 O módulo da área admin com as tabelas que alimentam a Ana: consultas particulares (preços e diferenciais), exames e estimativas de cirurgias. Super admins e secretárias editam; facilitadores leem. Edição vale imediatamente para a Ana (leitura direta, sem cache). Substitui a planilha do NocoDB (aposentado pelo ADR 0031). A tabela de convênios por especialidade saiu no ADR 0038: cobertura de convênio é a agenda online da Global Health quem responde, e no lugar dela vive o [Espelho da Global Health]. A regra que organiza o módulo: a Global Health é dona da agenda (o que existe, quem atende, quem é aceito, quando); as tabelas daqui são donas do que ela não tem (preço particular, preparo, estimativa).
 _Evitar_: "tabelas do NocoDB" (a casa agora é aqui); cache entre a edição e a API.
@@ -290,7 +294,7 @@ Um bug ou uma melhoria que o diretor relatou ao [Assistente de Tecnologia] ou qu
 _Evitar_: chamar de Pendência, tarefa ou ticket; tipo além de bug ou melhoria; Prioridade, Prazo ou raia (aposentados em 02/11/2026); "Demandas TI" (TI é o analista de TI do hospital, um terceiro).
 
 **Número da Demanda**:
-O número próprio de cada [Demanda], sequencial no app, que nasce já na conversa Registrada (as que existiam antes ganham número pela ordem de criação). Aparece como "Demanda 42", sem cerquilha, no topo do [Documento do card] e discreto na linha da lista. Todo mundo que vê a Demanda vê o número, inclusive o diretor; é a referência que circula fora do app ("vê a demanda 42"). Vem junto do **Link da Demanda**: o botão "Copiar link" copia "Demanda 42: <título>" e, na linha de baixo, o endereço que abre a aba Tecnologia já naquele card, o mesmo que o sino e o e-mail usam. Fica só no app, sem ir para a issue.
+O número próprio de cada [Demanda], sequencial no app e um só para os dois [Projetos] (ADR 0093), que nasce já na conversa Registrada (as que existiam antes ganham número pela ordem de criação). Aparece como "Demanda 42", sem cerquilha, no topo do [Documento do card] e discreto na linha da lista. Todo mundo que vê a Demanda vê o número, inclusive o diretor; é a referência que circula fora do app ("vê a demanda 42"). Vem junto do **Link da Demanda**: o botão "Copiar link" copia "Demanda 42: <título>" e, na linha de baixo, o endereço que abre a aba Tecnologia já naquele card, o mesmo que o sino e o e-mail usam. Fica só no app, sem ir para a issue.
 _Evitar_: confundir com o número da issue (`#1571`), que continua só do [Desenvolvedor]; mostrar o número da issue ao diretor; cerquilha no Número da Demanda; reaproveitar número de Demanda apagada.
 
 **Assistente de Tecnologia**:
@@ -310,7 +314,7 @@ O card de uma melhoria: o PRD inteiro escrito pelo [Planejamento da Demanda] na 
 _Evitar_: o app gravando `CONTEXT.md` ou ADR; PRD novo criado pelo terminal para um pedido que já tem Demanda (quebra o par Demanda x issue; o caminho é a [Revisão com o código de hoje]); número de issue dentro do bloco "Para o diretor".
 
 **Vínculo com o desenvolvimento**:
-A ligação de uma Demanda com **uma** issue-raiz do GitHub (o PRD do diretor ou a issue do bug), criada pelo clique "Criar o card" ou, na [Origem] Vitta, quando a issue-raiz nasce no terminal (ADR 0084). As fatias são sub-issues dessa raiz e nunca se vinculam uma a uma. O diretor vê a Etapa e O que muda, nunca número nem link.
+A ligação de uma Demanda com **uma** issue-raiz do GitHub do [Projeto] dela (o PRD do diretor ou a issue do bug), identificada pelo projeto e pelo número da issue (ADR 0093), criada pelo clique "Criar o card" ou, na [Origem] Vitta, quando a issue-raiz nasce no terminal (ADR 0084). As fatias são sub-issues dessa raiz e nunca se vinculam uma a uma. O diretor vê a Etapa e O que muda, nunca número nem link.
 _Evitar_: vincular fatia em vez da raiz; Demanda com mais de uma issue; vínculo digitado por número (aposentado).
 
 **Desenvolvedor**:
@@ -330,7 +334,7 @@ O estado de uma Demanda cujo "Criar o card" não chegou ao GitHub (ADR 0083). Fi
 _Evitar_: reenvio automático; falha que só o log sabe.
 
 **Etapa**:
-Onde a Demanda está na entrega, em palavras do diretor, sempre derivada do GitHub e nunca editada à mão: **Registrada** (conversa sem card), **Em análise**, **Planejada**, **Em desenvolvimento**, **Entregue**, **Em produção** e **Não será feita**. Num PRD, vem com "X de Y partes entregues". **Entregue** é o fechamento da issue (o merge); **Em produção** é a [Subida] que levou aquele fechamento ao ar, com a versão ("Em produção desde v0.165.0"; ADR 0069). Um PR aberto já conta como Em desenvolvimento. Num PRD, depois que a primeira parte começa, a Demanda fica Em desenvolvimento até a raiz fechar, mesmo entre uma onda e outra, sem voltar para Planejada (ADR 0092). É o que a lista lateral mostra em cada conversa.
+Onde a Demanda está na entrega, em palavras do diretor, sempre derivada do GitHub e nunca editada à mão: **Registrada** (conversa sem card), **Em análise**, **Planejada**, **Em desenvolvimento**, **Entregue**, **Em produção** e **Não será feita**. Num PRD, vem com "X de Y partes entregues". **Entregue** é o fechamento da issue (o merge); **Em produção** é a [Subida] que levou aquele fechamento ao ar, com a versão ("Em produção desde v0.165.0"; ADR 0069). Um PR aberto já conta como Em desenvolvimento. Na [Ana], a última Etapa é Entregue, porque ela não tem Subida com versão (ADR 0093). Num PRD, depois que a primeira parte começa, a Demanda fica Em desenvolvimento até a raiz fechar, mesmo entre uma onda e outra, sem voltar para Planejada (ADR 0092). É o que a lista lateral mostra em cada conversa.
 _Evitar_: Etapa digitada; Entregue como "deploy confirmado" (é o fechamento; o deploy é Em produção).
 
 **Subida**:
@@ -347,6 +351,10 @@ _Evitar_: título de parte, número de issue, link ou label na tela do diretor; 
 **Origem**:
 De onde a Demanda veio (ADR 0084): **Pedido do diretor**, quando nasceu do [Assistente de Tecnologia], ou **Vitta**, quando a issue-raiz do app (PRD ou bug) foi aberta pelo terminal. Aparece como selo na lista e é um dos filtros. A Demanda da Vitta não tem conversa com o agente, mas tem Etapa, [Documento do card] e [Conversa da Demanda]. Ferramenta e skills (`.claude/`, `tools/`, `docs/`) não viram Demanda.
 _Evitar_: label manual para mostrar ao diretor; Demanda para issue de ferramenta; parte (fatia) virando Demanda.
+
+**Projeto**:
+De qual sistema do hospital a Demanda é (ADR 0093): **Aplicativo do Hospital**, este app, ou **Ana**, a agente de atendimento, com repositório privado próprio. Da Ana viram Demanda só as raízes de produto (PRD ou issue solta, sem as partes e sem as de ferramenta), sempre da [Origem] Vitta. Os cards da Ana são só leitura: o [Assistente de Tecnologia] cria card apenas no Aplicativo do Hospital. Aparece como selo no card e é um filtro do [Quadro] e das [Entregas].
+_Evitar_: "Produto" (é o módulo do kit de conhecimento) ou "Sistema"; criar card da Ana pelo Assistente; Demanda da Ana Em produção; levar conteúdo do repositório da Ana para o deste app, que é público.
 
 **Documento do card**:
 O que abre quando se clica numa Demanda (ADR 0084): seções fixas, Em uma frase, [O que muda] (até cinco tópicos), Partes (com Etapa e datas), [Demonstração] e Datas (criado, entregue, em produção). Durante o [Planejamento da Demanda] se monta ao vivo ao lado do chat, no molde da ata viva da Ata Guiada; depois do card é lido do bloco "Para o diretor" da issue, que tem formato fixo e limite de tamanho tanto no [PRD do diretor] quanto no `/to-prd` do terminal. Nunca digitado no app.
@@ -484,8 +492,8 @@ Perfil de Contas médicas que só envia: sobe Conta e Prontuário, vê "Meus env
 ## Texto e comunicação
 
 **Manual do usuário**:
-Aposentado em 05/11/2026 (ADR 0078): o site, o item Ajuda do app, as Páginas de tarefa, os vídeos do módulo e a Fatia de manual saíram da plataforma. Um manual novo, com outra abordagem, será decisão nova.
-_Evitar_: citar o Manual como destino de texto ou de link; criar página em `docs/manual/`.
+O manual dentro do app (ADR 0094), aberto pelo item Manual no rodapé da barra lateral, com duas abas. **Aplicativo do Hospital**: uma página por módulo, com as tarefas em passo a passo, prints de tela com dados fictícios e fluxogramas; cada pessoa vê só os módulos que acessa. **Ana**: o [Retrato da Ana], só para Super admin. Sem vídeo. Muda junto com a tela: todo PRD com tela tem uma **Fatia de manual**, só com texto, print e fluxograma.
+_Evitar_: vídeo no manual; site fora do app; print com dado real; página de módulo que a pessoa não acessa; o manual aposentado em 05/11/2026 (o site na Vercel com vídeo por módulo, ADR 0078).
 
 **Régua de texto**:
 A passagem obrigatória de todo texto que alguém de fora vai ler (texto de tela, PDF, hover do Hospital OS, mensagem, legenda de vídeo, página de divulgação) pela skill `humanizer` antes de gravar, mais o lint que trava no CI os cacoetes que dão para pegar por regex (ADR 0071). A voz é a do canal: a amostra aprovada manda no tom, a skill só tira o cacoete.
