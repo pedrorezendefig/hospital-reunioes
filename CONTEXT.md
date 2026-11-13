@@ -330,7 +330,7 @@ O estado de uma Demanda cujo "Criar o card" não chegou ao GitHub (ADR 0083). Fi
 _Evitar_: reenvio automático; falha que só o log sabe.
 
 **Etapa**:
-Onde a Demanda está na entrega, em palavras do diretor, sempre derivada do GitHub e nunca editada à mão: **Registrada** (conversa sem card), **Em análise**, **Planejada**, **Em desenvolvimento**, **Entregue**, **Em produção** e **Não será feita**. Num PRD, vem com "X de Y partes entregues". **Entregue** é o fechamento da issue (o merge); **Em produção** é a [Subida] que levou aquele fechamento ao ar, com a versão ("Em produção desde v0.165.0"; ADR 0069). Um PR aberto já conta como Em desenvolvimento. É o que a lista lateral mostra em cada conversa.
+Onde a Demanda está na entrega, em palavras do diretor, sempre derivada do GitHub e nunca editada à mão: **Registrada** (conversa sem card), **Em análise**, **Planejada**, **Em desenvolvimento**, **Entregue**, **Em produção** e **Não será feita**. Num PRD, vem com "X de Y partes entregues". **Entregue** é o fechamento da issue (o merge); **Em produção** é a [Subida] que levou aquele fechamento ao ar, com a versão ("Em produção desde v0.165.0"; ADR 0069). Um PR aberto já conta como Em desenvolvimento. Num PRD, depois que a primeira parte começa, a Demanda fica Em desenvolvimento até a raiz fechar, mesmo entre uma onda e outra, sem voltar para Planejada (ADR 0091). É o que a lista lateral mostra em cada conversa.
 _Evitar_: Etapa digitada; Entregue como "deploy confirmado" (é o fechamento; o deploy é Em produção).
 
 **Subida**:
@@ -365,8 +365,20 @@ A tela principal da aba Tecnologia (ADR 0090): os cards das Demandas em cinco co
 _Evitar_: arrastar card entre colunas; coluna de Estado, Prioridade ou Prazo (o Quadro aposentado em 02/11/2026); raia por pessoa; confundir com as [Entregas], o retrato do que já foi entregue.
 
 **Entregas**:
-A segunda aba da Tecnologia (ADR 0084): o retrato do que foi entregue, contado por card, com as partes no detalhe. Entregues por semana e por mês, data de entrega (fechamento), data em produção ([Subida]) e [Responsável], com histórico desde o primeiro registro do `history.json`. Ninguém move nada ali.
-_Evitar_: chamar de Painel (aposentado em 02/11/2026) ou de [Quadro]; contar por parte; mover card pela aba.
+A segunda aba da Tecnologia (ADR 0084, emendada pela 0091): os números da entrega em cima e, embaixo, a lista do que foi entregue, contado por card, com as partes no detalhe. Os números são a [Vazão], o [Tempo na Etapa], os pedidos do diretor (quantos, de que tipo, quantas partes cada melhoria gerou e o custo de IA do [Planejamento da Demanda]) e o corte por [Responsável]. Entram as Demandas das duas [Origens], separáveis pelo filtro. Todos que veem a aba veem a mesma tela, diretor e [Desenvolvedores]. Ninguém move nada ali.
+_Evitar_: chamar de Painel (aposentado em 02/11/2026) ou de [Quadro]; contar por parte; mover card pela aba; atribuir o card a quem implementou uma parte (conta o Responsável da Demanda); números escondidos do diretor.
+
+**Vazão**:
+Quantas Demandas chegaram a Entregue num período, contadas por card. É o "quanto a equipe entrega" das [Entregas], por período e por [Responsável].
+_Evitar_: "produção" (é a Etapa Em produção); contar partes; contar Não será feita.
+
+**Tempo na Etapa**:
+Quanto uma Demanda ficou em cada [Etapa], medido de uma **passagem** a outra (o momento em que a Etapa muda). Vale também para o passado: as passagens anteriores a 13/11/2026 são reconstruídas do histórico do GitHub. Registrada conta da abertura da conversa até o "Criar o card".
+_Evitar_: tempo digitado ou estimado; somar o tempo das partes como se fosse o da Demanda.
+
+**Card parado**:
+Demanda que passou do prazo da [Etapa] em que está, contado em dias corridos: Em análise 5 dias, Planejada 5, Em desenvolvimento 3. Registrada não conta, porque ali o ritmo é do diretor. Aparece só nas [Entregas], numa lista que abre o card (ADR 0091).
+_Evitar_: selo de parado no card do [Quadro]; prazo ajustado na tela; confundir com Prazo, aposentado em 02/11/2026.
 
 **Demonstração**:
 O vídeo do que um card entregue mudou, com a página na Vercel, feito pelo `/divulgar` (ADR 0045) numa sessão aberta pelo botão "Gerar demonstração" do PedroOS, sempre por clique do Pedro (ADR 0084). A sessão grava na issue-raiz o marcador `<!-- demonstracao: <url> -->`, o webhook leva o link ao card e o card ganha o selo "Tem demonstração". Nem todo card tem. Quando fica pronta, o diretor recebe aviso por sino e e-mail, como recebe quando o card entra Em produção, com o resumo montado do [Documento do card], sem IA.

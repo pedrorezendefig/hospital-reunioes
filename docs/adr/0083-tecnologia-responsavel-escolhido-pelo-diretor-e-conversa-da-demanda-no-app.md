@@ -1,7 +1,7 @@
 ---
 status: accepted
 amends: 0077
-amended_by: 0084, 0090
+amended_by: 0084, 0090, 0091
 ---
 
 # Tecnologia: o diretor escolhe o Responsável, o Desenvolvedor vê as Demandas de todos e a Conversa da Demanda volta, só no app
