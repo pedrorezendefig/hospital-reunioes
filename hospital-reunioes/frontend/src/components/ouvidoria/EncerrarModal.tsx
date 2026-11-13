@@ -100,6 +100,10 @@ export function EncerrarModal({ manifestacao, token, onClose, onEncerrada }: Enc
 
   const pronto = Boolean(desfecho) && descricaoDeDesfechoValida(descricao) && !salvando;
   const comAviso = Boolean(trechos?.length);
+  // Enquanto o agente lê (pode levar segundos) e o envio sai, o modal não fecha
+  // e o texto e o desfecho não mudam: o encerrar() pendente usa os valores do
+  // clique, e um Cancelar ou uma edição no meio seriam ignorados em silêncio.
+  const fechar = salvando ? () => {} : onClose;
 
   async function encerrar() {
     if (!manifestacao || !token || !desfecho) return;
@@ -140,7 +144,7 @@ export function EncerrarModal({ manifestacao, token, onClose, onEncerrada }: Enc
   return (
     <AdminModal
       open={Boolean(manifestacao)}
-      onClose={onClose}
+      onClose={fechar}
       title={manifestacao ? `Encerrar ${manifestacao.protocolo}` : "Encerrar"}
       description="O caso grava o desfecho, sai da fila de tramitação e o desfecho vai por email a quem manifestou."
       icon={<CheckCircle2 className="w-5 h-5" />}
@@ -156,6 +160,7 @@ export function EncerrarModal({ manifestacao, token, onClose, onEncerrada }: Enc
                 key={opcao}
                 type="button"
                 onClick={() => setDesfecho(opcao)}
+                disabled={salvando}
                 className={`text-left px-3 py-2.5 rounded-xl border transition-colors ${
                   desfecho === opcao
                     ? "bg-primary/10 border-primary/40 text-primary"
@@ -194,6 +199,7 @@ export function EncerrarModal({ manifestacao, token, onClose, onEncerrada }: Enc
             id="encerrar-descricao"
             className={`${CAMPO} min-h-[90px]`}
             value={descricao}
+            disabled={salvando}
             onChange={(e) => {
               setDescricao(e.target.value);
               setTrechos(null);
@@ -233,8 +239,9 @@ export function EncerrarModal({ manifestacao, token, onClose, onEncerrada }: Enc
         <div className="flex justify-end gap-2">
           <button
             type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-100 transition-colors"
+            onClick={fechar}
+            disabled={salvando}
+            className="px-4 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Cancelar
           </button>

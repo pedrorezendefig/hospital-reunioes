@@ -140,3 +140,64 @@ describe("falha do agente", () => {
     expect(chamadas("/transicoes")).toHaveLength(1);
   });
 });
+
+describe("enquanto o agente lê", () => {
+  // A leitura pode levar segundos. Se o ouvidor pudesse cancelar ou editar no
+  // meio dela, o envio pendente sairia com o texto antigo (ou depois do
+  // Cancelar), e o aviso atrasado cobriria um texto que não foi lido.
+  function montarComLeituraPendente() {
+    let responder: (trechos: unknown[]) => void = () => {};
+    fetchMock.mockImplementation((url: string) => {
+      if (String(url).endsWith("/salvaguarda-da-resposta")) {
+        return new Promise((resolve) => {
+          responder = (trechos) =>
+            resolve({ ok: true, json: async () => ({ analisada: true, trechos }) } as Response);
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const onClose = vi.fn();
+    const onEncerrada = vi.fn();
+    render(
+      <EncerrarModal
+        manifestacao={{ id: "uuid-7", protocolo: "2026-0007", nsp_decisao: "confirmado" }}
+        token="t"
+        onClose={onClose}
+        onEncerrada={onEncerrada}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Procedente" }));
+    fireEvent.change(screen.getByLabelText(/Desfecho para o manifestante/), { target: { value: RESPOSTA } });
+    clicarEncerrar();
+    return { onClose, onEncerrada, responder: (t: unknown[]) => responder(t) };
+  }
+
+  it("o texto e o desfecho ficam travados até a leitura voltar", async () => {
+    const { responder } = montarComLeituraPendente();
+    const campo = screen.getByLabelText(/Desfecho para o manifestante/) as HTMLTextAreaElement;
+
+    await waitFor(() => expect(chamadas("/salvaguarda-da-resposta")).toHaveLength(1));
+    expect(campo.disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Improcedente" }) as HTMLButtonElement).disabled).toBe(true);
+
+    responder([{ trecho: TRECHO, motivo: MOTIVO }]);
+    await screen.findByText(`"${TRECHO}"`);
+    expect(campo.disabled).toBe(false);
+  });
+
+  it("cancelar no meio da leitura não fecha nem deixa o caso encerrar escondido", async () => {
+    const { onClose, onEncerrada, responder } = montarComLeituraPendente();
+    await waitFor(() => expect(chamadas("/salvaguarda-da-resposta")).toHaveLength(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+
+    responder([]);
+    await waitFor(() => expect(onEncerrada).toHaveBeenCalled());
+    const [[, init]] = chamadas("/transicoes");
+    expect(JSON.parse((init as RequestInit).body as string).desfecho_descricao).toBe(RESPOSTA);
+  });
+});
