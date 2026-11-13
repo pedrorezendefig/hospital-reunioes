@@ -8,6 +8,10 @@
  * `paginas.test.ts`.
  */
 
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { lerFluxograma, type Fluxo } from "@/components/manual/fluxograma/fluxo";
@@ -136,5 +140,61 @@ describe("o fluxograma da página de POPs", () => {
       expect(naoAprovada, decisao).toBeTruthy();
       expect(alcancaveis(leitura.fluxo, naoAprovada!.para).has(elaborar)).toBe(true);
     }
+  });
+});
+
+const ROTEIRO = join(process.cwd(), "scripts", "manual", "pops");
+const lerDoRoteiro = (arquivo: string) => readFileSync(join(ROTEIRO, arquivo), "utf8");
+
+/** Os PNGs que o roteiro grava: cada `foto("<arquivo>.png")` do prints.js. */
+function printsDoRoteiro(codigo: string): string[] {
+  return Array.from(codigo.matchAll(/\bfoto\(\s*"([^"]+\.png)"/g), (m) => m[1]);
+}
+
+describe("o roteiro dos prints da página de POPs", () => {
+  it("refaz todas as imagens da página, e só elas", () => {
+    const daPagina = imagensCitadas(POPS!.corpo).sort();
+    const doRoteiro = printsDoRoteiro(lerDoRoteiro("prints.js")).sort();
+
+    expect(daPagina.length).toBeGreaterThan(0);
+    expect(doRoteiro).toEqual([...new Set(daPagina)]);
+  });
+
+  it("o detector lê o nome de cada print do roteiro", () => {
+    const codigo = 'await foto("lista.png");\nawait foto( "ficha.png", { fullPage: true });\nfoto(arquivo);';
+    expect(printsDoRoteiro(codigo)).toEqual(["lista.png", "ficha.png"]);
+  });
+
+  it("recusa rodar contra um banco que não é o da máquina", () => {
+    const pasta = mkdtempSync(join(tmpdir(), "roteiro-pops-"));
+    const env = join(pasta, ".env");
+    writeFileSync(env, "SUPABASE_URL=https://banco.de-producao.exemplo\nSUPABASE_SERVICE_ROLE_KEY=x\n");
+
+    const rodada = spawnSync("bash", [join(ROTEIRO, "roteiro.sh")], {
+      env: { ...process.env, ENV_LOCAL: env },
+      encoding: "utf8",
+    });
+
+    expect(rodada.status).toBe(1);
+    expect(rodada.stderr).toContain("recusado");
+  });
+});
+
+describe("os dados de exemplo dos prints", () => {
+  const seed = lerDoRoteiro("semear.sql");
+  const roteiro = lerDoRoteiro("roteiro.sh");
+
+  it("só usam e-mails do domínio de exemplo, inclusive o de quem entra nos prints", () => {
+    const emails = [...`${seed}\n${roteiro}`.matchAll(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g)].map((m) => m[0]);
+
+    expect(emails.length).toBeGreaterThanOrEqual(6);
+    expect(emails.filter((email) => !email.endsWith("@exemplo.local"))).toEqual([]);
+  });
+
+  it("só criam pessoas na faixa própria do módulo, P995 a P999", () => {
+    const ids = [...new Set([...seed.matchAll(/'(P\d{3,})'/g)].map((m) => m[1]))];
+
+    expect(ids.length).toBeGreaterThan(0);
+    expect(ids.filter((id) => Number(id.slice(1)) < 995 || Number(id.slice(1)) > 999)).toEqual([]);
   });
 });

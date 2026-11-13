@@ -10,18 +10,16 @@ O caminho de um POP, do rascunho até a versão publicada:
 ```fluxograma
 inicio criar 1,1: Criar o POP | Quem cria escolhe o setor e as três pessoas. A versão nasce como rascunho, em A elaborar.
 passo elaborar 2,1: Elaborar | Quem elabora escreve o POP com o Consultor de POPs e aprova a versão final.
-decisao revisao 3,1: Revisão aprovada? | Quem revisa lê a versão inteira.
-decisao validacao 4,1: Validação aprovada? | Quem valida faz a última leitura antes das assinaturas.
+decisao revisao 3,1: Revisão aprovada? | Quem revisa lê a versão inteira. Se faltar algo, devolve com comentários, e o POP volta para quem elaborou.
+decisao validacao 4,1: Validação aprovada? | Quem valida faz a última leitura antes das assinaturas e também pode devolver com comentários.
 passo assinar 5,1: Assinar | As três pessoas assinam o documento digitalmente, pelo e-mail.
 fim publicada 6,1: Versão publicada | O POP entra na Biblioteca, com o PDF assinado.
-passo devolver 3,2: Devolver com comentários | O POP volta para quem elaborou. Depois do ajuste, vai direto para quem devolveu.
 criar -> elaborar
 elaborar -> revisao
 revisao -> validacao: sim
-revisao -> devolver: não
+revisao -> elaborar: não
 validacao -> assinar: sim
-validacao -> devolver: não
-devolver -> elaborar
+validacao -> elaborar: não
 assinar -> publicada
 ```
 

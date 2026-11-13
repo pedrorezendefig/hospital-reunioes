@@ -1,6 +1,6 @@
 // Os prints da página de POPs do manual (issue #1722). Quem roda é o
 // roteiro.sh, pelo `playwright-cli run-code`, depois de trocar __BASE__,
-// __SAIDA__, __EMAIL__ e __SENHA__. Cada `foto("<arquivo>.png")` é um print
+// __SAIDA__, __EMAIL__ e __SENHA__. Cada chamada de `foto` grava um print
 // citado em public/manual/pops/pagina.md, e o teste da página confere que as
 // duas listas batem.
 async (page) => {
