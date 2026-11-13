@@ -280,6 +280,12 @@ CAMPOS_DO_DOSSIE: dict[str, str | None] = {
     # dela, cinco anos depois de criada: o caso apagado antes disso (pela
     # Diretoria) não pode continuar apontando para ele.
     "avaliacao_id": None,
+    # O hash do Código de acompanhamento do anônimo (issue #1623, migration
+    # 141). É a chave de quem manifestou para a página pública, e sai junto com
+    # o contato do identificado: depois do apagamento as duas portas da página
+    # fecham juntas, e a resposta que ela mostraria já saiu com o
+    # `desfecho_descricao`.
+    "codigo_acompanhamento_hash": None,
 }
 
 # `resumo` é NOT NULL com CHECK anti-vazio desde a migration 063: não pode ir a

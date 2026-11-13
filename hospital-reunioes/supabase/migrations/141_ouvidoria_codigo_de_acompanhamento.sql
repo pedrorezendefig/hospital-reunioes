@@ -12,6 +12,10 @@
 -- anonimo de antes desta migration nao ganha codigo retroativo (nao ha como
 -- mostra-lo a quem manifestou).
 --
+-- RETENCAO: o hash sai com o Dossie, pelo cron dos cinco anos e pela porta
+-- antecipada da diretoria executiva (`CAMPOS_DO_DOSSIE` em
+-- app/services/ouvidoria_retencao.py), como o contato do identificado.
+--
 -- Sem tabela nova e sem policy: a linha do caso segue com a RLS que nega por
 -- padrao, e o backend le e escreve com a service role.
 --

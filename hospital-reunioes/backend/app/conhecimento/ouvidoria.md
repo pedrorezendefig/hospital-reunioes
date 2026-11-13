@@ -51,7 +51,7 @@ Fora do e-mail, quem manifestou acompanha o caso por conta própria:
 
 ## Encerramento e apagamento
 
-O relato de um caso encerrado é apagado depois de cinco anos, sozinho, de madrugada. A diretoria executiva pode apagar antes, um caso por vez, com motivo escrito. Apagar some com o relato, o nome, o contato e o telefone, os anexos e o que o passo a passo perguntou: o dia, o período e a hora, o lugar e o quarto, os profissionais, o nome e a data de nascimento do paciente e o que a pessoa esperava. O protocolo, a trilha e os números ficam, e é a trilha que explica o buraco. Não tem volta, e o caso apagado não reabre. O comentário da nota do QR também é apagado sozinho, cinco anos depois de escrito, e a nota e os motivos ficam para os números.
+O relato de um caso encerrado é apagado depois de cinco anos, sozinho, de madrugada. A diretoria executiva pode apagar antes, um caso por vez, com motivo escrito. Apagar some com o relato, o nome, o contato e o telefone, os anexos e o que o passo a passo perguntou: o dia, o período e a hora, o lugar e o quarto, os profissionais, o nome e a data de nascimento do paciente e o que a pessoa esperava. Some também o código de acompanhamento, e a página de acompanhamento deixa de abrir aquele caso. O protocolo, a trilha e os números ficam, e é a trilha que explica o buraco. Não tem volta, e o caso apagado não reabre. O comentário da nota do QR também é apagado sozinho, cinco anos depois de escrito, e a nota e os motivos ficam para os números.
 
 Arquivar é outra coisa: só tira da lista o caso que já foi encerrado, para organizar a vista, e tem volta. Caso em andamento não arquiva, porque esconder um prazo correndo é esconder atraso.
 
