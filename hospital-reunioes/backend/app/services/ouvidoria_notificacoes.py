@@ -1825,7 +1825,10 @@ def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozens
             # O link do Núcleo nasce aqui, como o do elogio, e só enquanto a
             # ciência espera o Recebido: o reenvio de um caso já recebido não
             # emite link novo para uma tela que mostra o relato integral.
-            from app.services import ouvidoria_nucleo
+            #
+            # O import do `ouvidoria_acionamentos` repete o do ramo do elogio:
+            # import dentro da função torna o nome local à função inteira.
+            from app.services import ouvidoria_acionamentos, ouvidoria_nucleo
 
             ciencia = ouvidoria_nucleo.ciencia_do_caso(supabase, notificacao["manifestacao_id"])
             if ciencia is None or ciencia.get("status") != "pendente":

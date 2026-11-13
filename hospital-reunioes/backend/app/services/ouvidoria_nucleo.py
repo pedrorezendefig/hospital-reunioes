@@ -149,6 +149,13 @@ def enviar(
     return ciencia
 
 
+def descartar(supabase, *, caso: dict, motivo: str, autor: dict, agora: dt.datetime) -> None:
+    """O ouvidor descarta o apontamento do agente, com o motivo de uma linha.
+    Fica gravado no caso e na trilha, e o Núcleo não recebe nada."""
+    _gravar_decisao(supabase, caso["id"], DESCARTADO, motivo, autor, agora)
+    _registrar_na_trilha(supabase, caso, autor, f"Envio ao Núcleo de Segurança do Paciente descartado. Motivo: {motivo}")
+
+
 def _gravar_decisao(supabase, manifestacao_id: str, decisao: str, motivo: str | None, autor: dict, agora) -> None:
     supabase.table("ouvidoria_protocolos").update(
         {

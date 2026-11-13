@@ -115,17 +115,22 @@ def criar_ciencia_do_elogio(
 
 
 def devolver_as_pendentes(supabase, manifestacao_id: str) -> None:
-    """A ciência do caso que ainda esperava o clique perde a vez (`devolvido`).
+    """A ciência do elogio que ainda esperava o clique perde a vez (`devolvido`).
 
     Chamada em todo acionamento novo do caso, de ciência ou de resposta: o
     elogio redirecionado como reclamação não pode deixar a ciência do setor
     antigo viva, senão o reenvio leva a ele o extrato escrito para o setor
-    novo, e o link antigo confirma um caso que não é mais elogio."""
+    novo, e o link antigo confirma um caso que não é mais elogio.
+
+    Só a do elogio: a ciência do Núcleo de Segurança do Paciente corre em
+    paralelo ao caso e não perde a vez quando a área é acionada (issue #1621,
+    ADR 0088, decisão 8)."""
     (
         supabase.table(TABELA)
         .update({"status": DEVOLVIDO})
         .eq("manifestacao_id", manifestacao_id)
         .eq("tipo", CIENCIA)
+        .eq("motivo_ciencia", MOTIVO_ELOGIO)
         .eq("status", PENDENTE)
         .execute()
     )

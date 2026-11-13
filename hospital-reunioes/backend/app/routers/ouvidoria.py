@@ -2989,6 +2989,12 @@ class PedidoValidacao(BaseModel):
     gravidade: Literal["critico", "alto", "medio", "baixo"]
     observacao: str | None = None
     extrato_para_o_setor: str | None = None
+    # A decisão sobre o Núcleo de Segurança do Paciente (issue #1621, ADR 0088,
+    # decisão 4). Obrigatória só quando o agente apontou o caso, e o motivo só
+    # quando o ouvidor descarta; os dois são opcionais no schema para a rota
+    # recusar com a frase que explica o porquê.
+    nsp_decisao: Literal["confirmado", "descartado"] | None = None
+    nsp_motivo: str | None = Field(default=None, max_length=300)
 
     @field_validator("setor")
     @classmethod
@@ -3002,7 +3008,7 @@ class PedidoValidacao(BaseModel):
             return None
         return sanitizar_travessao(valor).strip() or None
 
-    @field_validator("observacao", "extrato_para_o_setor")
+    @field_validator("observacao", "extrato_para_o_setor", "nsp_motivo")
     @classmethod
     def _observacao_limpa(cls, valor: str | None) -> str | None:
         if valor is None:
@@ -3724,9 +3730,13 @@ async def validar_e_acionar(
             # Este `select` é recortado à mão, e sem eles aqui a guarda logo
             # abaixo leria `None` para sempre: nasceria morta, com a chamada no
             # lugar certo e a suíte verde.
+            #
+            # O apontamento do agente e a decisão sobre o Núcleo entram pela
+            # trava da issue #1621: com apontamento e sem decisão, validar é
+            # recusado antes de qualquer efeito.
             .select(
                 "id, status, sigilo_reforcado, tipo_manifestacao, contato_em, data_abertura, "
-                "prazo_conclusivo_em, setor, anonimizada_em, apagamento_pedido_em"
+                "prazo_conclusivo_em, setor, anonimizada_em, apagamento_pedido_em, nsp_sugerido, nsp_decisao"
             )
             .eq("id", manifestacao_id)
             .execute()
@@ -3767,7 +3777,27 @@ async def validar_e_acionar(
     # o caso já ter saído da área antiga, e uma recusa naquele ponto deixaria o
     # caso parado em `em_classificacao`. Redirecionar confere primeiro, e por
     # isso "nada acontece" quando a área nova não tem responsável (ADR 0055).
-    area = conferir_o_acionamento(supabase, caso, pedido, agora.astimezone(FUSO_HOSPITAL).date())
+    hoje = agora.astimezone(FUSO_HOSPITAL).date()
+    # A decisão sobre o Núcleo é conferida junto, ANTES de qualquer efeito
+    # (issue #1621): com o apontamento do agente, validar sem decidir é
+    # recusado, e descartar pede o motivo.
+    decisao = conferir_a_decisao_do_nucleo(caso, pedido)
+    nucleo = conferir_o_nucleo(supabase, hoje) if decisao == ouvidoria_nucleo.CONFIRMADO else None
+    area = conferir_o_acionamento(supabase, caso, pedido, hoje)
+    # A decisão é aplicada antes do acionamento da área: se o acionamento
+    # falhar depois, a nova tentativa já não pede a decisão de novo, e o Núcleo
+    # não recebe o caso duas vezes.
+    if nucleo is not None:
+        mandar_ao_nucleo(supabase, me, caso, nucleo, pedido.gravidade, agora)
+    elif decisao == ouvidoria_nucleo.DESCARTADO:
+        try:
+            ouvidoria_nucleo.descartar(supabase, caso=caso, motivo=pedido.nsp_motivo or "", autor=me, agora=agora)
+        except (APIError, HTTPError) as exc:
+            logger.error("Falha ao gravar o descarte do Núcleo no caso %s", manifestacao_id)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Não foi possível gravar a decisão sobre o Núcleo agora. Tente de novo em instantes.",
+            ) from exc
     return acionador_do_tipo(pedido)(
         supabase,
         me,
@@ -4469,6 +4499,29 @@ def conferir_o_nucleo(supabase, hoje: dt.date) -> NucleoAcionavel:
     if destinatario is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=recusa_de_setor_sem_responsavel(setor))
     return NucleoAcionavel(setor=setor, destinatario=destinatario, feriados=carregar_feriados(supabase))
+
+
+NUCLEO_SEM_DECISAO = (
+    "O agente apontou este caso ao Núcleo de Segurança do Paciente. Antes de validar, confirme o envio ao "
+    "Núcleo ou descarte com o motivo."
+)
+NUCLEO_DESCARTE_SEM_MOTIVO = "Para descartar o envio ao Núcleo de Segurança do Paciente, escreva o motivo em uma linha."
+
+
+def conferir_a_decisao_do_nucleo(caso: dict, pedido: PedidoValidacao) -> str | None:
+    """A decisão sobre o Núcleo que a validação vai aplicar, ou None quando não
+    há nada a aplicar (ADR 0088, decisão 4). Não escreve nada.
+
+    Caso já enviado ao Núcleo não recebe outra decisão: a ciência existe e a
+    investigação corre por fora. Caso já decidido (o devolvido à Ouvidoria que
+    volta à validação) não pede a decisão de novo."""
+    if caso.get("nsp_decisao") == ouvidoria_nucleo.CONFIRMADO:
+        return None
+    if pedido.nsp_decisao == ouvidoria_nucleo.DESCARTADO and not pedido.nsp_motivo:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=NUCLEO_DESCARTE_SEM_MOTIVO)
+    if pedido.nsp_decisao is None and caso.get("nsp_sugerido") and caso.get("nsp_decisao") is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=NUCLEO_SEM_DECISAO)
+    return pedido.nsp_decisao
 
 
 def mandar_ao_nucleo(supabase, me: dict, caso: dict, nucleo: NucleoAcionavel, gravidade, agora) -> dict:

@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from test_ouvidoria_validacao_acionamento import (  # noqa: E402
     DENTRO_DO_EXPEDIENTE,
     OUVIDOR,
+    VALIDACAO,
     _manifestacao,
     _responsavel,
     _SupabaseFake,
@@ -161,3 +162,88 @@ class TestEnviarAoNucleoSemSugestao:
         assert caso["nsp_decisao"] == "confirmado"
         assert caso["nsp_decidido_por"] == OUVIDOR["id"]
         assert r.json()["selo"] == "Em análise pelo NSP"
+
+
+# =====================================================================
+# 2. Com sugestão, a validação só conclui depois da decisão sobre o Núcleo
+# =====================================================================
+
+
+def _caso_apontado(**overrides) -> dict:
+    """O caso que o agente de triagem apontou ao Núcleo, ainda em classificação."""
+    return _caso(
+        status="em_classificacao",
+        setor="A definir",
+        gravidade=None,
+        nsp_sugerido=True,
+        nsp_justificativa_simples=JUSTIFICATIVA_SIMPLES,
+        nsp_justificativa_tecnica=JUSTIFICATIVA_TECNICA,
+        **overrides,
+    )
+
+
+def _validar(client, **corpo):
+    return client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO | corpo)
+
+
+class TestDecisaoSobreONucleoNaValidacao:
+    def test_com_sugestao_validar_sem_decidir_sobre_o_nucleo_e_recusado(self, monkeypatch, emails):
+        client, supabase = _client(monkeypatch, _banco(_caso_apontado()))
+
+        r = _validar(client)
+
+        assert r.status_code == 422, r.text
+        assert "Núcleo de Segurança do Paciente" in r.json()["detail"]
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "em_classificacao", "a recusa vem antes de qualquer efeito"
+        assert supabase.tabelas["ouvidoria_notificacoes"] == []
+        assert emails == []
+
+    def test_descartar_sem_motivo_e_recusado(self, monkeypatch, emails):
+        client, supabase = _client(monkeypatch, _banco(_caso_apontado()))
+
+        r = _validar(client, nsp_decisao="descartado", nsp_motivo="   ")
+
+        assert r.status_code == 422, r.text
+        assert "motivo" in r.json()["detail"]
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "em_classificacao"
+        assert caso["nsp_decisao"] is None
+        assert emails == []
+
+    def test_descartar_com_motivo_grava_a_decisao_e_aciona_a_area(self, monkeypatch, emails):
+        client, supabase = _client(monkeypatch, _banco(_caso_apontado()))
+
+        r = _validar(client, nsp_decisao="descartado", nsp_motivo="Queda sem dano, ja notificada pela enfermagem.")
+
+        assert r.status_code == 200, r.text
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "aguardando_area"
+        assert caso["nsp_decisao"] == "descartado"
+        assert caso["nsp_decisao_motivo"] == "Queda sem dano, ja notificada pela enfermagem."
+        assert caso["nsp_decidido_por"] == OUVIDOR["id"]
+        assert _ciencias_do_nucleo(supabase) == []
+        assert [e["destinatario"] for e in emails] == ["carlos@hsm.br"]
+
+    def test_confirmar_na_validacao_envia_ao_nucleo_e_aciona_a_area(self, monkeypatch, emails):
+        client, supabase = _client(monkeypatch, _banco(_caso_apontado()))
+
+        r = _validar(client, nsp_decisao="confirmado")
+
+        assert r.status_code == 200, r.text
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "aguardando_area"
+        assert caso["nsp_decisao"] == "confirmado"
+        ciencias = _ciencias_do_nucleo(supabase)
+        assert len(ciencias) == 1
+        assert ciencias[0]["status"] == "pendente", "o acionamento da área não derruba a ciência do Núcleo"
+        assert sorted(e["destinatario"] for e in emails) == ["carlos@hsm.br", "nsp@hsm.br"]
+
+    def test_a_decisao_ja_tomada_nao_e_pedida_de_novo(self, monkeypatch):
+        """O caso devolvido à Ouvidoria volta à validação: a decisão sobre o
+        Núcleo já foi tomada e não trava o reacionamento."""
+        client, _supabase = _client(monkeypatch, _banco(_caso_apontado(nsp_decisao="descartado")))
+
+        r = _validar(client)
+
+        assert r.status_code == 200, r.text
