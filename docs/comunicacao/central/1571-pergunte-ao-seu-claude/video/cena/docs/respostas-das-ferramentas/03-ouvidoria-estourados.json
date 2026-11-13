@@ -1,0 +1,55 @@
+{
+ "jsonrpc": "2.0",
+ "id": 3,
+ "result": {
+  "content": [
+   {
+    "type": "text",
+    "text": "{\"total\": 3, \"mostrados\": 3, \"haMais\": false, \"aviso\": null, \"degradado\": [], \"casos\": [{\"protocolo\": \"2026-0152\", \"setor\": \"Farmácia\", \"situacao\": \"aguardando_area\", \"gravidade\": \"medio\", \"tipo\": \"reclamacao\", \"vencimento\": \"10/11/2026 às 17h00\", \"rotuloPrazo\": \"vencido há 2 dias úteis\", \"prazoDeReferencia\": \"2026-11-11\", \"prazoEstourado\": true}, {\"protocolo\": \"2026-0151\", \"setor\": \"UTI Adulto\", \"situacao\": \"aguardando_area\", \"gravidade\": \"alto\", \"tipo\": \"reclamacao\", \"vencimento\": \"11/11/2026 às 17h00\", \"rotuloPrazo\": \"vencido há 1 dia útil\", \"prazoDeReferencia\": \"2026-11-10\", \"prazoEstourado\": true}, {\"protocolo\": \"2026-0153\", \"setor\": \"Recepção\", \"situacao\": \"aguardando_area\", \"gravidade\": \"medio\", \"tipo\": \"reclamacao\", \"vencimento\": \"12/11/2026 às 17h00\", \"rotuloPrazo\": \"vencido há menos de 1 hora útil\", \"prazoDeReferencia\": \"2026-11-13\", \"prazoEstourado\": true}]}"
+   }
+  ],
+  "structuredContent": {
+   "total": 3,
+   "mostrados": 3,
+   "haMais": false,
+   "aviso": null,
+   "degradado": [],
+   "casos": [
+    {
+     "protocolo": "2026-0152",
+     "setor": "Farmácia",
+     "situacao": "aguardando_area",
+     "gravidade": "medio",
+     "tipo": "reclamacao",
+     "vencimento": "10/11/2026 às 17h00",
+     "rotuloPrazo": "vencido há 2 dias úteis",
+     "prazoDeReferencia": "2026-11-11",
+     "prazoEstourado": true
+    },
+    {
+     "protocolo": "2026-0151",
+     "setor": "UTI Adulto",
+     "situacao": "aguardando_area",
+     "gravidade": "alto",
+     "tipo": "reclamacao",
+     "vencimento": "11/11/2026 às 17h00",
+     "rotuloPrazo": "vencido há 1 dia útil",
+     "prazoDeReferencia": "2026-11-10",
+     "prazoEstourado": true
+    },
+    {
+     "protocolo": "2026-0153",
+     "setor": "Recepção",
+     "situacao": "aguardando_area",
+     "gravidade": "medio",
+     "tipo": "reclamacao",
+     "vencimento": "12/11/2026 às 17h00",
+     "rotuloPrazo": "vencido há menos de 1 hora útil",
+     "prazoDeReferencia": "2026-11-13",
+     "prazoEstourado": true
+    }
+   ]
+  },
+  "isError": false
+ }
+}

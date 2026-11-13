@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Conector · Reuniões e Ouvidoria no seu Claude</title>
+<meta name="description" content="O diretor pergunta ao próprio Claude sobre pendências atrasadas, atas e casos da Ouvidoria, e o Claude responde com os dados do aplicativo do hospital. Com demonstração em vídeo." />
+<style>
+  /* Design system do app (globals.css do Hospital Reuniões) */
+  @font-face{
+    font-family:"HP Simplified";
+    src:url("HPSimplified_Rg.ttf") format("truetype");
+    font-weight:400;font-style:normal;font-display:swap
+  }
+  :root{
+    --color-primary:#2B2E7E; --color-primary-light:#3B6FB6; --color-primary-dark:#1A1C4E;
+    --color-secondary:#88D7A4; --color-accent:#FFC067;
+    --color-bg:#ffffff; --color-surface:#ffffff;
+    --color-text:#1E293B; --color-text-secondary:#64748B; --color-border:#E2E8F0;
+    --color-shadow:rgba(0,0,0,.08); --color-shadow-strong:rgba(0,0,0,.12);
+    --shadow-premium:0 10px 25px -5px var(--color-shadow),0 8px 10px -6px var(--color-shadow);
+    --shadow-premium-strong:0 20px 25px -5px var(--color-shadow-strong),0 8px 10px -6px var(--color-shadow-strong);
+    --radius-xl:6px; --radius-2xl:8px; --radius-3xl:12px;
+    --font-app:"HP Simplified",system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box}
+  em,i,cite{font-style:normal}
+  a{text-decoration:none;color:inherit}
+  html{font-size:17px}
+  body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-app);line-height:1.6;-webkit-font-smoothing:antialiased;padding-bottom:110px}
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px}
+
+  /* ===== header ===== */
+  header.top{position:sticky;top:0;z-index:40;background:rgba(255,255,255,.9);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--color-border)}
+  .top-in{display:flex;align-items:center;gap:14px;padding:10px 0}
+  .top-logo{height:38px;width:auto;display:block}
+  .top-t{font-weight:700;font-size:16px}
+  .top-s{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-text-secondary);font-weight:600;margin-left:auto;display:flex;align-items:center;gap:8px}
+  .pulse{width:7px;height:7px;border-radius:50%;background:var(--color-secondary);box-shadow:0 0 0 0 rgba(136,215,164,.6);animation:pulse 2.2s infinite}
+  @keyframes pulse{70%{box-shadow:0 0 0 8px rgba(136,215,164,0)}100%{box-shadow:0 0 0 0 rgba(136,215,164,0)}}
+
+  /* ===== hero ===== */
+  .hero{padding:48px 0 6px}
+  .eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--color-text-secondary);font-weight:600}
+  h1{font-weight:700;font-size:clamp(28px,4.2vw,42px);line-height:1.15;margin:14px 0 16px;max-width:26ch}
+  h1 .hi{color:var(--color-primary)}
+  .dek{font-size:17px;color:var(--color-text-secondary);max-width:68ch;margin:0}
+
+  /* ===== seções ===== */
+  section{padding:32px 0 6px}
+  .mark{display:flex;align-items:center;gap:12px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--color-text-secondary);font-weight:700}
+  .mark::before{content:"";width:34px;height:2px;background:var(--color-primary);border-radius:2px}
+  h2.title{font-weight:700;font-size:clamp(21px,2.8vw,28px);margin:12px 0 10px;line-height:1.2}
+  .lede{color:var(--color-text-secondary);max-width:72ch;margin:0 0 20px}
+  .lede b,.lede strong{color:var(--color-text)}
+
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  @media(max-width:820px){.grid3{grid-template-columns:1fr}}
+  .b-card{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-2xl);padding:16px 16px 14px;box-shadow:var(--shadow-premium)}
+  .b-card h3{font-size:17px;font-weight:700;margin:0 0 6px;line-height:1.3;color:var(--color-primary-dark)}
+  .b-card p{margin:0;color:var(--color-text-secondary);font-size:14px}
+
+  /* checklist */
+  .checks{display:grid;gap:10px;margin-top:8px}
+  .check{display:flex;gap:12px;align-items:flex-start;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-xl);padding:12px 15px;box-shadow:var(--shadow-premium)}
+  .check .ck{width:22px;height:22px;border-radius:var(--radius-md,3px);background:rgba(136,215,164,.25);color:#1d7a45;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;margin-top:1px}
+  .check b{color:var(--color-text)}
+  .check p{margin:0;font-size:14px;color:var(--color-text-secondary)}
+
+  /* CTA pro vídeo */
+  .cta-video{display:flex;align-items:center;gap:14px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-2xl);padding:16px 18px;margin:28px 0 8px;cursor:pointer;box-shadow:var(--shadow-premium)}
+  .cta-video:hover{border-color:var(--color-primary-light);box-shadow:var(--shadow-premium-strong)}
+  .cta-ic{width:42px;height:42px;border-radius:9999px;background:var(--color-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+  .cta-t{font-weight:700}
+  .cta-s{font-size:13px;color:var(--color-text-secondary)}
+
+  .panel{display:none}
+  .panel.on{display:block;animation:fadein .35s ease}
+  @keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @media(prefers-reduced-motion:reduce){.panel.on{animation:none}}
+
+  /* ===== aba do vídeo ===== */
+  .video-box{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-3xl);padding:16px;box-shadow:var(--shadow-premium-strong);margin-top:10px}
+  .video-box video{width:100%;display:block;border-radius:var(--radius-2xl);background:#000}
+  .video-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--color-text-secondary);padding:12px 4px 2px}
+  .video-meta b{color:var(--color-text);font-weight:700}
+
+  footer{padding:30px 0 20px;color:var(--color-text-secondary);font-size:13px}
+  footer .meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+  /* ===== barra de abas flutuante (liquid glass, receita .glass-card do app) ===== */
+  .tabbar{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:60;
+    display:flex;gap:4px;padding:5px;border-radius:9999px;
+    background:rgba(255,255,255,.8);
+    backdrop-filter:blur(12px) saturate(160%);-webkit-backdrop-filter:blur(12px) saturate(160%);
+    border:1px solid rgba(255,255,255,.5);
+    box-shadow:var(--shadow-premium-strong),inset 0 1px 0 rgba(255,255,255,.7),0 0 0 1px rgba(30,41,59,.06)}
+  .tabbar .tab{font-family:var(--font-app);font-weight:700;font-size:14px;color:var(--color-text-secondary);
+    background:transparent;border:none;border-radius:9999px;padding:10px 22px;cursor:pointer;white-space:nowrap;
+    transition:color .2s,background .2s,box-shadow .2s}
+  .tabbar .tab:hover{color:var(--color-text)}
+  .tabbar .tab.on{background:var(--color-primary);color:#fff;box-shadow:0 4px 12px -2px rgba(43,46,126,.45)}
+  @media(max-width:480px){.tabbar .tab{padding:10px 14px;font-size:13px}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap top-in">
+    <img class="top-logo" src="logo-hsm.png" alt="Hospital São Matheus" />
+    <div class="top-t">Conector</div>
+    <div class="top-s"><span class="pulse"></span> em produção</div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="hero">
+    <div class="eyebrow">Conector · Reuniões e Ouvidoria no seu Claude</div>
+    <h1>Pendências, atas e casos da Ouvidoria, <span class="hi">respondidos pelo seu Claude.</span></h1>
+    <p class="dek">O diretor pergunta ao próprio Claude, no celular ou no computador, quais pendências estão atrasadas, o que saiu de uma reunião ou quais casos da Ouvidoria estouraram o prazo. O Claude consulta o aplicativo do hospital e responde com os mesmos dados que as telas mostram.</p>
+  </div>
+
+  <!-- ===== aba Funcionalidade ===== -->
+  <div class="panel on" id="panel-func" role="tabpanel" aria-labelledby="tab-func">
+
+    <section>
+      <div class="mark">O problema</div>
+      <h2 class="title">Como era antes</h2>
+      <p class="lede">Para responder sobre pendências e casos, o Claude precisava ler a tela do aplicativo no navegador, uma página por vez. A resposta dependia do que estava aberto, e cada pergunta nova pedia outra volta pelas telas.</p>
+    </section>
+
+    <section>
+      <div class="mark">O que mudou</div>
+      <h2 class="title">O Claude consulta o aplicativo direto</h2>
+      <div class="grid3">
+        <div class="b-card">
+          <h3>Pendências atrasadas, e de quem</h3>
+          <p>Pergunte o que está atrasado e o Claude traz cada pendência com responsável e prazo, com a mesma marca de atraso da tela de Pendências.</p>
+        </div>
+        <div class="b-card">
+          <h3>O que saiu de cada reunião</h3>
+          <p>O Claude acha a reunião pela data ou pelo assunto e traz a Ata, quem participou e a situação de cada pendência que nasceu dela.</p>
+        </div>
+        <div class="b-card">
+          <h3>Casos com prazo estourado, por setor</h3>
+          <p>O Claude traz os mesmos casos que a fila da Ouvidoria mostra vencidos, com protocolo, setor e gravidade.</p>
+        </div>
+        <div class="b-card">
+          <h3>O caso inteiro pelo protocolo</h3>
+          <p>Peça um caso e chega o Dossiê como a diretoria executiva vê na tela: relato, trilha e respostas da área. A consulta entra no histórico de acesso do caso.</p>
+        </div>
+        <div class="b-card">
+          <h3>Só leitura, só diretoria executiva</h3>
+          <p>O Claude não muda reuniões, pendências nem casos. Só quem tem o acesso de diretoria executiva na Ouvidoria usa, e quem perde esse acesso deixa de consultar na pergunta seguinte.</p>
+        </div>
+        <div class="b-card">
+          <h3>Um guia para começar</h3>
+          <p>O guia do Conector traz exemplos de pergunta e pede para desligar, na conta do Claude, o uso das conversas para melhorar os modelos.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="mark">Na prática</div>
+      <h2 class="title">Como reconhecer a mudança funcionando</h2>
+      <div class="checks">
+        <div class="check"><span class="ck">✓</span><p><b>Pergunte "Quais pendências estão atrasadas, e de quem?":</b> a resposta bate com a tela de Pendências filtrada em atrasadas.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Pergunte pelos casos com prazo estourado:</b> os protocolos e os setores são os da fila da Ouvidoria.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Peça um caso pelo protocolo:</b> vêm o relato, a trilha e a resposta da área, e a consulta fica no histórico de acesso do caso.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>No celular e no computador:</b> o mesmo Conector, ligado uma vez na conta do Claude.</p></div>
+        <div class="check"><span class="ck">✓</span><p><b>Sem o acesso de diretoria executiva:</b> Reuniões e Ouvidoria não aparecem no Claude.</p></div>
+      </div>
+    </section>
+
+    <div class="cta-video" id="cta-video" role="button" tabindex="0">
+      <div class="cta-ic">▶</div>
+      <div>
+        <div class="cta-t">Veja tudo isso funcionando</div>
+        <div class="cta-s">A demonstração completa, com as telas do aplicativo, está na aba Demonstração por Vídeo.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===== aba Demonstração por Vídeo ===== -->
+  <div class="panel" id="panel-video" role="tabpanel" aria-labelledby="tab-video">
+
+    <section>
+      <div class="mark">Demonstração</div>
+      <h2 class="title">Uma manhã de perguntas ao Claude</h2>
+      <p class="lede">A diretoria pergunta ao Claude, no celular, quais pendências estão atrasadas, o que saiu da reunião da CME e quais casos da Ouvidoria estouraram o prazo, e depois abre um caso pelo protocolo. Cada resposta é conferida na tela do aplicativo, com dados de exemplo. O vídeo tem narração e a fala aparece na tela, então funciona com ou sem som.</p>
+
+      <div class="video-box">
+        <video controls preload="metadata" src="1571-pergunte-ao-seu-claude.mp4"></video>
+        <div class="video-meta">
+          <span><b>1 min 9 s</b></span><span>·</span>
+          <span>PRD #1571</span><span>·</span>
+          <span>retrata o app em v0.275.0</span><span>·</span>
+          <span>gerado em 13/11/2026</span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <footer>
+    <div class="meta">
+      <span class="pulse"></span>
+      <span>Conector · Hospital São Matheus · Reuniões e Ouvidoria consultadas pelo Claude · novembro de 2026 · versão 0.275.0 do app</span>
+    </div>
+  </footer>
+
+</div>
+
+<!-- barra de abas flutuante -->
+<nav class="tabbar" role="tablist" aria-label="Seções da documentação">
+  <button class="tab on" id="tab-func" role="tab" aria-selected="true" aria-controls="panel-func">Funcionalidade</button>
+  <button class="tab" id="tab-video" role="tab" aria-selected="false" aria-controls="panel-video">Demonstração por Vídeo</button>
+</nav>
+
+<script>
+  var tabs = { func: document.getElementById("tab-func"), video: document.getElementById("tab-video") };
+  var panels = { func: document.getElementById("panel-func"), video: document.getElementById("panel-video") };
+  var videoEl = document.querySelector("#panel-video video");
+
+  function show(which) {
+    ["func", "video"].forEach(function (k) {
+      var on = k === which;
+      tabs[k].classList.toggle("on", on);
+      tabs[k].setAttribute("aria-selected", on ? "true" : "false");
+      panels[k].classList.toggle("on", on);
+    });
+    if (which !== "video" && videoEl && !videoEl.paused) videoEl.pause();
+    if (history.replaceState) history.replaceState(null, "", which === "video" ? "#video" : "#funcionalidade");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  tabs.func.addEventListener("click", function () { show("func"); });
+  tabs.video.addEventListener("click", function () { show("video"); });
+
+  var cta = document.getElementById("cta-video");
+  cta.addEventListener("click", function () { show("video"); });
+  cta.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); show("video"); } });
+
+  if (location.hash === "#video") show("video");
+</script>
+
+</body>
+</html>

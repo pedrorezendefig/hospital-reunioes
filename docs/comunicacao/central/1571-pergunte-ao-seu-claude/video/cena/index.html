@@ -1,0 +1,757 @@
+<!doctype html>
+<!-- Pergunte ao seu Claude: o vídeo de percepção de valor do PRD #1571 do Hospital São Matheus.
+     Contrato do estúdio: seek(t) pinta o quadro t do zero (DOM com transform), sem rAF, timer ou transição CSS,
+     acaso só com semente, movimento só com molas (lib/motion.js). Todo evento preso a uma palavra do tempos.js.
+     As telas do app são capturas reais (assets/0*.png). A conversa com o Claude é desenhada aqui, com o texto
+     que as ferramentas do Conector devolveram no app local, com dados de exemplo. -->
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: 'HPS'; font-weight: 400; src: url(assets/HPSimplified_Rg.ttf) format('truetype'); }
+  * { transition: none !important; animation: none !important; box-sizing: border-box; }
+  html, body { margin: 0; background: #000; overflow: hidden; }
+  #palco { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: #14163F;
+    font-family: 'HPS', system-ui, sans-serif; font-weight: 400; color: #EEF2FA; -webkit-font-smoothing: antialiased; }
+  #fundo { position: absolute; inset: 0; }
+  #cam { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+  .camada { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden; display: none; transform-origin: 50% 50%; }
+
+  /* Celular */
+  .cel { position: absolute; left: 0; top: 0; width: 520px; height: 940px; border-radius: 66px; background: #0B0C26;
+    border: 2px solid rgba(238, 242, 250, 0.16); box-shadow: 0 40px 120px rgba(0, 0, 0, 0.5); transform-origin: 260px 470px; z-index: 5; }
+  .cel .vidro { position: absolute; left: 16px; top: 16px; width: 484px; height: 904px; border-radius: 50px; background: #fff; overflow: hidden; color: #1E293B; }
+  .topo { position: absolute; left: 0; top: 0; width: 100%; height: 84px; border-bottom: 1px solid #E2E8F0; background: #fff; z-index: 3; }
+  .topo .nome { position: absolute; left: 30px; top: 38px; font-size: 27px; color: #1A1C4E; }
+  .topo .con { position: absolute; right: 24px; top: 36px; font-size: 16px; color: #2B2E7E; background: #EEF2FA; border-radius: 999px;
+    padding: 7px 14px 7px 12px; transform-origin: 100% 50%; white-space: nowrap; }
+  .topo .con i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #3B6FB6; margin-right: 8px; vertical-align: 1px; }
+  .fio { position: absolute; left: 0; top: 84px; width: 484px; height: 724px; overflow: hidden; }
+  .rolo { position: absolute; left: 0; top: 0; width: 484px; padding: 22px 22px 40px; }
+  .entrada { position: absolute; left: 0; bottom: 0; width: 100%; height: 96px; border-top: 1px solid #E2E8F0; background: #fff; z-index: 3; }
+  .campo { position: absolute; left: 20px; top: 18px; width: 372px; height: 60px; border-radius: 30px; background: #F3F5FA;
+    border: 1px solid #E2E8F0; overflow: hidden; }
+  .campo .txt { position: absolute; left: 22px; top: 16px; font-size: 21px; color: #1E293B; white-space: nowrap; }
+  .campo .ph { position: absolute; left: 22px; top: 16px; font-size: 21px; color: #94A3B8; white-space: nowrap; }
+  .campo .cur { display: inline-block; width: 2px; height: 24px; background: #2B2E7E; vertical-align: -4px; margin-left: 2px; }
+  .enviar { position: absolute; left: 404px; top: 20px; width: 56px; height: 56px; border-radius: 50%; background: #2B2E7E; }
+  .enviar svg { position: absolute; left: 15px; top: 15px; }
+
+  /* Mensagens */
+  .eu { position: relative; margin: 4px 0 20px auto; max-width: 372px; width: fit-content; background: #2B2E7E; color: #fff;
+    font-size: 23px; line-height: 1.3; padding: 14px 20px; border-radius: 24px 24px 6px 24px; }
+  .ia { position: relative; margin: 0 0 24px 0; }
+  .chip { position: relative; display: inline-block; font-size: 15px; color: #2B2E7E; background: #EEF2FA; border: 1px solid #DCE4F2;
+    border-radius: 999px; padding: 7px 14px 7px 12px; overflow: hidden; white-space: nowrap; }
+  .chip .luz { position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(59, 111, 182, 0.28) 50%, transparent 70%); background-size: 260% 100%; }
+  .chip .a, .chip .b { position: relative; }
+  .chip svg { vertical-align: -3px; margin-right: 6px; }
+  .tit { font-size: 27px; color: #1A1C4E; margin: 14px 0 10px; line-height: 1.15; }
+  .meta { font-size: 18px; color: #64748B; margin: -4px 0 10px; }
+  .lin { background: #F5F7FC; border: 1px solid #E2E8F0; border-radius: 16px; padding: 11px 16px 12px; margin-bottom: 8px; }
+  .lin .q { font-size: 20px; color: #2B2E7E; }
+  .lin .o { font-size: 17px; color: #475569; line-height: 1.3; margin-top: 3px; }
+  .lin .v { font-size: 16px; color: #1D3F98; margin-top: 4px; }
+  .lin .v i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #3B6FB6; margin-right: 7px; vertical-align: 1px; }
+  .rot { font-size: 14px; color: #64748B; letter-spacing: 0.06em; text-transform: uppercase; margin: 12px 0 5px; }
+  .item { font-size: 18px; color: #1E293B; line-height: 1.32; padding-left: 16px; position: relative; margin-bottom: 4px; }
+  .item::before { content: ''; position: absolute; left: 2px; top: 9px; width: 6px; height: 6px; border-radius: 50%; background: #3B6FB6; }
+  .citacao { font-size: 18px; color: #334155; line-height: 1.35; border-left: 3px solid #3B6FB6; padding: 2px 0 2px 12px; }
+  .marco { font-size: 17px; color: #1E293B; line-height: 1.3; padding-left: 22px; position: relative; margin-bottom: 4px; }
+  .marco b { font-weight: 400; color: #64748B; margin-right: 8px; }
+  .marco::before { content: ''; position: absolute; left: 3px; top: 7px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid #3B6FB6; background: #fff; }
+  .rodape { font-size: 16px; color: #2B2E7E; background: #EEF2FA; border-radius: 12px; padding: 9px 12px; margin-top: 10px; position: relative; overflow: hidden; }
+
+  /* Painel com captura do app */
+  .painel { position: absolute; overflow: hidden; border-radius: 22px; background: #fff; box-shadow: 0 40px 110px rgba(0, 0, 0, 0.45);
+    display: none; transform-origin: 50% 50%; z-index: 3; }
+  .mundo { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  .mundo > img { position: absolute; left: 0; top: 0; }
+  .realce { position: absolute; border: 3px solid #3B6FB6; border-radius: 10px; box-shadow: 0 0 0 6px rgba(59, 111, 182, 0.2);
+    overflow: hidden; display: none; }
+  .realce i { position: absolute; inset: 0; background: linear-gradient(105deg, transparent 35%, rgba(143, 178, 234, 0.45) 50%, transparent 65%); background-size: 260% 100%; }
+  .foco { position: absolute; border-radius: 14px; display: none; }
+  .cursor { position: absolute; left: 0; top: 0; width: 30px; height: 42px; transform-origin: 0 0; display: none; z-index: 9; }
+  .anel { position: absolute; left: 0; top: 0; border: 3px solid #3B6FB6; border-radius: 50%; display: none; z-index: 8; }
+  .selo { position: absolute; display: none; white-space: nowrap; background: #3B6FB6; color: #fff; font-size: 30px; border-radius: 999px;
+    padding: 14px 28px 14px 20px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35); transform-origin: 50% 50%; z-index: 12; }
+  .selo svg { vertical-align: -6px; margin-right: 10px; }
+  .selo.escuro { background: #1A1C4E; border: 2px solid rgba(238, 242, 250, 0.25); }
+
+  /* Fora do celular */
+  .aviso { position: absolute; display: none; white-space: nowrap; background: rgba(238, 242, 250, 0.08); border: 1px solid rgba(238, 242, 250, 0.24);
+    border-radius: 24px; padding: 22px 30px 22px 24px; font-size: 36px; color: #EEF2FA; z-index: 6; }
+  .aviso svg { vertical-align: -12px; margin-right: 14px; }
+  .ficha { position: absolute; display: none; width: 360px; background: #2B2E7E; border: 2px solid rgba(143, 178, 234, 0.55);
+    border-radius: 24px; padding: 26px 30px; z-index: 6; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35); }
+  .ficha .n { font-size: 38px; color: #EEF2FA; }
+  .ficha .s { font-size: 28px; color: #A9BCE3; margin-top: 8px; }
+  .dado { position: absolute; display: none; width: 520px; z-index: 6; }
+  .dado .num { font-size: 190px; line-height: 0.9; color: #EEF2FA; }
+  .dado .rot2 { font-size: 46px; color: #A9BCE3; margin: 6px 0 26px; line-height: 1.1; }
+  .dado .it { font-size: 36px; color: #EEF2FA; line-height: 1.25; padding: 14px 0; border-top: 1px solid rgba(238, 242, 250, 0.16); }
+  .dado .it em { font-style: normal; color: #8FB2EA; }
+  .ficha svg { margin-bottom: 12px; }
+
+  /* Computador */
+  .note { position: absolute; display: none; left: 0; top: 0; width: 980px; height: 640px; z-index: 6; }
+  .note .jan { position: absolute; left: 0; top: 0; width: 980px; height: 610px; background: #fff; border-radius: 22px; overflow: hidden;
+    box-shadow: 0 40px 120px rgba(0, 0, 0, 0.5); color: #1E293B; border: 10px solid #0B0C26; }
+  .note .barra { height: 64px; border-bottom: 1px solid #E2E8F0; position: relative; }
+  .note .barra .nome { position: absolute; left: 34px; top: 22px; font-size: 24px; color: #1A1C4E; }
+  .note .barra .con { position: absolute; right: 28px; top: 18px; font-size: 16px; color: #2B2E7E; background: #EEF2FA; border-radius: 999px; padding: 7px 14px; }
+  .note .corpo { position: absolute; left: 0; top: 64px; width: 100%; padding: 26px 60px; }
+  .note .corpo .eu { max-width: 600px; }
+  .note .base { position: absolute; left: -60px; top: 608px; width: 1100px; height: 26px; background: #2A2C5E; border-radius: 0 0 26px 26px; }
+
+  /* Legenda */
+  .leg { position: absolute; left: 960px; top: 1018px; display: none; white-space: nowrap; background: rgba(13, 14, 40, 0.88);
+    border: 1px solid rgba(238, 242, 250, 0.14); border-radius: 999px; padding: 13px 34px 15px; font-size: 38px; color: #EEF2FA;
+    box-shadow: 0 16px 50px rgba(0, 0, 0, 0.35); z-index: 40; }
+  .leg span { display: inline-block; margin-right: 0.24em; }
+  .leg span:last-child { margin-right: 0; }
+
+  /* Persiana e assinatura */
+  .tira { position: absolute; left: 0; width: 1920px; background: #14163F; transform-origin: 50% 0; display: none; z-index: 30; }
+  #cortina { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: #fff; display: none; z-index: 50; }
+  #logo { position: absolute; left: 50%; top: 50%; width: 600px; display: none; z-index: 51; }
+</style>
+<script src="../../lib/motion.js"></script>
+<script src="assets/tempos.js"></script>
+</head>
+<body>
+<div id="palco"><div id="fundo"></div><div id="cam"></div></div>
+<script>
+const { spring, track, MOLA, mulberry32, clamp } = Motion;
+const S = (t, m = MOLA.padrao) => spring(t, ...m);
+const TR = (t, keys, m = MOLA.padrao) => track(t, keys, ...m);
+const lerp = (a, b, p) => a + (b - a) * p;
+const px = (v) => `${v}px`;
+const palco = document.getElementById('palco');
+const cam = document.getElementById('cam');
+const fundo = document.getElementById('fundo');
+function el(tag, cls, css, html, parent) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (css) Object.assign(e.style, css);
+  if (html != null) e.innerHTML = html;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+// ---------- Tempo: cada evento preso a uma palavra da narração ----------
+const norm = (x) => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+function W(n, txt, k = 0) {
+  const alvo = norm(txt);
+  for (const w of TEMPOS.cenas[n - 1].palavras) if (norm(w.p) === alvo && k-- === 0) return w.a;
+  throw new Error(`palavra ${txt} não está no trecho ${n}`);
+}
+const FIM_FALA = TEMPOS.cenas[10].fim_s;
+const C1 = W(3, 'é') - 0.6, C2 = W(4, 'quer') - 0.9, C3 = W(5, 'na') - 0.93, C4 = W(6, 'são') - 0.44;
+const C5 = W(7, 'peça') - 0.6, C6 = W(8, 'cada') - 0.3, C7 = W(9, 'o') - 0.74, C8 = W(9, 'diretoria') - 0.1;
+const C9 = W(10, 'o') - 0.6, C10 = W(11, 'no') - 0.46, C11 = FIM_FALA + 0.25;
+const DUR = 69.0;
+window.FILM = { fps: 30, duration: DUR, formatos: ['16x9'] };
+
+const CUES = [];
+const cue = (t, type, extra = {}) => CUES.push({ t: +t.toFixed(3), type, ...extra });
+
+// ---------- Ícones ----------
+const SETA = `<svg width="30" height="42" viewBox="0 0 30 42"><path d="M2 2 L2 33 L10 25.5 L15.5 38.5 L21 36.2 L15.6 23.6 L26 23.6 Z" fill="#fff" stroke="#1A1C4E" stroke-width="2.4" stroke-linejoin="round"/></svg>`;
+const CHECK = (c = '#fff', s = 30) => `<svg width="${s}" height="${s}" viewBox="0 0 30 30"><circle cx="15" cy="15" r="13" fill="none" stroke="${c}" stroke-width="2.4"/><path d="M9 15.5 L13.3 19.6 L21.2 11" fill="none" stroke="${c}" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const CADEADO = (c = '#fff', s = 32) => `<svg width="${s}" height="${s}" viewBox="0 0 32 32"><rect x="6" y="14" width="20" height="14" rx="3.5" fill="none" stroke="${c}" stroke-width="2.4"/><path d="M10.5 14 V10 a5.5 5.5 0 0 1 11 0 V14" fill="none" stroke="${c}" stroke-width="2.4"/><circle cx="16" cy="21" r="2" fill="${c}"/></svg>`;
+const APP = `<svg width="15" height="15" viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="13" height="13" rx="3" fill="none" stroke="#3B6FB6" stroke-width="1.8"/><path d="M5 8 H11 M8 5 V11" stroke="#3B6FB6" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+const OK = `<svg width="15" height="15" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#3B6FB6"/><path d="M4.7 8.3 L7 10.5 L11.4 6" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const NAVEGADOR = `<svg width="64" height="50" viewBox="0 0 64 50"><rect x="3" y="3" width="58" height="44" rx="7" fill="none" stroke="#A9BCE3" stroke-width="3"/><path d="M3 15 H61" stroke="#A9BCE3" stroke-width="3"/><circle cx="11" cy="9" r="2" fill="#A9BCE3"/><circle cx="18" cy="9" r="2" fill="#A9BCE3"/><path class="risco" d="M6 46 L58 4" stroke="#8FB2EA" stroke-width="4.5" stroke-linecap="round" fill="none" stroke-dasharray="67" stroke-dashoffset="67"/></svg>`;
+const CALENDARIO = `<svg width="44" height="44" viewBox="0 0 44 44"><rect x="5" y="8" width="34" height="31" rx="6" fill="none" stroke="#8FB2EA" stroke-width="2.6"/><path d="M5 17 H39 M14 4 V12 M30 4 V12" stroke="#8FB2EA" stroke-width="2.6" stroke-linecap="round"/></svg>`;
+const PASTA = `<svg width="44" height="44" viewBox="0 0 44 44"><path d="M5 12 a4 4 0 0 1 4 -4 h9 l4 5 h13 a4 4 0 0 1 4 4 v17 a4 4 0 0 1 -4 4 h-26 a4 4 0 0 1 -4 -4 z" fill="none" stroke="#8FB2EA" stroke-width="2.6" stroke-linejoin="round"/></svg>`;
+const ENVIAR = `<svg width="26" height="26" viewBox="0 0 26 26"><path d="M13 21 V5 M6 12 L13 5 L20 12" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+// ---------- Fundo: azul-marinho com uma luz que anda devagar ----------
+function pintaFundo(t) {
+  const x = 380 + 16 * t, y = 260 + 3 * t;
+  fundo.style.background = `radial-gradient(1000px 760px at ${x}px ${y}px, rgba(59,111,182,0.30), transparent 70%),
+    radial-gradient(900px 700px at ${1700 - 10 * t}px ${900 - 2 * t}px, rgba(43,46,126,0.55), transparent 70%),
+    linear-gradient(160deg, #1E1D57 0%, #15174A 55%, #101233 100%)`;
+}
+
+// ---------- O celular e a conversa ----------
+const cel = el('div', 'cel', null, null, cam);
+const vidro = el('div', 'vidro', null, null, cel);
+const topo = el('div', 'topo', null, `<div class="nome">Claude</div><div class="con"><i></i>Hospital São Matheus</div>`, vidro);
+const conTopo = topo.querySelector('.con');
+const fio = el('div', 'fio', null, null, vidro);
+const rolo = el('div', 'rolo', null, null, fio);
+const entrada = el('div', 'entrada', null, null, vidro);
+const campo = el('div', 'campo', null, `<div class="ph">Pergunte ao Claude</div><div class="txt"><span></span><i class="cur"></i></div>`, entrada);
+const campoPh = campo.querySelector('.ph'), campoTxt = campo.querySelector('.txt'), campoSpan = campoTxt.querySelector('span'), campoCur = campoTxt.querySelector('.cur');
+const botao = el('div', 'enviar', null, ENVIAR, entrada);
+
+const PARTES = [];
+function parte(parent, cls, html, t, tag = 'div') { const e = el(tag, cls, null, html, parent); PARTES.push({ el: e, t }); return e; }
+
+// Digitação com ritmo de gente, encaixada entre t0 e t1.
+function digitacao(txt, t0, t1, semente) {
+  const r = mulberry32(semente); let acc = 0; const ts = [];
+  for (let i = 0; i < txt.length; i++) { acc += 0.6 + r() * 0.8 + (txt[i] === ' ' ? 0.35 : 0); ts.push(acc); }
+  return ts.map((x) => t0 + (x / acc) * (t1 - t0));
+}
+const PERGUNTAS = [
+  { txt: 'Quais pendências estão atrasadas, e de quem?', t0: -0.3, t1: W(1, 'quem') + 0.18, env: W(1, 'agora') },
+  { txt: 'O que saiu da reunião da CME?', t0: C2 + 0.3, t1: W(4, 'cme') + 0.2, env: W(4, 'cme') + 0.38 },
+  { txt: 'Quais casos da Ouvidoria estão com prazo estourado?', t0: 23.35, t1: W(5, 'ouvidoria') + 0.3, env: W(5, 'ouvidoria') + 0.42 },
+  { txt: 'Me mostra o caso 2026-0151.', t0: C5 + 0.3, t1: W(7, 'protocolo') + 0.25, env: W(7, 'protocolo') + 0.42 },
+];
+PERGUNTAS.forEach((q, i) => { q.ts = digitacao(q.txt, q.t0, q.t1, 11 + i); });
+
+function chip(parent, ferramenta, t, tOk) {
+  const c = parte(parent, 'chip', `<span class="luz"></span><span class="a">${APP}Consultando o app do hospital</span><span class="b">${OK}Consultou o app do hospital: ${ferramenta}</span>`, t);
+  return { el: c, luz: c.querySelector('.luz'), a: c.querySelector('.a'), b: c.querySelector('.b'), t, tOk };
+}
+const CHIPS = [];
+const linha = (parent, q, o, v, t) => parte(parent, 'lin', `<div class="q">${q}</div>${o ? `<div class="o">${o}</div>` : ''}<div class="v"><i></i>${v}</div>`, t);
+
+// Pergunta 1 e resposta 1: Pendências
+parte(rolo, 'eu', PERGUNTAS[0].txt, PERGUNTAS[0].env);
+const a1 = el('div', 'ia', null, null, rolo);
+CHIPS.push(chip(a1, 'Pendências', W(1, 'pergunta'), W(2, 'aplicativo')));
+parte(a1, 'tit', '3 pendências atrasadas', W(2, 'três'));
+linha(a1, 'Otávio Serra', 'Revisar o contrato de manutenção das autoclaves', 'venceu em 04/11', W(2, 'otávio'));
+linha(a1, 'Otávio Serra', 'Revisar o fluxo de esterilização do instrumental cirúrgico', 'venceu em 11/11', W(2, 'otávio') + 0.3);
+linha(a1, 'Renata Fontes', 'Publicar o relatório de indicadores do trimestre', 'venceu em 27/10', W(2, 'renata'));
+parte(a1, 'meta', 'As três saíram da reunião Acompanhamento da CME.', W(2, 'fontes') + 0.4);
+
+// Pergunta 2 e resposta 2: Reuniões
+parte(rolo, 'eu', PERGUNTAS[1].txt, PERGUNTAS[1].env);
+const a2 = el('div', 'ia', null, null, rolo);
+CHIPS.push(chip(a2, 'Reuniões', W(4, 'vem'), W(4, 'vem') + 0.34));
+parte(a2, 'tit', 'Acompanhamento da CME', W(4, 'vem') + 0.1);
+parte(a2, 'meta', '03/11, das 9h às 10h. Ata assinada.', W(4, 'ata'));
+parte(a2, 'rot', 'Decisões', W(4, 'ata') + 0.12);
+parte(a2, 'item', 'Antecipar em uma hora o último ciclo das autoclaves.', W(4, 'ata') + 0.18);
+parte(a2, 'item', 'Pedir os indicadores biológicos no primeiro dia útil do mês.', W(4, 'ata') + 0.3);
+parte(a2, 'rot', 'Participaram', W(4, 'participou'));
+parte(a2, 'item', 'Renata Fontes, Tiago Meireles, Luciana Braga e Otávio Serra.', W(4, 'participou') + 0.08);
+parte(a2, 'rot', 'O que ficou com cada um', W(4, 'ficou'));
+parte(a2, 'item', 'Otávio Serra: 2 pendências, as duas atrasadas.', W(4, 'ficou') + 0.08);
+parte(a2, 'item', 'Renata Fontes: 1 pendência atrasada.', W(4, 'ficou') + 0.24);
+parte(a2, 'item', 'Luciana Braga: 1 em progresso e 1 repactuada.', W(4, 'ficou') + 0.4);
+parte(a2, 'item', 'Tiago Meireles: 1 concluída e 1 cancelada.', W(4, 'ficou') + 0.56);
+
+// Pergunta 3 e resposta 3: Ouvidoria
+parte(rolo, 'eu', PERGUNTAS[2].txt, PERGUNTAS[2].env);
+const a3 = el('div', 'ia', null, null, rolo);
+CHIPS.push(chip(a3, 'Ouvidoria', PERGUNTAS[2].env + 0.12, W(5, 'casos') + 0.3));
+parte(a3, 'tit', '3 casos com prazo estourado', W(5, 'casos'));
+linha(a3, 'Farmácia', 'Caso 2026-0152, gravidade média', 'venceu em 10/11', W(5, 'farmácia'));
+linha(a3, 'UTI Adulto', 'Caso 2026-0151, gravidade alta', 'venceu em 11/11', W(5, 'uti'));
+linha(a3, 'Recepção', 'Caso 2026-0153, gravidade média', 'venceu em 12/11', W(5, 'recepção'));
+
+// Pergunta 4 e resposta 4: o caso pelo protocolo
+parte(rolo, 'eu', PERGUNTAS[3].txt, PERGUNTAS[3].env);
+const a4 = el('div', 'ia', null, null, rolo);
+CHIPS.push(chip(a4, 'caso 2026-0151', PERGUNTAS[3].env + 0.3, W(7, 'dossiê') + 0.1));
+parte(a4, 'tit', 'Caso 2026-0151, UTI Adulto', W(7, 'dossiê'));
+parte(a4, 'meta', 'Reclamação, gravidade alta, aguardando a área.', W(7, 'dossiê') + 0.18);
+parte(a4, 'rot', 'Relato', W(7, 'relato'));
+parte(a4, 'citacao', 'Meu pai está internado na UTI desde sábado. Segunda e terça eu liguei no horário do boletim e ninguém atendeu o telefone do setor.', W(7, 'relato') + 0.06);
+parte(a4, 'rot', 'Trilha', W(7, 'trilha'));
+[['03/11', 'Chegou pelo site'], ['03/11', 'UTI Adulto acionada'], ['05/11', 'Resposta da UTI'], ['09/11', 'Devolvida por insuficiência'], ['11/11', 'Prazo da área vencido']]
+  .forEach(([d, x], i) => parte(a4, 'marco', `<b>${d}</b>${x}`, W(7, 'trilha') + 0.06 + i * 0.09));
+parte(a4, 'rot', 'Resposta da área', W(7, 'resposta'));
+parte(a4, 'citacao', 'O boletim foi retomado no horário das 14h e o médico plantonista recebeu a família na quinta.', W(7, 'resposta') + 0.06);
+const rodape = parte(a4, 'rodape', '<span class="luz" style="position:absolute;inset:0"></span><span style="position:relative">Esta consulta fica no histórico de acesso do caso.</span>', W(8, 'cada'));
+const rodapeLuz = rodape.querySelector('.luz');
+
+// ---------- Painéis com as capturas do app ----------
+function painel(parent, src, iw, ih, w, h, x, y) {
+  const box = el('div', 'painel', { width: px(w), height: px(h), left: px(x), top: px(y) }, null, parent);
+  const mundo = el('div', 'mundo', { width: px(iw), height: px(ih) }, null, box);
+  const img = el('img', null, { width: px(iw), height: px(ih) }, null, mundo); img.src = src;
+  return { box, mundo, img, w, h, iw, ih, s: 1 };
+}
+function vista(p, x0, y0, s) { p.s = s; p.mundo.style.transform = `translate(${(-x0 * s).toFixed(2)}px, ${(-y0 * s).toFixed(2)}px) scale(${s.toFixed(4)})`; }
+function foco(p, fx, fy, s) {
+  const hw = p.w / (2 * s), hh = p.h / (2 * s);
+  fx = clamp(fx, hw, Math.max(hw, p.iw - hw)); fy = clamp(fy, hh, Math.max(hh, p.ih - hh));
+  vista(p, fx - hw, fy - hh, s);
+}
+function realce(p) { return el('div', 'realce', null, '<i></i>', p.mundo); }
+function pintaRealce(r, caixa, s, t, t0, t1 = 1e9) {
+  if (t < t0 || t > t1 + 0.3) { r.style.display = 'none'; return; }
+  const p = clamp(S(t - t0, MOLA.ui), 0, 1.05), q = t > t1 ? clamp(S(t - t1, MOLA.ui), 0, 1) : 0;
+  const pad = (8 + 6 * (1 - p)) / s;
+  const [x, y, w, h] = caixa;
+  Object.assign(r.style, { display: 'block', left: px(x - pad), top: px(y - pad), width: px(w + 2 * pad), height: px(h + 2 * pad),
+    borderWidth: px(3 / s), borderRadius: px(10 / s), boxShadow: `0 0 0 ${6 / s}px rgba(59,111,182,0.2)`, opacity: clamp(p * 1.4, 0, 1) * (1 - q) });
+  r.firstChild.style.backgroundPosition = `${lerp(130, -40, clamp(S(t - t0 - 0.05, [60, 15.5]), 0, 1))}% 0`;
+}
+function holofote(p) { return el('div', 'foco', null, null, p.mundo); }
+function pintaHolofote(f, caixa, s, t, t0, t1 = 1e9) {
+  if (t < t0 || t > t1 + 0.4) { f.style.display = 'none'; return; }
+  const a = clamp(S(t - t0, MOLA.padrao), 0, 1) * (t > t1 ? 1 - clamp(S(t - t1, MOLA.padrao), 0, 1) : 1);
+  const [x, y, w, h] = caixa, pad = 12 / s;
+  Object.assign(f.style, { display: 'block', left: px(x - pad), top: px(y - pad), width: px(w + 2 * pad), height: px(h + 2 * pad),
+    borderRadius: px(14 / s), boxShadow: `0 0 0 ${4000 / s}px rgba(16,18,51,${(0.62 * a).toFixed(3)}), 0 0 0 ${3 / s}px rgba(59,111,182,${a.toFixed(3)})` });
+}
+function cursor(p) { return { c: el('div', 'cursor', null, SETA, p.mundo), a: el('div', 'anel', null, null, p.mundo) }; }
+function pintaCursor(k, s, t, keys, tClique, vis = true) {
+  if (!vis) { k.c.style.display = 'none'; k.a.style.display = 'none'; return; }
+  const x = TR(t, keys.map(([tt, xx]) => [tt, xx]), MOLA.padrao), y = TR(t, keys.map(([tt, , yy]) => [tt, yy]), MOLA.padrao);
+  const ap = clamp(S(t - keys[0][0], MOLA.ui), 0, 1);
+  const esc = 1 - 0.18 * (S(t - tClique, [600, 40]) - S(t - tClique - 0.09, [600, 40]));
+  Object.assign(k.c.style, { display: 'block', opacity: ap, transform: `translate(${x}px, ${y}px) scale(${(esc * 1.25) / s})` });
+  const d = t - tClique;
+  if (d < 0 || d > 0.6) { k.a.style.display = 'none'; return; }
+  const r = (12 + 46 * S(d, [200, 24])) / s;
+  Object.assign(k.a.style, { display: 'block', width: px(2 * r), height: px(2 * r), borderWidth: px(3 / s), transform: `translate(${x - r}px, ${y - r}px)`, opacity: 1 - S(d, [60, 15.5]) });
+}
+function selo(parent, html, cls = '') { return el('div', 'selo ' + cls, null, html, parent); }
+function pintaSelo(e, t, t0, t1, x, y, esc = 1) {
+  if (t < t0 || t > t1 + 0.3) { e.style.display = 'none'; return; }
+  const p = S(t - t0, MOLA.brincalhona), q = t > t1 ? clamp(S(t - t1, MOLA.ui), 0, 1) : 0;
+  Object.assign(e.style, { display: 'block', left: px(x), top: px(y), opacity: clamp(S(t - t0, MOLA.ui) * 2, 0, 1) * (1 - q),
+    transform: `translate(-50%, -50%) scale(${(esc * (0.6 + 0.4 * p) * (1 - 0.15 * q)).toFixed(4)}) rotate(${(-4 * (1 - p)).toFixed(2)}deg)` });
+}
+
+// Pendências (01), Reunião (05), Dossiê (04) e o registro do guia (07) à direita do celular.
+const PX = 770, PY = 92, PW = 1080, PH = 840;
+const P01 = painel(cam, 'assets/01-pendencias-atrasadas.png', 1920, 1080, PW, 640, PX, 190);
+const R01 = [realce(P01), realce(P01), realce(P01), realce(P01)];
+const K01 = cursor(P01);
+const SELO01 = selo(cam, `${CHECK()}bate com a tela`);
+const P05 = painel(cam, 'assets/05-reuniao-cme.png', 1920, 2306, PW, PH, PX, PY);
+const R05 = [realce(P05), realce(P05), realce(P05), realce(P05)];
+const P04 = painel(cam, 'assets/04-dossie-inteiro.png', 1920, 2559, PW, PH, PX, PY);
+const R04 = [realce(P04), realce(P04), realce(P04), realce(P04)];
+const P07 = painel(cam, 'assets/07-guia-conector.png', 1920, 1992, PW, PH, PX, PY);
+const H07 = holofote(P07);
+const SELO07 = selo(cam, `${CHECK()}fica registrado`);
+
+// Fora do celular
+const avisoSem = el('div', 'aviso', null, `${NAVEGADOR}sem ler a tela no navegador`, cam);
+const risco = avisoSem.querySelector('.risco');
+const soLe = selo(cam, `${CADEADO('#fff', 34)}só leitura`);
+const fichaR = el('div', 'ficha', null, `${CALENDARIO}<div class="n">Reuniões</div><div class="s">nada muda</div>`, cam);
+const fichaC = el('div', 'ficha', null, `${PASTA}<div class="n">Casos da Ouvidoria</div><div class="s">nada muda</div>`, cam);
+const dadoP = el('div', 'dado', null, `<div class="num">3</div><div class="rot2">pendências atrasadas</div><div class="it">Otávio Serra <em>2</em></div><div class="it">Renata Fontes <em>1</em></div>`, cam);
+const dadoO = el('div', 'dado', null, `<div class="num">3</div><div class="rot2">casos com prazo estourado</div><div class="it">Farmácia</div><div class="it">UTI Adulto</div><div class="it">Recepção</div>`, cam);
+
+// ---------- Telas cheias (fora da câmera do palco) ----------
+function camada(z) { const c = el('div', 'camada', { zIndex: z }, null, palco); return c; }
+const L02 = camada(10);
+const F02 = painel(L02, 'assets/02-ouvidoria-fila.png', 1920, 1080, 1920, 1080, 0, 0);
+F02.box.style.borderRadius = '0'; F02.box.style.display = 'block'; F02.box.style.boxShadow = 'none';
+const R02 = [realce(F02), realce(F02), realce(F02), realce(F02)];
+const SELO02 = selo(L02, `${CHECK()}bate com a fila`);
+const L06 = camada(11);
+const F06 = painel(L06, 'assets/06-usuario-diretoria.png', 1920, 1080, 1920, 1080, 0, 0);
+F06.box.style.borderRadius = '0'; F06.box.style.display = 'block'; F06.box.style.boxShadow = 'none';
+const troca = el('div', null, { position: 'absolute', left: '630px', top: '461px', width: '660px', height: '34px', overflow: 'hidden', borderRadius: '8px' }, null, F06.mundo);
+const trocaImg = el('img', null, { position: 'absolute', left: '-630px', top: '-461px', width: '1920px', height: '1080px' }, null, troca); trocaImg.src = 'assets/06c-acesso-retirado.png';
+const R06 = realce(F06);
+const K06 = cursor(F06);
+const SELO06 = selo(L06, `${CADEADO('#fff', 32)}acesso cortado`, 'escuro');
+const L07 = camada(12);
+const F07 = painel(L07, 'assets/07-guia-conector.png', 1920, 1992, 1920, 1080, 0, 0);
+F07.box.style.borderRadius = '0'; F07.box.style.display = 'block'; F07.box.style.boxShadow = 'none';
+const H07b = holofote(F07);
+const H07c = holofote(F07);
+const veu07 = el('div', null, { position: 'absolute', inset: '0', background: '#14163F', opacity: 0 }, null, L07);
+const TIRAS = Array.from({ length: 9 }, (_, i) => el('div', 'tira', { top: px(i * 120), height: '121px' }, null, palco));
+
+// ---------- Computador (fim) ----------
+const note = el('div', 'note', null, `<div class="base"></div><div class="jan"><div class="barra"><div class="nome">Claude</div><div class="con">Hospital São Matheus</div></div><div class="corpo"></div></div>`, cam);
+const noteCorpo = note.querySelector('.corpo');
+el('div', 'eu', null, PERGUNTAS[0].txt, noteCorpo);
+const noteIa = el('div', 'ia', null, `<div class="chip"><span class="b">${OK}Consultou o app do hospital: Pendências</span></div><div class="tit">3 pendências atrasadas</div>`, noteCorpo);
+const noteLin = [
+  ['Otávio Serra', 'Revisar o contrato de manutenção das autoclaves', 'venceu em 04/11'],
+  ['Otávio Serra', 'Revisar o fluxo de esterilização do instrumental cirúrgico', 'venceu em 11/11'],
+  ['Renata Fontes', 'Publicar o relatório de indicadores do trimestre', 'venceu em 27/10'],
+].map(([q, o, v]) => el('div', 'lin', null, `<div class="q">${q}</div><div class="o">${o}</div><div class="v"><i></i>${v}</div>`, noteIa));
+
+// ---------- Assinatura ----------
+const cortina = el('div', null, null, null, palco); cortina.id = 'cortina';
+const logo = el('img', null, null, null, palco); logo.id = 'logo'; logo.src = 'assets/logo-hsm.png';
+
+// ---------- Legenda: a fala na tela, palavra por palavra ----------
+const LEG = [];
+for (const c of TEMPOS.cenas) {
+  let atual = [];
+  const fecha = () => { if (atual.length) LEG.push({ n: c.n, ws: atual }); atual = []; };
+  c.palavras.forEach((w, i) => {
+    atual.push(w);
+    const fim = /[.?!:]$/.test(w.p) || (/,$/.test(w.p) && atual.length >= 4) || atual.length >= 7;
+    if (fim || i === c.palavras.length - 1) fecha();
+  });
+}
+LEG.forEach((L, i) => {
+  L.t0 = L.ws[0].a - 0.12;
+  const prox = LEG[i + 1];
+  const fimCena = TEMPOS.cenas[L.n - 1].fim_s + 0.45;
+  L.t1 = prox && prox.n === L.n ? prox.ws[0].a - 0.12 : prox ? Math.min(fimCena, prox.ws[0].a - 0.2) : fimCena;
+  L.el = el('div', 'leg', null, null, palco);
+  L.spans = L.ws.map((w) => el('span', null, null, w.p, L.el));
+});
+function pintaLegenda(t) {
+  for (const L of LEG) {
+    const on = t >= L.t0 && t < L.t1 + 0.12;
+    L.el.style.display = on ? 'block' : 'none';
+    if (!on) continue;
+    const p = clamp(S(t - L.t0, MOLA.ui), 0, 1.05), q = t > L.t1 ? clamp(S(t - L.t1, [500, 45]), 0, 1) : 0;
+    L.el.style.opacity = clamp(p * 2, 0, 1) * (1 - q);
+    L.el.style.transform = `translate(-50%, -50%) translateY(${((1 - p) * 18 + q * 14).toFixed(2)}px)`;
+    let ultima = -1;
+    L.ws.forEach((w, i) => { if (t >= w.a - 0.02) ultima = i; });
+    L.spans.forEach((sp, i) => {
+      const w = S(t - L.ws[i].a + 0.04, MOLA.ui);
+      sp.style.opacity = clamp(w * 1.6, 0, 1);
+      sp.style.transform = `translateY(${((1 - clamp(w, 0, 1.1)) * 20).toFixed(2)}px)`;
+      sp.style.color = i === ultima ? '#9DBBEF' : '#EEF2FA';
+    });
+  }
+}
+
+// ---------- Rolagem da conversa ----------
+let ROLAGEM = [[0, 0]];
+function medeRolagem() {
+  const vh = 724, folga = 26;
+  const desce = (e) => { let y = 0, n = e; while (n && n !== rolo) { y += n.offsetTop; n = n.offsetParent; } return y + e.offsetHeight + 22; };
+  let prev = 0;
+  const ks = [[0, 0]];
+  for (const p of [...PARTES].sort((a, b) => a.t - b.t)) {
+    const alvo = Math.max(prev, desce(p.el) - vh + folga);
+    if (alvo > prev + 1) { ks.push([p.t, alvo]); prev = alvo; }
+  }
+  ks.push([C9 + 2, 0]);
+  ROLAGEM = ks;
+}
+
+// ---------- Câmera do palco ----------
+const ESC = [[0, 2.05], [W(1, 'agora') - 0.08, 1.0], [W(2, 'três'), 1.06], [C1, 1.0], [W(5, 'casos'), 1.06], [C4, 1.0], [C7, 1.03], [C8 - 0.12, 5.2], [C9, 1.0]];
+const FY = [[0, 896], [W(1, 'agora') - 0.08, 500], [W(2, 'três'), 520], [C1, 540], [W(5, 'casos'), 520], [C4, 540], [C8 - 0.12, 470], [C9, 540]];
+const FX = [[0, 935], [W(1, 'agora') - 0.08, 960]];
+function pintaCamera(t) {
+  const lento = t > C8 - 0.3 && t < C9 ? MOLA.ui : MOLA.padrao;
+  const s = TR(t, ESC, lento) * (1 + 0.012 * Math.sin(t * 0.35));
+  const fx = TR(t, FX, lento) + 5 * Math.sin(t * 0.8), fy = TR(t, FY, lento) + 3 * Math.sin(t * 0.6);
+  cam.style.transform = `translate(${(960 - fx * s).toFixed(2)}px, ${(540 - fy * s).toFixed(2)}px) scale(${s.toFixed(4)})`;
+}
+
+// ---------- Pintura por quadro ----------
+function pintaCelular(t) {
+  // posição: centro, esquerda, centro, esquerda, centro; no fim entra pela esquerda junto com o computador
+  const xs = [[0, 700], [C1, 150], [C3, 700], [C5, 150], [C7, 700]];
+  let x = TR(t, xs), y = 26, esc = 1, vis = t < C8 + 0.35;
+  if (t >= C10) {
+    vis = t < C11 + 0.6;
+    const p = S(t - (W(11, 'celular') - 0.25), MOLA.padrao);
+    x = lerp(-700, 250, p); y = 92; esc = 0.86;
+  }
+  cel.style.display = vis ? 'block' : 'none';
+  if (!vis) return;
+  const balanco = 1.2 * Math.sin(t * 0.7);
+  cel.style.transform = `translate(${x.toFixed(2)}px, ${y}px) scale(${esc}) rotate(${(balanco * 0.15).toFixed(3)}deg)`;
+  // topo: o conector pulsa em "Claude"
+  const pulso = S(t - W(1, 'claude'), MOLA.brincalhona) - S(t - W(1, 'claude') - 0.25, MOLA.ui);
+  conTopo.style.transform = `scale(${(1 + 0.12 * pulso).toFixed(4)})`;
+  conTopo.style.background = pulso > 0.05 ? '#DCE6F7' : '#EEF2FA';
+  // campo de digitação
+  let txt = '', digitando = false, env = null;
+  for (const q of PERGUNTAS) {
+    if (t >= q.t0 && t < q.env) { txt = q.txt.slice(0, q.ts.filter((x) => x <= t).length); digitando = true; }
+    if (Math.abs(t - q.env) < 0.6) env = q.env;
+  }
+  campoPh.style.display = txt ? 'none' : 'block';
+  campoTxt.style.display = txt ? 'block' : 'none';
+  campoSpan.textContent = txt;
+  campoCur.style.opacity = digitando && Math.floor(t * 2.6) % 2 === 0 ? 1 : 0;
+  const larg = campoTxt.offsetWidth, cabe = 330;
+  campoTxt.style.transform = `translateX(${-Math.max(0, larg - cabe)}px)`;
+  const aperto = env == null ? 0 : S(t - env, [600, 40]) - S(t - env - 0.1, [600, 40]);
+  botao.style.transform = `scale(${(1 - 0.16 * aperto).toFixed(4)})`;
+  // partes da conversa
+  for (const p of PARTES) {
+    const d = t - p.t;
+    if (d < 0) { p.el.style.opacity = 0; p.el.style.transform = 'translateY(14px)'; continue; }
+    const k = clamp(S(d, MOLA.ui), 0, 1.06);
+    p.el.style.opacity = clamp(k * 1.5, 0, 1);
+    p.el.style.transform = `translateY(${((1 - k) * 16).toFixed(2)}px)`;
+  }
+  for (const c of CHIPS) {
+    const ok = t >= c.tOk;
+    c.a.style.display = ok ? 'none' : 'inline'; c.b.style.display = ok ? 'inline' : 'none';
+    c.luz.style.display = ok ? 'none' : 'block';
+    c.luz.style.backgroundPosition = `${(130 - ((t - c.t) * 220) % 170).toFixed(1)}% 0`;
+  }
+  // rodapé do caso acende em "histórico"
+  const h = t - W(8, 'histórico');
+  rodape.style.background = h > 0 && t < C7 ? `rgba(59,111,182,${(0.16 + 0.14 * clamp(S(h, MOLA.ui), 0, 1)).toFixed(3)})` : '#EEF2FA';
+  rodapeLuz.style.background = 'linear-gradient(105deg, transparent 35%, rgba(255,255,255,0.7) 50%, transparent 65%)';
+  rodapeLuz.style.backgroundSize = '260% 100%';
+  rodapeLuz.style.backgroundPosition = `${lerp(130, -40, clamp(S(h - 0.05, [60, 15.5]), 0, 1))}% 0`;
+  rodapeLuz.style.display = h > 0 && h < 1.5 ? 'block' : 'none';
+  // rolagem
+  rolo.style.transform = `translateY(${(-TR(t, ROLAGEM, MOLA.padrao)).toFixed(2)}px)`;
+}
+
+function pintaAviso(t) {
+  const t0 = W(2, 'sem') - 0.1, t1 = W(2, 'três') - 0.05;
+  if (t < t0 || t > t1 + 0.5) { avisoSem.style.display = 'none'; return; }
+  const p = S(t - t0, MOLA.padrao), q = t > t1 ? clamp(S(t - t1, MOLA.ui), 0, 1) : 0;
+  Object.assign(avisoSem.style, { display: 'block', left: '96px', top: '430px', opacity: clamp(p * 1.5, 0, 1) * (1 - q),
+    transform: `translateX(${((1 - p) * 60 + q * 40).toFixed(2)}px)` });
+  risco.style.strokeDashoffset = (67 * (1 - clamp(S(t - W(2, 'navegador'), MOLA.ui), 0, 1))).toFixed(2);
+}
+
+function pintaDado(d, t, t0, t1, tis) {
+  if (t < t0 - 0.05 || t > t1 + 0.6) { d.style.display = 'none'; return; }
+  const p = S(t - t0, MOLA.padrao), q = t > t1 ? clamp(S(t - t1, MOLA.ui), 0, 1) : 0;
+  Object.assign(d.style, { display: 'block', left: '1290px', top: '250px', opacity: clamp(p * 1.6, 0, 1) * (1 - q),
+    transform: `translateX(${((1 - p) * 80 + q * 520).toFixed(2)}px)` });
+  const num = d.querySelector('.num'); const kn = S(t - t0, MOLA.pesada);
+  num.style.transform = `translateY(${((1 - kn) * 60).toFixed(2)}px)`;
+  [...d.querySelectorAll('.it')].forEach((it, i) => { const k = S(t - tis[i], MOLA.ui); it.style.opacity = t >= tis[i] ? clamp(k * 1.6, 0, 1) : 0;
+    it.style.transform = `translateX(${((1 - clamp(k, 0, 1)) * 30).toFixed(2)}px)`; });
+}
+
+function pintaP01(t) {
+  const vis = t >= C1 && t < C2 + 0.6;
+  P01.box.style.display = vis ? 'block' : 'none';
+  if (!vis) { SELO01.style.display = 'none'; return; }
+  const p = clamp(S(t - C1, MOLA.padrao), 0, 1.02), q = t > C2 ? clamp(S(t - C2, MOLA.ui), 0, 1) : 0;
+  P01.box.style.opacity = clamp((t - C1) / 0.12, 0, 1) * (1 - q);
+  P01.box.style.transform = `perspective(1800px) translateX(${((1 - p) * 220 + q * 420).toFixed(2)}px) rotateY(${(38 * (1 - p) - 48 * q).toFixed(2)}deg)`;
+  const lt = t - C1;
+  const s = 0.745 + 0.008 * lt;
+  vista(P01, 290, 66 + 4 * lt, s);
+  pintaCursor(K01, s, t, [[C1 + 0.3, 1500, 760], [W(3, 'mesma') - 0.35, 410, 396]], W(3, 'mesma'));
+  pintaRealce(R01[0], [308, 378, 148, 36], s, t, W(3, 'mesma'));
+  pintaRealce(R01[1], [312, 488, 1410, 72], s, t, W(3, 'lista'));
+  pintaRealce(R01[2], [312, 568, 1410, 72], s, t, W(3, 'lista') + 0.2);
+  pintaRealce(R01[3], [312, 648, 1410, 74], s, t, W(3, 'aparece'));
+  pintaSelo(SELO01, t, W(3, 'pendências'), C2, 1700, 205);
+}
+
+function pintaP05(t) {
+  const vis = t >= C2 && t < C3 + 0.7;
+  P05.box.style.display = vis ? 'block' : 'none';
+  if (!vis) return;
+  const p = clamp(S(t - C2 - 0.08, MOLA.padrao), 0, 1), q = t > C3 ? clamp(S(t - C3, MOLA.padrao), 0, 1) : 0;
+  P05.box.style.clipPath = `inset(${(100 * (1 - p)).toFixed(2)}% 0 0 0 round 22px)`;
+  P05.box.style.transform = `translate(${(q * 1250).toFixed(2)}px, ${((1 - p) * 50).toFixed(2)}px)`;
+  const s = 1.07;
+  const y0 = TR(t, [[C2, 30], [W(4, 'ata'), 590], [W(4, 'participou'), 780], [W(4, 'ficou'), 1210]]);
+  vista(P05, 268, y0 + 2 * (t - C2), s);
+  pintaRealce(R05[0], [306, 302, 951, 76], s, t, W(4, 'ata') - 0.1, W(4, 'participou') - 0.1);
+  pintaRealce(R05[1], [306, 657, 951, 150], s, t, W(4, 'ata') + 0.15, W(4, 'participou') - 0.05);
+  pintaRealce(R05[2], [306, 836, 951, 219], s, t, W(4, 'participou'), W(4, 'ficou') - 0.05);
+  pintaRealce(R05[3], [345, 1478, 870, 280], s, t, W(4, 'ficou') + 0.1);
+}
+
+function pintaP04(t) {
+  const vis = t >= C5 + 0.15 && t < C6 + 0.7;
+  P04.box.style.display = vis ? 'block' : 'none';
+  if (!vis) return;
+  const p = clamp(S(t - C5 - 0.25, MOLA.padrao), 0, 1.02), q = t > C6 ? clamp(S(t - C6, MOLA.padrao), 0, 1.02) : 0;
+  P04.box.style.opacity = clamp((t - C5 - 0.15) / 0.2, 0, 1);
+  P04.box.style.transform = `translateX(${(-q * 1180).toFixed(2)}px) scale(${(0.9 + 0.1 * p).toFixed(4)})`;
+  P04.box.style.filter = p < 0.98 ? `blur(${(14 * (1 - p)).toFixed(2)}px)` : 'none';
+  const s = 1.2;
+  const y0 = TR(t, [[C5, 140], [W(7, 'relato'), 1460], [W(7, 'trilha'), 1860]]);
+  vista(P04, 645, y0 + 2 * (t - C5), s);
+  pintaRealce(R04[0], [681, 1580, 830, 66], s, t, W(7, 'relato'), W(7, 'trilha') - 0.1);
+  pintaRealce(R04[1], [681, 1946, 830, 476], s, t, W(7, 'trilha'), W(7, 'resposta') - 0.1);
+  pintaRealce(R04[2], [681, 1880, 600, 44], s, t, W(7, 'resposta'));
+  pintaRealce(R04[3], [690, 2160, 640, 82], s, t, W(7, 'resposta') + 0.2);
+}
+
+function pintaP07(t) {
+  const vis = t >= C6 - 0.05 && t < C7 + 0.6;
+  P07.box.style.display = vis ? 'block' : 'none';
+  if (!vis) { SELO07.style.display = 'none'; return; }
+  const p = clamp(S(t - C6, MOLA.padrao), 0, 1.02), q = t > C7 ? clamp(S(t - C7, MOLA.ui), 0, 1) : 0;
+  P07.box.style.transform = `perspective(1800px) translateX(${((1 - p) * 1180).toFixed(2)}px) rotateX(${(86 * q).toFixed(2)}deg)`;
+  P07.box.style.opacity = 1 - clamp(q * 1.2, 0, 1);
+  const s = 1.48;
+  vista(P07, 598, 1440 + 3 * (t - C6), s);
+  pintaHolofote(H07, [624, 1736, 672, 76], s, t, W(8, 'histórico') - 0.1);
+  pintaSelo(SELO07, t, W(8, 'nome'), C7 - 0.1, 1560, 170);
+}
+
+function pintaVerso(t) {
+  // "só leitura" vira como um cartão, e as fichas dizem que nada muda
+  const t0 = W(9, 'só'), t1 = C8 - 0.05;
+  if (t < t0 - 0.05 || t > t1 + 0.3) { soLe.style.display = 'none'; fichaR.style.display = 'none'; fichaC.style.display = 'none'; return; }
+  const p = clamp(S(t - t0, MOLA.ui), 0, 1.05), q = t > t1 ? clamp(S(t - t1, MOLA.ui), 0, 1) : 0;
+  Object.assign(soLe.style, { display: 'block', left: '960px', top: '470px', opacity: clamp(p * 2, 0, 1) * (1 - q),
+    transform: `translate(-50%, -50%) perspective(900px) rotateX(${(-90 * (1 - clamp(p, 0, 1))).toFixed(2)}deg) scale(1.3)` });
+  const ficha = (f, ta, x) => {
+    const k = S(t - ta, MOLA.padrao);
+    Object.assign(f.style, { display: t >= ta ? 'block' : 'none', left: px(x), top: '380px', opacity: clamp(k * 1.6, 0, 1) * (1 - q),
+      transform: `translateY(${((1 - k) * 40).toFixed(2)}px)` });
+    f.querySelector('.s').style.color = t > ta + 0.35 ? '#A9BCE3' : '#EEF2FA';
+  };
+  ficha(fichaR, W(9, 'reuniões'), 250);
+  ficha(fichaC, W(9, 'casos'), 1290);
+}
+
+function pintaL02(t) {
+  const vis = t >= C4 && t < C5 + 0.7;
+  L02.style.display = vis ? 'block' : 'none';
+  if (!vis) return;
+  const r = 1300 * clamp(S(t - C4, MOLA.padrao), 0, 1.02);
+  L02.style.clipPath = t < C5 ? `circle(${r.toFixed(1)}px at 960px 640px)` : 'none';
+  const q = t > C5 ? clamp(S(t - C5, MOLA.padrao), 0, 1) : 0;
+  L02.style.transform = `translate(${((410 - 960) * q).toFixed(2)}px, ${((515 - 540) * q).toFixed(2)}px) scale(${(1 - 0.82 * q).toFixed(4)})`;
+  L02.style.opacity = 1 - clamp((q - 0.55) / 0.4, 0, 1);
+  L02.style.borderRadius = `${(40 * q).toFixed(1)}px`;
+  const lt = t - C4;
+  const s = TR(t, [[C4, 1.0], [W(6, 'mesmos') - 0.2, 1.16]]) + 0.006 * lt;
+  const fy = TR(t, [[C4, 540], [W(6, 'mesmos') - 0.2, 470]]);
+  foco(F02, 1080 + 3 * lt, fy, s);
+  const sv = F02.s;
+  pintaRealce(R02[0], [1396, 206, 189, 34], sv, t, W(6, 'mesmos'));
+  pintaRealce(R02[1], [522, 482, 1150, 64], sv, t, W(6, 'fila'));
+  pintaRealce(R02[2], [522, 550, 1150, 64], sv, t, W(6, 'mostra'));
+  pintaRealce(R02[3], [522, 618, 1150, 64], sv, t, W(6, 'como'));
+  pintaSelo(SELO02, t, W(6, 'vencidos'), C5, 1560, 820);
+}
+
+function pintaL06(t) {
+  const vis = t >= C8 - 0.02 && t < C9 + 0.05;
+  L06.style.display = vis ? 'block' : 'none';
+  if (!vis) { SELO06.style.display = 'none'; return; }
+  const p = clamp(S(t - C8, MOLA.padrao), 0, 1.02);
+  L06.style.opacity = clamp((t - C8 + 0.02) / 0.14, 0, 1);
+  L06.style.transform = `scale(${(1.6 - 0.6 * p).toFixed(4)})`;
+  L06.style.filter = p < 0.97 ? `blur(${(12 * (1 - p)).toFixed(2)}px)` : 'none';
+  const lt = t - C8;
+  const s = TR(t, [[C8, 1.0], [W(9, 'executiva'), 1.32]]) + 0.008 * lt;
+  foco(F06, 960, TR(t, [[C8, 540], [W(9, 'executiva'), 520]]), s);
+  const sv = F06.s;
+  pintaRealce(R06, [628, 459, 664, 38], sv, t, W(9, 'executiva'));
+  const tc = W(9, 'perder') - 0.12;
+  pintaCursor(K06, sv, t, [[W(9, 'executiva'), 1240, 760], [tc - 0.4, 1180, 482]], tc);
+  troca.style.opacity = clamp(S(t - W(9, 'perder'), MOLA.ui) * 1.3, 0, 1);
+  pintaSelo(SELO06, t, W(9, 'para'), C9 - 0.2, 1380, 300);
+}
+
+function pintaL07(t) {
+  const vis = t >= C9 && t < C10 + 0.9;
+  L07.style.display = vis ? 'block' : 'none';
+  if (!vis) return;
+  const ks = [[C9, 300], [W(10, 'exemplos') - 0.15, 1625], [W(10, 'privacidade') - 0.25, 722]];
+  const fy = TR(t, ks, MOLA.padrao), fy0 = TR(t - 1 / 60, ks, MOLA.padrao);
+  const lt = t - C9;
+  const s = 1.46 + 0.006 * lt;
+  foco(F07, 960, fy, s);
+  const v = Math.abs(fy - fy0) * 60;
+  F07.mundo.style.filter = v > 300 ? `blur(${Math.min(10, (v - 300) / 260).toFixed(2)}px)` : 'none';
+  pintaHolofote(H07b, [624, 1550, 672, 140], F07.s, t, W(10, 'pergunta') - 0.1, W(10, 'privacidade') - 0.45);
+  pintaHolofote(H07c, [624, 656, 672, 124], F07.s, t, W(10, 'privacidade'));
+  // recua quando os aparelhos chegam
+  const q = t > C10 ? clamp(S(t - C10, MOLA.padrao), 0, 1) : 0;
+  L07.style.transform = `scale(${(1 - 0.08 * q).toFixed(4)})`;
+  veu07.style.opacity = (0.88 * q).toFixed(3);
+}
+
+function pintaTiras(t) {
+  // persiana: fecha sobre o cadastro e abre no guia
+  const fecha = C9 - 0.32;
+  TIRAS.forEach((tr, i) => {
+    const a = S(t - fecha - i * 0.022, MOLA.ui), b = S(t - C9 - 0.02 - i * 0.03, MOLA.ui);
+    const v = clamp(a, 0, 1) * (1 - clamp(b, 0, 1));
+    tr.style.display = v > 0.002 && t > fecha && t < C9 + 0.9 ? 'block' : 'none';
+    tr.style.transform = `scaleY(${v.toFixed(4)})`;
+  });
+}
+
+function pintaNote(t) {
+  const vis = t >= C10 && t < C11 + 0.6;
+  note.style.display = vis ? 'block' : 'none';
+  if (!vis) return;
+  const p = S(t - (W(11, 'computador') - 0.25), MOLA.padrao);
+  note.style.transform = `translate(${lerp(2100, 820, p).toFixed(2)}px, 200px) rotate(${(0.15 * Math.sin(t * 0.7 + 1)).toFixed(3)}deg)`;
+  const r = t - W(11, 'responde');
+  noteLin.forEach((l, i) => { const k = clamp(S(r - i * 0.08, MOLA.ui), 0, 1); l.style.background = r > 0 ? `rgba(59,111,182,${(0.06 + 0.12 * k).toFixed(3)})` : '#F5F7FC'; });
+}
+
+function pintaAssinatura(t) {
+  const p = S(t - C11, MOLA.pesada);
+  cortina.style.display = t >= C11 ? 'block' : 'none';
+  cortina.style.transform = `translateY(${((1 - clamp(p, 0, 1)) * 1080).toFixed(2)}px)`;
+  const tl = C11 + 0.3;
+  logo.style.display = t >= tl ? 'block' : 'none';
+  const k = clamp(S(t - tl, MOLA.pesada), 0, 1);
+  logo.style.opacity = clamp((t - tl) / 0.35, 0, 1);
+  logo.style.transform = `translate(-50%, -50%) scale(${(0.96 + 0.04 * k).toFixed(4)})`;
+}
+
+// ---------- Sons ----------
+PERGUNTAS.forEach((q) => { cue(Math.max(0, q.t0), 'key', { len: +(q.t1 - Math.max(0, q.t0)).toFixed(2), g: 0.35 }); cue(q.env, 'pop', { g: 0.55 }); });
+CHIPS.forEach((c) => cue(c.tOk, 'notification', { g: 0.5 }));
+[C1, C2, C3, C4, C5, C6, C7, C8, C9, C10].forEach((c) => cue(c, 'whoosh', { len: 0.4, g: 0.45 }));
+cue(W(3, 'mesma'), 'click', { g: 0.55 });
+cue(W(9, 'perder') - 0.12, 'click', { g: 0.55 });
+cue(W(3, 'pendências'), 'pop', { g: 0.5 });
+cue(W(6, 'vencidos'), 'pop', { g: 0.5 });
+cue(W(8, 'nome'), 'pop', { g: 0.5 });
+cue(W(9, 'para'), 'hit', { g: 0.45 });
+cue(C11 + 0.3, 'chime', { g: 0.6 });
+const PESO = { hit: 6, notification: 5, chime: 5, click: 4, pop: 3, whoosh: 3, key: 2 };
+function poda(lista) {
+  const ok = [];
+  for (const c of [...lista].sort((a, b) => (PESO[b.type] - PESO[a.type]) || (a.t - b.t))) {
+    if (ok.some((o) => Math.abs(o.t - c.t) < 0.12)) continue;
+    ok.push(c);
+  }
+  return ok.sort((a, b) => a.t - b.t);
+}
+window.CUES = poda(CUES.filter((c) => c.t >= 0 && c.t < DUR));
+
+// ---------- Carregar e pintar ----------
+const PRONTO = (async () => {
+  await document.fonts.load('40px HPS');
+  await document.fonts.ready;
+  await Promise.all([...palco.querySelectorAll('img')].map((i) => (i.decode ? i.decode().catch(() => {}) : null)));
+  for (const p of PARTES) { p.el.style.opacity = 1; p.el.style.transform = 'none'; }
+  rolo.style.transform = 'none';
+  medeRolagem();
+})();
+
+window.seek = async (t) => {
+  await PRONTO;
+  pintaFundo(t);
+  pintaCamera(t);
+  pintaCelular(t);
+  pintaAviso(t);
+  pintaDado(dadoP, t, W(2, 'três'), C1 - 0.1, [W(2, 'otávio'), W(2, 'renata')]);
+  pintaDado(dadoO, t, W(5, 'casos'), C4 - 0.05, [W(5, 'farmácia'), W(5, 'uti'), W(5, 'recepção')]);
+  pintaP01(t);
+  pintaP05(t);
+  pintaP04(t);
+  pintaP07(t);
+  pintaVerso(t);
+  pintaL02(t);
+  pintaL06(t);
+  pintaL07(t);
+  pintaTiras(t);
+  pintaNote(t);
+  pintaLegenda(t);
+  pintaAssinatura(t);
+};
+
+if (!window.RENDER) {
+  const q = new URLSearchParams(location.search);
+  const t0 = performance.now(), ini = +(q.get('t') || 0);
+  let ocupado = false;
+  const tocar = async (agora) => { if (!ocupado) { ocupado = true; await seek((ini + (agora - t0) / 1000) % DUR); ocupado = false; } requestAnimationFrame(tocar); };
+  requestAnimationFrame(tocar);
+} else {
+  seek(0);
+}
+</script>
+</body>
+</html>

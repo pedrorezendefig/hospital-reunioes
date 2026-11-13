@@ -1,0 +1,170 @@
+{
+ "jsonrpc": "2.0",
+ "id": 0,
+ "result": {
+  "tools": [
+   {
+    "name": "get_active_now",
+    "title": "Pessoas no site agora",
+    "description": "Quantas pessoas estão no site do hospital agora, em tempo real (o Ao vivo da Central de Comando). Sem ninguém no site, é zero de verdade, não falta de dado. Não recebe argumentos.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {},
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "get_site_analytics",
+    "title": "Números do Site",
+    "description": "Os números do Site do hospital no período pedido (a Central de Comando). Números do Site do Hospital São Matheus (fonte: Google Analytics), somente leitura. O campo \"visitantes\" traz os Visitantes, as pessoas diferentes que acessaram o Site no período (os usuários ativos do Google), com o número do período anterior de mesmo tamanho e \"variacaoPct\" (12 quer dizer +12%; null quer dizer que não há base para comparar). \"movimento\" traz, dia a dia, os \"visitantes\" do dia e o \"anterior\", os do dia correspondente do período anterior; o \"anterior\" é sempre um número, e zero quer dizer que o Google não trouxe visitante naquele dia. \"areasDoSite\" é o ranking das Áreas do site, os grupos de páginas por serviço do hospital (Maternidade, Emergência 24h, Centro de Imagem, Centro Médico, Laboratório); o número fala do site, não da procura real pelo serviço. \"origens\" é a Origem do público (Busca no Google, Direto, Redes sociais, Anúncios, Indicação para quem chegou por um link em outro site, e os rótulos gentis Outros, a soma das origens pequenas, e Não identificado, o que o Google não classificou). \"dispositivos\" são as Visitas por dispositivo. Em \"contatos\", cada canal tem um \"estado\": \"medido\" traz os \"cliques\" reais, zero incluso (hoje WhatsApp e Fale Conosco), \"em-construcao\" quer dizer que o Site ainda não avisa o Google quando o contato acontece, e \"nao-medido\" quer dizer que não há como medir; \"em-construcao\" e \"nao-medido\" nunca são zero. Em \"frescor\", \"atualizadoHaMin\" diz há quantos minutos o dado foi lido e \"falhaAoAtualizar\" verdadeiro quer dizer que é o último valor bom guardado; \"motivo\" vem sempre, nulo quando não houve falha, e com a frase da falha quando houve. Não invente números que não estejam no payload.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "period": {
+       "type": "string",
+       "enum": [
+        "7d",
+        "28d",
+        "90d"
+       ],
+       "description": "A janela de tempo: 7d, 28d ou 90d."
+      }
+     },
+     "required": [
+      "period"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "get_instagram_analytics",
+    "title": "Números do Instagram",
+    "description": "Os números do Instagram do hospital no período pedido (a Central de Comando). Números do Instagram do Hospital São Matheus, somente leitura. \"disponivel\" falso quer dizer que o dado não pôde ser lido agora (por exemplo, token ou configuração), e não é zero nem \"sem seguidores\": diga que está indisponível, com o motivo, nunca relate como queda. As métricas comparadas (Alcance, Visualizações, Interações, Contas que engajaram) trazem o atual, o anterior e \"variacaoPct\". \"alcance\" são as contas diferentes que viram o conteúdo (pessoas); \"visualizacoes\" são as vezes que o conteúdo foi exibido. \"seguidores\" é estoque (o total agora), sem variação percentual: o que varia por período é o \"crescimento\". \"interacoes\" é a soma de curtidas, comentários, salvamentos e compartilhamentos, e \"detalheInteracoes\" abre essas quatro partes. \"principaisPublicacoes\" vêm ordenadas por interações no período, sem Stories. Em \"frescor\", \"atualizadoHaMin\" diz há quantos minutos o dado foi lido e \"falhaAoAtualizar\" verdadeiro quer dizer que é o último valor bom guardado; \"motivo\" vem sempre, nulo quando não houve falha, e com a frase da falha quando houve. Não invente números que não estejam no payload.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "period": {
+       "type": "string",
+       "enum": [
+        "7d",
+        "28d"
+       ],
+       "description": "A janela de tempo: 7d ou 28d."
+      }
+     },
+     "required": [
+      "period"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "get_pendencias",
+    "title": "Pendências",
+    "description": "As Pendências das Reuniões do hospital, somente leitura: cada uma é uma ação atribuída a um responsável, com prazo, que nasce da Ata. O diretor chama de meta a Pendência com prazo. Filtre por \"situacao\" (atrasada, pendente, em_progresso, concluida, cancelada, repactuada), por \"responsavel\" (parte do nome) e por prazo (\"prazoDe\" e \"prazoAte\", AAAA-MM-DD). Sem filtro, vêm todas. Atrasada é a mesma marca da tela de Pendências: a pendência pendente cujo prazo venceu. A lista vem por prazo, a mais antiga primeiro; \"total\" é quantas atendem ao filtro e \"haMais\" verdadeiro quer dizer que só as 50 primeiras vieram: refine o filtro para ver o resto. \"repactuada\" é a pendência com prazo apagado, à espera da data nova. Não invente pendências que não estejam no payload.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "situacao": {
+       "type": "string",
+       "enum": [
+        "atrasada",
+        "pendente",
+        "em_progresso",
+        "concluida",
+        "cancelada",
+        "repactuada"
+       ],
+       "description": "A situação da pendência."
+      },
+      "responsavel": {
+       "type": "string",
+       "description": "Parte do nome do responsável."
+      },
+      "prazoDe": {
+       "type": "string",
+       "description": "Prazo a partir deste dia (AAAA-MM-DD)."
+      },
+      "prazoAte": {
+       "type": "string",
+       "description": "Prazo até este dia (AAAA-MM-DD)."
+      }
+     },
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "get_reunioes",
+    "title": "Reuniões",
+    "description": "As Reuniões do hospital, somente leitura, cada uma com a Ata, os Participantes e as Pendências que saíram dela. Busque por período (\"dataDe\" e \"dataAte\", AAAA-MM-DD, pela data da Reunião) e por \"termo\" (procura no título, no objetivo e no resumo executivo da Ata). Sem filtro, vêm as mais recentes. \"situacaoDaAta\" é o estado da Reunião (PROGRAMADA, AGUARDANDO_VALIDACAO, ASSINADA, APROVADA, CANCELADA e outros); \"ata\" é nula quando a Reunião ainda não tem Ata. Cada Pendência traz o responsável, o prazo e a \"situacao\" (atrasada, pendente, em_progresso, concluida, cancelada, repactuada), a mesma da tela de Pendências; o diretor chama de meta a Pendência com prazo. Cada Reunião traz até 15 Pendências, pelo prazo (as sem prazo, como a repactuada, no fim); \"totalDePendencias\" é quantas ela tem e \"pendenciasCortadas\" verdadeiro quer dizer que só vieram as primeiras: nesse caso não diga que a Reunião não tem uma Pendência que não veio. A lista vem da mais recente para a mais antiga; \"total\" é quantas atendem à busca e \"haMais\" verdadeiro quer dizer que só as 20 primeiras vieram: refine a busca para ver o resto. Não invente Reuniões, decisões ou Pendências que não estejam no payload.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "dataDe": {
+       "type": "string",
+       "description": "Reuniões a partir deste dia (AAAA-MM-DD)."
+      },
+      "dataAte": {
+       "type": "string",
+       "description": "Reuniões até este dia (AAAA-MM-DD)."
+      },
+      "termo": {
+       "type": "string",
+       "description": "Palavra ou trecho a procurar."
+      }
+     },
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "get_ouvidoria_prazo_estourado",
+    "title": "Casos da Ouvidoria e prazos",
+    "description": "A fila da Ouvidoria do hospital, somente leitura: os casos em trabalho (sem os arquivados), cada um com protocolo, setor, situação, gravidade e prazo. Filtre por \"prazoEstourado\" (verdadeiro traz só os estourados), por \"setor\" (parte do nome) e por \"situacao\" (novo, em_classificacao, aguardando_area, aguardando_manifestante, respondido, encerrado). Sem filtro, vem a fila inteira. Prazo estourado é a mesma marca vermelha da fila na tela: conta em dias úteis pela Tabela de prazos e pelo Calendário útil; caso já respondido, parado aguardando o manifestante, ou elogio nunca está estourado. \"vencimento\" é o prazo da área; caso ainda sem gravidade não tem prazo da área e é medido pelo \"prazoDeReferencia\". A lista vem pelo prazo, o mais antigo primeiro; \"total\" é quantos atendem ao filtro e \"haMais\" verdadeiro quer dizer que só os 50 primeiros vieram: refine o filtro para ver o resto. \"degradado\" não vazio quer dizer que parte da leitura falhou e o prazo pode não estar confirmado. Não invente casos que não estejam no payload.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "prazoEstourado": {
+       "type": "boolean",
+       "description": "Verdadeiro: só os casos com prazo estourado."
+      },
+      "setor": {
+       "type": "string",
+       "description": "Parte do nome do setor."
+      },
+      "situacao": {
+       "type": "string",
+       "enum": [
+        "novo",
+        "em_classificacao",
+        "aguardando_area",
+        "aguardando_manifestante",
+        "respondido",
+        "encerrado"
+       ],
+       "description": "A situação do caso."
+      }
+     },
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "get_ouvidoria_dossie",
+    "title": "Caso da Ouvidoria",
+    "description": "O Dossiê de um caso da Ouvidoria do hospital pelo protocolo (AAAA-NNNN), somente leitura, como a página do caso mostra para a diretoria executiva. \"dossie\" traz a ficha do caso, o relato integral, a identificação que o caso gravou (quem manifestou e o Paciente do caso), o sigilo reforçado, a resposta corrente da área e os quatro marcos com os prazos. Caso anônimo não tem identificação: não deduza quem manifestou. \"trilha\" é a linha do tempo, do mais novo para o mais antigo, com o tempo útil entre os marcos; \"respostas\" são todas as respostas da área, da mais antiga para a mais nova. Caso apagado não tem relato nem identificação: \"aviso_caso_apagado\" diz quando e por quê. \"degradado\" lista o que não pôde ser lido (o calendário útil, por exemplo): sem ele, o tempo em dias úteis não está confirmado. Esta consulta fica registrada no histórico de acesso do caso. Não invente dado que não esteja no payload.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "protocolo": {
+       "type": "string",
+       "description": "O protocolo do caso, como 2026-0123."
+      }
+     },
+     "required": [
+      "protocolo"
+     ],
+     "additionalProperties": false
+    }
+   }
+  ]
+ }
+}

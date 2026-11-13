@@ -1,0 +1,54 @@
+{
+ "jsonrpc": "2.0",
+ "id": 1,
+ "result": {
+  "content": [
+   {
+    "type": "text",
+    "text": "{\"total\": 3, \"mostradas\": 3, \"haMais\": false, \"aviso\": null, \"pendencias\": [{\"id\": \"MANP04\", \"descricao\": \"Publicar o relatório de indicadores do trimestre\", \"responsavel\": \"Renata Fontes\", \"coResponsavel\": null, \"prazo\": \"2026-10-27\", \"situacao\": \"atrasada\", \"atrasada\": true, \"metaEntregavel\": \"Relatório no painel do setor\", \"reuniao\": \"MANREU01\"}, {\"id\": \"MANP06\", \"descricao\": \"Revisar o contrato de manutenção das autoclaves\", \"responsavel\": \"Otávio Serra\", \"coResponsavel\": null, \"prazo\": \"2026-11-04\", \"situacao\": \"atrasada\", \"atrasada\": true, \"metaEntregavel\": \"Contrato revisado com o setor de compras\", \"reuniao\": \"MANREU01\"}, {\"id\": \"MANP01\", \"descricao\": \"Revisar o fluxo de esterilização do instrumental cirúrgico\", \"responsavel\": \"Otávio Serra\", \"coResponsavel\": null, \"prazo\": \"2026-11-11\", \"situacao\": \"atrasada\", \"atrasada\": true, \"metaEntregavel\": \"Fluxo revisado e afixado no setor\", \"reuniao\": \"MANREU01\"}]}"
+   }
+  ],
+  "structuredContent": {
+   "total": 3,
+   "mostradas": 3,
+   "haMais": false,
+   "aviso": null,
+   "pendencias": [
+    {
+     "id": "MANP04",
+     "descricao": "Publicar o relatório de indicadores do trimestre",
+     "responsavel": "Renata Fontes",
+     "coResponsavel": null,
+     "prazo": "2026-10-27",
+     "situacao": "atrasada",
+     "atrasada": true,
+     "metaEntregavel": "Relatório no painel do setor",
+     "reuniao": "MANREU01"
+    },
+    {
+     "id": "MANP06",
+     "descricao": "Revisar o contrato de manutenção das autoclaves",
+     "responsavel": "Otávio Serra",
+     "coResponsavel": null,
+     "prazo": "2026-11-04",
+     "situacao": "atrasada",
+     "atrasada": true,
+     "metaEntregavel": "Contrato revisado com o setor de compras",
+     "reuniao": "MANREU01"
+    },
+    {
+     "id": "MANP01",
+     "descricao": "Revisar o fluxo de esterilização do instrumental cirúrgico",
+     "responsavel": "Otávio Serra",
+     "coResponsavel": null,
+     "prazo": "2026-11-11",
+     "situacao": "atrasada",
+     "atrasada": true,
+     "metaEntregavel": "Fluxo revisado e afixado no setor",
+     "reuniao": "MANREU01"
+    }
+   ]
+  },
+  "isError": false
+ }
+}

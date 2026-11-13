@@ -1,0 +1,146 @@
+{
+ "jsonrpc": "2.0",
+ "id": 2,
+ "result": {
+  "content": [
+   {
+    "type": "text",
+    "text": "{\"total\": 1, \"mostradas\": 1, \"haMais\": false, \"aviso\": null, \"reunioes\": [{\"id\": \"MANREU01\", \"titulo\": \"Acompanhamento da CME\", \"data\": \"2026-11-03\", \"horaInicio\": \"09:00:00\", \"horaFim\": \"10:00:00\", \"tipo\": \"Coordenação\", \"objetivo\": \"Acompanhar os indicadores do setor e as ações da última reunião.\", \"situacaoDaAta\": \"ASSINADA\", \"ata\": {\"resumoExecutivo\": \"A reunião acompanhou o tempo de giro das autoclaves e a reposição de material da CME. Ficou combinado antecipar o último ciclo do dia em uma hora e programar o pedido de indicadores biológicos para o primeiro dia útil do mês.\", \"topicos\": [{\"titulo\": \"Tempo de giro das autoclaves\", \"descricao\": \"O setor apresentou o tempo médio de cada ciclo e mostrou onde a fila de material cresce no fim da tarde.\", \"decisao\": \"Antecipar o último ciclo do dia em uma hora durante o mês de teste.\"}, {\"titulo\": \"Reposição do material de consumo\", \"descricao\": \"A Farmácia apontou atraso na entrega de indicadores biológicos e propôs um pedido programado.\", \"decisao\": \"Passar a fazer o pedido no primeiro dia útil de cada mês.\"}], \"proximaReuniao\": \"01/12/2026\"}, \"participantes\": [{\"nome\": \"Renata Fontes\", \"cargo\": \"Coordenação\"}, {\"nome\": \"Tiago Meireles\", \"cargo\": \"Farmacêutico\"}, {\"nome\": \"Luciana Braga\", \"cargo\": \"Enfermeira\"}, {\"nome\": \"Otávio Serra\", \"cargo\": \"Técnico de Esterilização\"}], \"pendencias\": [{\"id\": \"MANP04\", \"descricao\": \"Publicar o relatório de indicadores do trimestre\", \"responsavel\": \"Renata Fontes\", \"coResponsavel\": null, \"prazo\": \"2026-10-27\", \"situacao\": \"atrasada\", \"atrasada\": true, \"metaEntregavel\": \"Relatório no painel do setor\", \"reuniao\": \"MANREU01\"}, {\"id\": \"MANP03\", \"descricao\": \"Conferir o estoque de indicadores biológicos\", \"responsavel\": \"Tiago Meireles\", \"coResponsavel\": null, \"prazo\": \"2026-10-29\", \"situacao\": \"concluida\", \"atrasada\": false, \"metaEntregavel\": \"Planilha de conferência assinada\", \"reuniao\": \"MANREU01\"}, {\"id\": \"MANP06\", \"descricao\": \"Revisar o contrato de manutenção das autoclaves\", \"responsavel\": \"Otávio Serra\", \"coResponsavel\": null, \"prazo\": \"2026-11-04\", \"situacao\": \"atrasada\", \"atrasada\": true, \"metaEntregavel\": \"Contrato revisado com o setor de compras\", \"reuniao\": \"MANREU01\"}, {\"id\": \"MANP02\", \"descricao\": \"Atualizar a escala de plantão da UTI\", \"responsavel\": \"Luciana Braga\", \"coResponsavel\": null, \"prazo\": \"2026-11-07\", \"situacao\": \"em_progresso\", \"atrasada\": false, \"metaEntregavel\": \"Escala publicada no mural\", \"reuniao\": \"MANREU01\"}, {\"id\": \"MANP01\", \"descricao\": \"Revisar o fluxo de esterilização do instrumental cirúrgico\", \"responsavel\": \"Otávio Serra\", \"coResponsavel\": null, \"prazo\": \"2026-11-11\", \"situacao\": \"atrasada\", \"atrasada\": true, \"metaEntregavel\": \"Fluxo revisado e afixado no setor\", \"reuniao\": \"MANREU01\"}, {\"id\": \"MANP07\", \"descricao\": \"Comprar carrinho de emergência para a Farmácia\", \"responsavel\": \"Tiago Meireles\", \"coResponsavel\": null, \"prazo\": \"2026-11-16\", \"situacao\": \"cancelada\", \"atrasada\": false, \"metaEntregavel\": \"Carrinho recebido e conferido\", \"reuniao\": \"MANREU01\"}, {\"id\": \"MANP05\", \"descricao\": \"Treinar a equipe no novo formulário de rastreabilidade\", \"responsavel\": \"Luciana Braga\", \"coResponsavel\": null, \"prazo\": null, \"situacao\": \"repactuada\", \"atrasada\": false, \"metaEntregavel\": \"Lista de presença do treinamento\", \"reuniao\": \"MANREU01\"}], \"totalDePendencias\": 7, \"pendenciasCortadas\": false}]}"
+   }
+  ],
+  "structuredContent": {
+   "total": 1,
+   "mostradas": 1,
+   "haMais": false,
+   "aviso": null,
+   "reunioes": [
+    {
+     "id": "MANREU01",
+     "titulo": "Acompanhamento da CME",
+     "data": "2026-11-03",
+     "horaInicio": "09:00:00",
+     "horaFim": "10:00:00",
+     "tipo": "Coordenação",
+     "objetivo": "Acompanhar os indicadores do setor e as ações da última reunião.",
+     "situacaoDaAta": "ASSINADA",
+     "ata": {
+      "resumoExecutivo": "A reunião acompanhou o tempo de giro das autoclaves e a reposição de material da CME. Ficou combinado antecipar o último ciclo do dia em uma hora e programar o pedido de indicadores biológicos para o primeiro dia útil do mês.",
+      "topicos": [
+       {
+        "titulo": "Tempo de giro das autoclaves",
+        "descricao": "O setor apresentou o tempo médio de cada ciclo e mostrou onde a fila de material cresce no fim da tarde.",
+        "decisao": "Antecipar o último ciclo do dia em uma hora durante o mês de teste."
+       },
+       {
+        "titulo": "Reposição do material de consumo",
+        "descricao": "A Farmácia apontou atraso na entrega de indicadores biológicos e propôs um pedido programado.",
+        "decisao": "Passar a fazer o pedido no primeiro dia útil de cada mês."
+       }
+      ],
+      "proximaReuniao": "01/12/2026"
+     },
+     "participantes": [
+      {
+       "nome": "Renata Fontes",
+       "cargo": "Coordenação"
+      },
+      {
+       "nome": "Tiago Meireles",
+       "cargo": "Farmacêutico"
+      },
+      {
+       "nome": "Luciana Braga",
+       "cargo": "Enfermeira"
+      },
+      {
+       "nome": "Otávio Serra",
+       "cargo": "Técnico de Esterilização"
+      }
+     ],
+     "pendencias": [
+      {
+       "id": "MANP04",
+       "descricao": "Publicar o relatório de indicadores do trimestre",
+       "responsavel": "Renata Fontes",
+       "coResponsavel": null,
+       "prazo": "2026-10-27",
+       "situacao": "atrasada",
+       "atrasada": true,
+       "metaEntregavel": "Relatório no painel do setor",
+       "reuniao": "MANREU01"
+      },
+      {
+       "id": "MANP03",
+       "descricao": "Conferir o estoque de indicadores biológicos",
+       "responsavel": "Tiago Meireles",
+       "coResponsavel": null,
+       "prazo": "2026-10-29",
+       "situacao": "concluida",
+       "atrasada": false,
+       "metaEntregavel": "Planilha de conferência assinada",
+       "reuniao": "MANREU01"
+      },
+      {
+       "id": "MANP06",
+       "descricao": "Revisar o contrato de manutenção das autoclaves",
+       "responsavel": "Otávio Serra",
+       "coResponsavel": null,
+       "prazo": "2026-11-04",
+       "situacao": "atrasada",
+       "atrasada": true,
+       "metaEntregavel": "Contrato revisado com o setor de compras",
+       "reuniao": "MANREU01"
+      },
+      {
+       "id": "MANP02",
+       "descricao": "Atualizar a escala de plantão da UTI",
+       "responsavel": "Luciana Braga",
+       "coResponsavel": null,
+       "prazo": "2026-11-07",
+       "situacao": "em_progresso",
+       "atrasada": false,
+       "metaEntregavel": "Escala publicada no mural",
+       "reuniao": "MANREU01"
+      },
+      {
+       "id": "MANP01",
+       "descricao": "Revisar o fluxo de esterilização do instrumental cirúrgico",
+       "responsavel": "Otávio Serra",
+       "coResponsavel": null,
+       "prazo": "2026-11-11",
+       "situacao": "atrasada",
+       "atrasada": true,
+       "metaEntregavel": "Fluxo revisado e afixado no setor",
+       "reuniao": "MANREU01"
+      },
+      {
+       "id": "MANP07",
+       "descricao": "Comprar carrinho de emergência para a Farmácia",
+       "responsavel": "Tiago Meireles",
+       "coResponsavel": null,
+       "prazo": "2026-11-16",
+       "situacao": "cancelada",
+       "atrasada": false,
+       "metaEntregavel": "Carrinho recebido e conferido",
+       "reuniao": "MANREU01"
+      },
+      {
+       "id": "MANP05",
+       "descricao": "Treinar a equipe no novo formulário de rastreabilidade",
+       "responsavel": "Luciana Braga",
+       "coResponsavel": null,
+       "prazo": null,
+       "situacao": "repactuada",
+       "atrasada": false,
+       "metaEntregavel": "Lista de presença do treinamento",
+       "reuniao": "MANREU01"
+      }
+     ],
+     "totalDePendencias": 7,
+     "pendenciasCortadas": false
+    }
+   ]
+  },
+  "isError": false
+ }
+}
