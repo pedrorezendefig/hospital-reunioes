@@ -43,7 +43,7 @@ from app.config import settings  # noqa: E402
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
-from app.services import github_client  # noqa: E402
+from app.services import email_service, github_client  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_ANALISE,
     ETAPA_EM_DESENVOLVIMENTO,
@@ -1131,6 +1131,10 @@ def _montar(
         monkeypatch.setattr(github_client, "ler_issue", gh.ler_issue)
         monkeypatch.setattr(github_client, "ler_sub_issues", gh.ler_sub_issues)
         monkeypatch.setattr(github_client, "criar_issue", gh.criar_issue)
+        # O "Criar o card" manda email ao Responsavel (issue #1635): o envio fica
+        # no modo mock, e o SMTP do `.env` desta maquina nao entra na conversa.
+        monkeypatch.setattr(email_service, "_resend_configurado", lambda: False)
+        monkeypatch.setattr(email_service, "_smtp_configurado", lambda: False)
 
     async def _usuario() -> dict[str, Any]:
         return {"id": logado["auth_user_id"], "email": logado["email"], "metadata": {}}

@@ -1767,6 +1767,17 @@ def _corpo_do_prd(supabase: Client, *, demanda: dict, atual: dict, titulo: str) 
     )
 
 
+AVISO_DO_EMAIL_DO_CARD_FALHOU = "O email de um card novo não saiu"
+
+
+def _mandar_o_email_do_card(supabase: Client, demanda: dict, *, resumo: dict | None) -> None:
+    """O email ao Responsavel do card que acabou de nascer (issue #1635). O que
+    nao sai (falha do envio, Responsavel sem email, card sem Responsavel) vai
+    para o sino de cada Desenvolvedor, como a falha do envio; o card fica."""
+    if not tecnologia_email.enviar_card_novo(supabase, demanda=demanda, resumo=resumo):
+        _avisar_os_desenvolvedores(supabase, demanda, titulo=AVISO_DO_EMAIL_DO_CARD_FALHOU)
+
+
 def _enviar_o_card(
     supabase: Client,
     *,
@@ -1791,7 +1802,7 @@ def _enviar_o_card(
         # A melhoria (issue #1383): o PRD do diretor, que nasce na triagem
         # (`needs-triage` e `type:feature`) porque ainda passa pelo
         # `/to-issues`, atribuido ao Responsavel.
-        _enviar(
+        vinculada = _enviar(
             supabase,
             demanda=demanda,
             ator=ator,
@@ -1800,6 +1811,7 @@ def _enviar_o_card(
             labels=[*labels_da_issue_nova(chat_tecnologia.TIPO_DA_CLASSIFICACAO["melhoria"]), LABEL_ORIGEM_DIRETOR],
             responsavel_id=responsavel_id,
         )
+        _mandar_o_email_do_card(supabase, vinculada, resumo=resumo)
         linha = planejamento_demanda.marcar_enviado(supabase, demanda_id, agora=_agora())
         return _chat_para_a_tela(
             supabase, demanda_id, linha or {**atual, "estado": planejamento_demanda.ESTADO_ENVIADO}
@@ -1820,7 +1832,7 @@ def _enviar_o_card(
             documentos=documentos,
         )
 
-    _enviar(
+    vinculada = _enviar(
         supabase,
         demanda=demanda,
         ator=ator,
@@ -1829,6 +1841,7 @@ def _enviar_o_card(
         labels=[*LABELS_DO_BUG, LABEL_ORIGEM_DIRETOR],
         responsavel_id=responsavel_id,
     )
+    _mandar_o_email_do_card(supabase, vinculada, resumo=resumo)
     linha = planejamento_demanda.marcar_enviado(supabase, demanda_id, agora=_agora())
     return _chat_para_a_tela(supabase, demanda_id, linha or {**atual, "estado": planejamento_demanda.ESTADO_ENVIADO})
 

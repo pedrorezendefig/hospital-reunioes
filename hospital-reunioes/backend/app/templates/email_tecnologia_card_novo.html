@@ -1,0 +1,54 @@
+{% extends "email_base.html" %}
+
+{% block title %}Card novo do diretor: {{ titulo }} - Hospital São Matheus{% endblock %}
+
+{% block header_subtitle %}Tecnologia{% endblock %}
+
+{% block body %}
+  <p style="color:#475569;font-size:15px;margin:0 0 16px;">
+    Olá, <strong style="color:#1e293b;">{{ destinatario_nome }}</strong>!
+  </p>
+
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
+    O diretor criou um card na aba Tecnologia, e você cuida dele.
+  </p>
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+    <tr>
+      <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px 24px;">
+        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 6px;">
+          Pedido
+        </p>
+        <p style="font-size:15px;font-weight:600;color:#1e293b;line-height:1.5;margin:0;">
+          {{ titulo }}
+        </p>
+        {% for rotulo, texto in partes %}
+        <p style="color:#475569;font-size:14px;line-height:1.6;margin:12px 0 0;">
+          <strong style="color:#1e293b;">{{ rotulo }}:</strong> {{ texto }}
+        </p>
+        {% endfor %}
+      </td>
+    </tr>
+  </table>
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
+    <tr>
+      <td align="center">
+        <a href="{{ vitta_os }}"
+           style="display:inline-block;background:linear-gradient(135deg,#2B2E7E,#2558A0);color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:13px 36px;border-radius:10px;">
+          Abrir a sessão no Vitta OS
+        </a>
+      </td>
+    </tr>
+  </table>
+
+  <p style="color:#94a3b8;font-size:12px;line-height:1.6;margin:0 0 20px;text-align:center;">
+    {{ aviso_do_vitta_os }}
+  </p>
+
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0;text-align:center;">
+    <a href="{{ issue }}" style="color:#2558A0;">Issue no GitHub</a>
+    &nbsp;·&nbsp;
+    <a href="{{ demanda }}" style="color:#2558A0;">Demanda no app</a>
+  </p>
+{% endblock %}
