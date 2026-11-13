@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-12T23:46:52-03:00",
+      "sha": "d04e6b3c96a56ec3a473ace6ec827aaa3dffa32c",
+      "app_version": "0.267.0",
+      "subject": "Onda hsm-quadro-onda1: Botão Copiar link no Documento do card",
+      "raw_subject": "chore(deploy): registro da onda hsm-quadro-onda1 (#1660)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1584
+      ],
+      "result": "healthy",
+      "duration_seconds": 332,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-quadro-onda1: PR #1660 (issue #1588), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 17,
+          "frontend": 176
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-12T23:41:25-03:00",
       "sha": "d57fd9ffae69dd98a08b2424d855f1dfb52a7eef",
       "app_version": "0.266.0",
