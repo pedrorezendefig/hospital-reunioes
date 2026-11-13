@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T02:53+0000 -->
+<!-- last_update: 2026-11-13T04:28+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -287,6 +287,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/movimentos` | A linha do tempo do caso: a trilha imutável lida, enfim (issue #485). | ✅ |
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/notificacoes` | Toda notificação que o caso já gerou, da mais recente para a mais antiga. | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/notificacoes/{notificacao_id}/reenviar` | Manda a mesma notificação de novo, quando o setor diz que não recebeu. | ✅ |
+| POST | `/ouvidoria/manifestacoes/{manifestacao_id}/nsp` | O botão Enviar ao NSP do Dossiê, sempre disponível (ADR 0088, decisão 4). | ✅ |
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/prorrogacoes` | O pedido de prorrogação do caso, quando existe. É uma lista de zero ou | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/prorrogacoes/{prorrogacao_id}/decidir` | O ouvidor aprova ou nega o pedido da área (PRD #318, história 3). | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/reaberturas` | Devolve à área um caso encerrado que o manifestante voltou a cobrar. | ✅ |
@@ -300,6 +301,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/ouvidoria/nota-externa` | A última nota de cada fonte, com a escala junto do número. | ✅ |
 | POST | `/ouvidoria/nota-externa` | Registra a nota atual do Reclame Aqui (PRD #319, história 10). O Google é 422 (issue #1619). | ✅ |
 | GET | `/ouvidoria/novidades` | O total de casos com novidade, para o distintivo do menu (issue #487, | ✅ |
+| GET | `/ouvidoria/nucleo` | O setor do Núcleo na configuração da Ouvidoria, "" quando ninguém o | ✅ |
+| PUT | `/ouvidoria/nucleo` | O ouvidor escolhe qual setor é o Núcleo (ADR 0088, decisão 3). O setor | ✅ |
 | GET | `/ouvidoria/pontos` | Os cartazes, com o QR já embutido. | ✅ |
 | POST | `/ouvidoria/pontos` | Cria o cartaz e devolve o código sorteado. | ✅ |
 | PATCH | `/ouvidoria/pontos/{ponto_id}` | Renomeia o cartaz, aposenta ou traz de volta. | ✅ |
@@ -330,6 +333,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
 | POST | `/ouvidoria-setor/elogio/{token}/recebido` | O responsável do setor confirma que o elogio chegou à equipe, sem senha. | ❌ |
+| GET | `/ouvidoria-setor/nsp/{token}` | A tela que o link do email do Núcleo abre, sem senha (ADR 0088, | ❌ |
+| POST | `/ouvidoria-setor/nsp/{token}/recebido` | O botão Recebido pelo NSP, sem senha e uma vez só (ADR 0088, decisão 4). | ❌ |
 | GET | `/ouvidoria-setor/{token}` | O que o titular vê ao abrir o link do email: extrato, prazo e se o caso | ❌ |
 | POST | `/ouvidoria-setor/{token}/devolver` | A Devolução à Ouvidoria: este caso não é do meu setor (issue #600). | ❌ |
 | POST | `/ouvidoria-setor/{token}/prorrogacao` | O pedido de mais prazo, feito pelo próprio link do email (issue #333). | ❌ |
@@ -538,4 +543,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 307 endpoints em 45 routers · 94% exigem auth.
+**Totais:** 312 endpoints em 45 routers · 93% exigem auth.

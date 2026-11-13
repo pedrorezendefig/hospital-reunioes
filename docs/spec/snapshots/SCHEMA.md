@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-12T23:43+0000 -->
+<!-- last_update: 2026-11-13T04:28+0000 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -967,13 +967,14 @@ erDiagram
         TEXT tipo
         TEXT motivo_ciencia
         TEXT status
-        _ mais_colunas "+8"
+        _ mais_colunas "+9"
     }
     ouvidoria_config {
         BOOLEAN id PK
         TEXT google_place_id
         TEXT google_review_url
         TIMESTAMPTZ atualizada_em
+        TEXT nsp_setor
     }
 ```
 
@@ -1129,6 +1130,7 @@ erDiagram
 | `ouvidoria_acionamentos` | `idx_ouvidoria_acionamentos_token` | `token_hash` | `136_ouvidoria_acionamento_de_ciencia.sql` |
 | `ouvidoria_acionamentos` | `idx_ouvidoria_acionamentos_caso` | `manifestacao_id, criado_em` | `136_ouvidoria_acionamento_de_ciencia.sql` |
 | `ouvidoria_acionamentos` | `idx_ouvidoria_acionamentos_pendentes` | `enviado_em` | `136_ouvidoria_acionamento_de_ciencia.sql` |
+| `ouvidoria_acionamentos` | `idx_ouvidoria_acionamentos_um_nucleo_por_caso` | `manifestacao_id` | `139_ouvidoria_envio_ao_nucleo.sql` |
 
 ---
 **Resumo:** 89 tabelas · 130 relacionamentos FK detectados.

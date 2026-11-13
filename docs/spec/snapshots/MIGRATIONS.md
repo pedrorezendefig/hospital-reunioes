@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T02:53+0000 -->
+<!-- last_update: 2026-11-13T04:28+0000 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -138,6 +138,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 136 | `136_ouvidoria_acionamento_de_ciencia.sql` | o registro de acionamento e o elogio como ciencia | 1 | 0 | 3 | 0 |
 | 137 | `137_ouvidoria_nota_do_google_automatica.sql` | nota do Google buscada toda semana (issue #1619, PRD #1527, ADR 0089) | 1 | 1 | 0 | 0 |
 | 138 | `138_ouvidoria_manifestacao_guiada.sql` | a Manifestacao guiada em cinco passos | 0 | 1 | 0 | 0 |
+| 139 | `139_ouvidoria_envio_ao_nucleo.sql` | o envio ao Nucleo de Seguranca do Paciente | 0 | 3 | 1 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 132 migrations.
+**Total:** 133 migrations.
