@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T04:15:15-03:00",
+      "sha": "95535013850d8f7bb59ba8ecf8298e2b71251455",
+      "app_version": "0.278.0",
+      "subject": "Onda hsm-qr-onda4: Aba Avaliações com números, conversão em caso e arquivo da revisão; Salvaguarda da resposta no caso com selo do Núcleo",
+      "raw_subject": "chore(deploy): registro da onda hsm-qr-onda4 (#1683 #1682)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1527
+      ],
+      "result": "healthy",
+      "duration_seconds": 1148,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "144_ouvidoria_motivo_do_arquivo_da_revisao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-qr-onda4: PR #1683 (issue #1626), PR #1682 (issue #1627), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 6,
+        "build_s": {
+          "backend": 176,
+          "frontend": 161
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T04:06:20-03:00",
       "sha": "de14e6da40a0c764ffa76aa05a7cc5e4cc435911",
       "app_version": "0.277.1",
