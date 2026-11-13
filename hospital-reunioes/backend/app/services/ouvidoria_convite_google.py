@@ -16,14 +16,15 @@ from __future__ import annotations
 import datetime as dt
 import logging
 
+from app.services import ouvidoria_pontos
 from app.services.ouvidoria_avaliacoes import NOTA_QUE_PERGUNTA_RETORNO
 from app.services.ouvidoria_avaliacoes import TABELA as TABELA_AVALIACOES
+from app.services.paginacao import ler_tudo
 
 logger = logging.getLogger(__name__)
 
 TABELA_CONFIG = "ouvidoria_config"
 TABELA_AUDITORIA = "ouvidoria_convite_google_auditoria"
-TABELA_PONTOS = "ouvidoria_pontos"
 
 # O prazo do teste (seção 4.9 da especificação da Diretoria). Passado, a
 # Central lembra de reavaliar; o convite não se desliga sozinho.
@@ -119,9 +120,80 @@ def mudar_chave_do_ponto(supabase, ponto: dict, ligado: bool, me: dict) -> bool:
     anterior = bool(ponto.get("google_teste_ativo"))
     if anterior == ligado:
         return ligado
-    supabase.table(TABELA_PONTOS).update({"google_teste_ativo": ligado}).eq("id", ponto["id"]).execute()
+    supabase.table(ouvidoria_pontos.TABELA).update({"google_teste_ativo": ligado}).eq("id", ponto["id"]).execute()
     _auditar(supabase, me, "ponto", ponto["id"], anterior, ligado)
     return ligado
+
+
+def _instante(valor) -> dt.datetime:
+    return valor if isinstance(valor, dt.datetime) else dt.datetime.fromisoformat(str(valor))
+
+
+def _taxa(convites: int, cliques: int) -> float | None:
+    return round(cliques / convites, 4) if convites else None
+
+
+def numeros_do_teste(supabase, inicio: dt.date, fim: dt.date, hoje: dt.date, fuso: dt.tzinfo) -> dict:
+    """O que a Central mostra do teste (ADR 0089, decisão 7): o estado da chave
+    geral, há quantos dias está ligada, o aviso de reavaliar passados os 60
+    dias e, por cartaz, os convites exibidos, os cliques e a taxa de clique
+    entre `inicio` e `fim` (dias inteiros no fuso do hospital).
+
+    Entram os cartazes com a chave ligada e os que mostraram convite no
+    período, mesmo que a chave já tenha sido desligada."""
+    config = ler_config(supabase)
+    dias_ligado = None
+    if config["global"] and config["ligado_em"]:
+        dias_ligado = (hoje - _instante(config["ligado_em"]).astimezone(fuso).date()).days
+
+    comeco = dt.datetime.combine(inicio, dt.time.min, tzinfo=fuso)
+    depois_do_fim = dt.datetime.combine(fim + dt.timedelta(days=1), dt.time.min, tzinfo=fuso)
+    exibidos = ler_tudo(
+        lambda: (
+            supabase.table(TABELA_AVALIACOES)
+            .select("id, ponto_id, criada_em, convite_google_clicado")
+            .eq("convite_google_exibido", True)
+            .gte("criada_em", comeco.astimezone(dt.UTC).isoformat())
+            .order("criada_em")
+            .order("id")
+        ),
+        rotulo="convites ao Google",
+    )
+    contagem: dict[str, list[int]] = {}
+    for linha in exibidos:
+        if _instante(linha["criada_em"]) >= depois_do_fim:
+            continue
+        conta = contagem.setdefault(linha.get("ponto_id"), [0, 0])
+        conta[0] += 1
+        conta[1] += 1 if linha.get("convite_google_clicado") else 0
+
+    pontos = []
+    for ponto in ouvidoria_pontos.listar(supabase):
+        convites, cliques = contagem.get(ponto["id"], [0, 0])
+        if not ponto.get("google_teste_ativo") and not convites:
+            continue
+        pontos.append(
+            {
+                "ponto_id": ponto["id"],
+                "nome": ouvidoria_pontos.nome_exibido(ponto),
+                "ligado": bool(ponto.get("google_teste_ativo")),
+                "convites": convites,
+                "cliques": cliques,
+                "taxa": _taxa(convites, cliques),
+            }
+        )
+    total_convites = sum(c for c, _ in contagem.values())
+    total_cliques = sum(c for _, c in contagem.values())
+    return {
+        "ligado": config["global"],
+        "ligado_em": config["ligado_em"] if config["global"] else None,
+        "dias_ligado": dias_ligado,
+        "dias_do_teste": DIAS_DO_TESTE,
+        "reavaliar": dias_ligado is not None and dias_ligado >= DIAS_DO_TESTE,
+        "intervalo": {"inicio": inicio.isoformat(), "fim": fim.isoformat()},
+        "pontos": pontos,
+        "total": {"convites": total_convites, "cliques": total_cliques, "taxa": _taxa(total_convites, total_cliques)},
+    }
 
 
 def link_de_avaliacao(supabase) -> str | None:

@@ -11,6 +11,7 @@ Os testes sobem as rotas reais com um banco falso em memória.
 
 from __future__ import annotations
 
+import datetime as dt
 import os
 import sys
 
@@ -74,6 +75,7 @@ class _Tabela:
         self._insert: dict | None = None
         self._update: dict | None = None
         self._ordem: tuple[str, bool] | None = None
+        self._recorte: tuple[int, int] | None = None
 
     def select(self, colunas: str = "*", *_a, **_k):
         if colunas != "*":
@@ -110,7 +112,8 @@ class _Tabela:
     def limit(self, _n):
         return self
 
-    def range(self, *_a):
+    def range(self, inicio, fim):
+        self._recorte = (inicio, fim)
         return self
 
     def execute(self):
@@ -132,6 +135,8 @@ class _Tabela:
         if self._ordem:
             col, desc = self._ordem
             casadas = sorted(casadas, key=lambda r: str(r.get(col) or ""), reverse=desc)
+        if self._recorte:
+            casadas = casadas[self._recorte[0] : self._recorte[1] + 1]
         dados = [({c: r.get(c) for c in self._colunas} if self._colunas else dict(r)) for r in casadas]
         return type("R", (), {"data": dados})()
 
@@ -423,3 +428,119 @@ class TestSoADiretoriaLigaEDesliga:
         assert r.status_code == 200, r.text
         assert r.json()["convite_google"] == {"global": True, "ligado_em": "2026-09-01T12:00:00+00:00"}
         assert r.json()["pontos"][0]["google_teste_ativo"] is True
+
+
+HOJE = dt.date(2026, 11, 13)
+
+
+def _avaliacao(ponto: str, criada_em: str, *, clicou: bool = False, convite: bool = True) -> dict:
+    return {
+        "id": f"av-{ponto}-{criada_em}-{clicou}",
+        "ponto_id": f"ponto-{ponto}",
+        "canal": "qr",
+        "nota": 5,
+        "criada_em": criada_em,
+        "convite_google_exibido": convite,
+        "convite_google_clicado": clicou,
+    }
+
+
+class _BancoDaCentral(_Banco):
+    """O gate da Central lê `participantes`; os números, as tabelas da Ouvidoria."""
+
+    def __init__(self, **kwargs):
+        from central_de_comando_apoio import FACILITADOR, SECRETARIA, SUPER_ADMIN, SupabaseDosParticipantes
+
+        super().__init__(**kwargs)
+        self._gate = SupabaseDosParticipantes([SUPER_ADMIN, SECRETARIA, FACILITADOR])
+
+    def table(self, nome: str):
+        return self._gate.table(nome) if nome == "participantes" else super().table(nome)
+
+
+def _lente(monkeypatch, banco: _Banco, periodo: str = "28d") -> dict:
+    from central_de_comando_apoio import PREFIXO_DA_CENTRAL, SUPER_ADMIN, cliente_da_central
+
+    from app.services.central_de_comando import periodo as periodo_da_central
+
+    monkeypatch.setattr(periodo_da_central, "hoje_utc", lambda *_a: HOJE)
+    cliente = cliente_da_central(SUPER_ADMIN)
+    cliente.app.dependency_overrides[get_supabase_client] = lambda: banco
+    r = cliente.get(f"{PREFIXO_DA_CENTRAL}/objetivos/google-reputacao", params={"periodo": periodo})
+    assert r.status_code == 200, r.text
+    return r.json()["convite"]
+
+
+@pytest.mark.usefixtures("gate_e_limitador_zerados")
+class TestACentralMedeOTeste:
+    """CA: a Central mostra convites, cliques e taxa por ponto e o aviso depois
+    de 60 dias, e o convite continua aparecendo."""
+
+    def test_convites_cliques_e_taxa_por_ponto_no_periodo(self, monkeypatch):
+        banco = _BancoDaCentral(
+            pontos=[_ponto(CODIGO, convite=True), _ponto(OUTRO, convite=True, nome="Centro médico")],
+            global_ligado=True,
+            ligado_em="2026-10-20T12:00:00+00:00",
+        )
+        banco.tabelas["ouvidoria_avaliacoes"] = [
+            _avaliacao(CODIGO, "2026-11-01T13:00:00+00:00", clicou=True),
+            _avaliacao(CODIGO, "2026-11-05T13:00:00+00:00"),
+            _avaliacao(CODIGO, "2026-11-06T13:00:00+00:00"),
+            _avaliacao(CODIGO, "2026-11-07T13:00:00+00:00", clicou=True),
+            _avaliacao(OUTRO, "2026-11-08T13:00:00+00:00"),
+            # Fora do período de 28 dias (16/10 a 12/11): antes e hoje.
+            _avaliacao(CODIGO, "2026-10-10T13:00:00+00:00", clicou=True),
+            _avaliacao(CODIGO, "2026-11-13T13:00:00+00:00", clicou=True),
+            # A nota que não viu o convite não entra na conta.
+            _avaliacao(OUTRO, "2026-11-08T14:00:00+00:00", convite=False),
+        ]
+
+        convite = _lente(monkeypatch, banco)
+
+        assert convite["ligado"] is True
+        assert convite["intervalo"] == {"inicio": "2026-10-16", "fim": "2026-11-12"}
+        por_nome = {p["nome"]: p for p in convite["pontos"]}
+        assert por_nome["Emergência adulta"]["convites"] == 4
+        assert por_nome["Emergência adulta"]["cliques"] == 2
+        assert por_nome["Emergência adulta"]["taxa"] == 0.5
+        assert por_nome["Centro médico"]["convites"] == 1
+        assert por_nome["Centro médico"]["cliques"] == 0
+        assert por_nome["Centro médico"]["taxa"] == 0.0
+        assert convite["total"] == {"convites": 5, "cliques": 2, "taxa": 0.4}
+
+    def test_antes_dos_60_dias_nao_avisa(self, monkeypatch):
+        banco = _BancoDaCentral(global_ligado=True, ligado_em="2026-10-20T12:00:00+00:00")
+
+        convite = _lente(monkeypatch, banco)
+
+        assert convite["dias_ligado"] == 24
+        assert convite["reavaliar"] is False
+
+    def test_depois_de_60_dias_avisa_e_o_convite_continua_aparecendo(self, monkeypatch):
+        ligado_em = "2026-09-01T12:00:00+00:00"
+        banco = _BancoDaCentral(pontos=[_ponto(CODIGO, convite=True)], global_ligado=True, ligado_em=ligado_em)
+
+        convite = _lente(monkeypatch, banco)
+
+        assert convite["dias_ligado"] == 73
+        assert convite["reavaliar"] is True
+        # O teste não se desliga sozinho (ADR 0089, decisão 7).
+        r = _avaliar(_publico(banco), 5)
+        assert r.json()["convite_google"] is True
+
+    def test_desligado_nao_avisa_nem_conta_dias(self, monkeypatch):
+        banco = _BancoDaCentral(global_ligado=False, ligado_em="2026-09-01T12:00:00+00:00")
+
+        convite = _lente(monkeypatch, banco)
+
+        assert convite["ligado"] is False
+        assert convite["reavaliar"] is False
+        assert convite["dias_ligado"] is None
+
+    def test_ponto_sem_convite_no_periodo_fica_sem_taxa(self, monkeypatch):
+        banco = _BancoDaCentral(pontos=[_ponto(CODIGO, convite=True)], global_ligado=True)
+
+        convite = _lente(monkeypatch, banco, "7d")
+
+        assert convite["intervalo"] == {"inicio": "2026-11-06", "fim": "2026-11-12"}
+        assert convite["total"] == {"convites": 0, "cliques": 0, "taxa": None}
