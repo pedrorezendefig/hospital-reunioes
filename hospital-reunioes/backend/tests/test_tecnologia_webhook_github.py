@@ -305,6 +305,8 @@ def _demanda(did: str, **campos) -> dict:
         "concluida_por": None,
         "cancelada_em": None,
         "cancelada_por": None,
+        # O default da migration 145 (issue #1713): a Demanda de hoje e do Hospital.
+        "projeto": "hospital",
         "github_issue_numero": None,
         "etapa": ETAPA_EM_ANALISE,
         "partes_entregues": None,
@@ -329,7 +331,7 @@ class _GithubFalso:
         self.erro = erro
         self.leituras: list[int] = []
 
-    def ler_issue(self, numero: int) -> dict:
+    def ler_issue(self, numero: int, *, projeto: str = "hospital") -> dict:
         self.leituras.append(numero)
         if self.erro is not None:
             raise self.erro
@@ -337,7 +339,7 @@ class _GithubFalso:
             raise github_client.IssueNaoEncontradaError(str(numero))
         return self.issues[numero]
 
-    def ler_sub_issues(self, numero: int) -> list[dict]:
+    def ler_sub_issues(self, numero: int, *, projeto: str = "hospital") -> list[dict]:
         return self.sub_issues.get(numero, [])
 
 
