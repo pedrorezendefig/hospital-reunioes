@@ -22,6 +22,7 @@ from test_tecnologia_chat import _cenario  # noqa: E402
 from test_tecnologia_vinculo import BASE, DIRETOR, PEDRO, _demanda, _pessoa  # noqa: E402
 
 from app.limiter import limiter  # noqa: E402
+from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
 from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 from app.services.tecnologia_entregas import ritmo, tamanho_da_entrega  # noqa: E402
 
@@ -131,6 +132,8 @@ def _demandas() -> list[dict]:
 
 @pytest.fixture
 def entregas(monkeypatch):
+    monkeypatch.setattr(tecnologia_router, "agora_utc", lambda: AGORA)
+
     def pedir(logado: dict, consulta: str = ""):
         client, _, _ = _cenario(
             monkeypatch,
@@ -146,10 +149,6 @@ def entregas(monkeypatch):
 def _corpo(resposta) -> dict:
     assert resposta.status_code == 200, resposta.text
     return resposta.json()
-
-
-def _periodos(resposta) -> list[tuple[str, int]]:
-    return [(p["inicio"], p["total"]) for p in _corpo(resposta)["periodos"]]
 
 
 def _ids(resposta) -> list[str]:
@@ -298,26 +297,44 @@ class TestRitmo:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 1. A contagem por semana e por mes
+# 1. O ritmo pela rota: o topo e as 12 semanas
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class TestContagem:
-    def test_a_semana_comeca_na_segunda_e_conta_pelo_dia_do_hospital(self, entregas):
-        assert _periodos(entregas(PEDRO, "agrupar=semana")) == [
-            ("2026-11-02", 2),
-            ("2026-10-26", 2),
-            ("2026-10-12", 1),
-        ]
+def _topo(resposta) -> tuple[int, int]:
+    """As entregas das 4 semanas do topo e das 4 anteriores."""
+    entregas = _corpo(resposta)["topo"]["entregas"]
+    return entregas["total"], entregas["anteriores"]
 
-    def test_o_mes_conta_pelo_dia_do_hospital(self, entregas):
-        assert _periodos(entregas(PEDRO, "agrupar=mes")) == [("2026-11-01", 3), ("2026-10-01", 2)]
 
-    def test_sem_agrupar_a_contagem_e_por_semana(self, entregas):
+def _titulos_da_semana(resposta, inicio: str) -> list[str]:
+    [semana] = [s for s in _corpo(resposta)["semanas"] if s["inicio"] == inicio]
+    return [e["titulo"] for e in semana["entregas"]]
+
+
+class TestRitmoPelaRota:
+    def test_a_rota_devolve_o_topo_e_as_12_semanas(self, entregas):
+        """Com o relogio na sexta 13/11: o bug e o aviso fecharam na semana de
+        02/11, o domingo e o terceiro na de 26/10 (pelo dia do hospital), e o
+        painel da outra diretora na de 12/10, que ja e das 4 anteriores."""
         corpo = _corpo(entregas(PEDRO))
 
-        assert corpo["agrupar"] == "semana"
-        assert corpo["periodos"][0] == {"inicio": "2026-11-02", "total": 2}
+        assert corpo["topo"]["entregas"] == {"total": 4, "anteriores": 1, "g": 0, "m": 0, "p": 4}
+        assert [s["inicio"] for s in corpo["semanas"]][::11] == ["2026-08-24", "2026-11-09"]
+        assert len(corpo["semanas"]) == 12
+        assert _titulos_da_semana(entregas(PEDRO), "2026-11-02") == [
+            "Aviso quando a ata sair",
+            "Botao de responder sumiu",
+        ]
+        assert "agrupar" not in corpo and "periodos" not in corpo
+
+    def test_o_diretor_conta_as_dele_e_as_da_vitta(self, entregas):
+        """A mesma regra da lista do chat (`pode_ver`): o pedido de outra
+        diretora nao entra, nem no topo."""
+        resposta = entregas(DIRETOR)
+
+        assert _topo(resposta) == (4, 0)
+        assert "e-outra-diretora" not in _ids(resposta)
 
     def test_a_lista_vem_da_entrega_mais_recente_para_a_mais_antiga(self, entregas):
         assert _ids(entregas(PEDRO)) == [
@@ -328,40 +345,45 @@ class TestContagem:
             "e-outra-diretora",
         ]
 
-    def test_o_diretor_conta_as_dele_e_as_da_vitta(self, entregas):
-        """A mesma regra da lista do chat (`pode_ver`): o pedido de outra
-        diretora nao entra, nem na contagem."""
-        resposta = entregas(DIRETOR, "agrupar=mes")
-
-        assert _periodos(resposta) == [("2026-11-01", 3), ("2026-10-01", 1)]
-        assert "e-outra-diretora" not in _ids(resposta)
-
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 2. Os filtros combinam
+# 2. Os filtros valem para o topo, as semanas e a lista
 # ═══════════════════════════════════════════════════════════════════════════
 
 
 class TestFiltros:
     @pytest.mark.parametrize(
-        ("consulta", "esperado"),
+        ("consulta", "topo", "semana_02_11", "lista"),
         [
-            ("de=2026-10-31&ate=2026-11-03", ["e-bug-diretor", "e-domingo", "e-vitta-terceiro"]),
-            ("de=2026-11-01", ["e-vitta-rib", "e-bug-diretor", "e-domingo"]),
-            ("ate=2026-10-31", ["e-vitta-terceiro", "e-outra-diretora"]),
-            ("tipo=bug", ["e-bug-diretor", "e-vitta-terceiro"]),
-            ("tipo=melhoria&origem=vitta", ["e-vitta-rib"]),
-            ("origem=diretor&de=2026-11-01", ["e-bug-diretor", "e-domingo"]),
-            ("responsavel=P1&tipo=melhoria", ["e-domingo", "e-outra-diretora"]),
-            ("responsavel=terceiro-gh", ["e-vitta-terceiro"]),
-            ("responsavel=P4&origem=vitta&de=2026-11-01&tipo=melhoria", ["e-vitta-rib"]),
+            ("tipo=bug", (2, 0), ["Botao de responder sumiu"], ["e-bug-diretor", "e-vitta-terceiro"]),
+            ("origem=vitta", (2, 0), ["Aviso quando a ata sair"], ["e-vitta-rib", "e-vitta-terceiro"]),
+            (
+                "responsavel=P1",
+                (2, 1),
+                ["Botao de responder sumiu"],
+                ["e-bug-diretor", "e-domingo", "e-outra-diretora"],
+            ),
+            ("responsavel=terceiro-gh", (1, 0), [], ["e-vitta-terceiro"]),
+            ("tipo=melhoria&origem=diretor&responsavel=P1", (1, 1), [], ["e-domingo", "e-outra-diretora"]),
         ],
     )
-    def test_periodo_tipo_origem_e_responsavel_combinam(self, entregas, consulta, esperado):
-        assert _ids(entregas(PEDRO, consulta)) == esperado
+    def test_tipo_origem_e_responsavel_valem_para_tudo(self, entregas, consulta, topo, semana_02_11, lista):
+        resposta = entregas(PEDRO, consulta)
 
-    def test_a_contagem_segue_os_filtros(self, entregas):
-        assert _periodos(entregas(PEDRO, "agrupar=mes&origem=vitta")) == [("2026-11-01", 1), ("2026-10-01", 1)]
+        assert _topo(resposta) == topo
+        assert _titulos_da_semana(resposta, "2026-11-02") == semana_02_11
+        assert _ids(resposta) == lista
+
+    def test_os_filtros_valem_para_os_pedidos(self, entregas):
+        """Os pedidos nasceram todos em 01/09 (a criacao da Demanda, sem foto
+        com a data): a semana de 31/08 conta os do filtro."""
+
+        def pedidos_de_31_08(resposta) -> int:
+            [semana] = [s for s in _corpo(resposta)["semanas"] if s["inicio"] == "2026-08-31"]
+            return semana["pedidos"]
+
+        assert pedidos_de_31_08(entregas(PEDRO)) == 7
+        assert pedidos_de_31_08(entregas(PEDRO, "origem=vitta")) == 2
 
     def test_o_diretor_filtra_por_responsavel(self, entregas):
         """Nas Entregas o Responsavel e filtro de todos: e a pergunta do diretor
@@ -378,9 +400,6 @@ class TestFiltros:
             {"valor": "terceiro-gh", "nome": "terceiro-gh"},
         ]
 
-    def test_periodo_invertido_e_recusado(self, entregas):
-        assert entregas(PEDRO, "de=2026-11-05&ate=2026-11-01").status_code == 422
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 3. O que fica fora
@@ -390,17 +409,35 @@ class TestFiltros:
 class TestFicamFora:
     @pytest.mark.parametrize("did", ["x-apagado", "x-em-desenvolvimento", "x-nao-sera-feita"])
     def test_card_apagado_e_card_nao_entregue_ficam_fora_da_lista(self, entregas, did):
-        assert did not in _ids(entregas(PEDRO, "de=2026-11-03&ate=2026-11-03"))
+        assert did not in _ids(entregas(PEDRO))
 
-    def test_card_apagado_nao_conta_na_semana(self, entregas):
-        """Os tres de fora tem a data de 03/11, a mesma do bug entregue: a
-        semana de 02/11 conta so os dois entregues."""
-        assert _periodos(entregas(PEDRO, "de=2026-11-02&ate=2026-11-08")) == [("2026-11-02", 2)]
+    def test_card_apagado_e_nao_sera_feita_nao_contam_na_semana(self, entregas):
+        """O apagado e o Nao sera feita tem a data de 03/11, a mesma do bug
+        entregue: a semana de 02/11 lista so os dois entregues."""
+        assert _titulos_da_semana(entregas(PEDRO), "2026-11-02") == [
+            "Aviso quando a ata sair",
+            "Botao de responder sumiu",
+        ]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 4. A lista: datas e Responsavel
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+def _folhas(valor):
+    """Todo valor do JSON, em qualquer profundidade."""
+    if isinstance(valor, dict):
+        for filho in valor.values():
+            yield from _folhas(filho)
+    elif isinstance(valor, list):
+        for filho in valor:
+            yield from _folhas(filho)
+    else:
+        yield valor
+
+
+NUMEROS_DAS_ISSUES = set(range(901, 909))
 
 
 class TestLista:
@@ -424,12 +461,15 @@ class TestLista:
 
         assert entrega["responsavel"] == "terceiro-gh"
 
-    def test_numero_e_link_da_issue_nao_saem_para_o_diretor(self, entregas):
-        """O mesmo funil da lista do chat (ADR 0054, decisao 9)."""
-        [entrega] = _corpo(entregas(DIRETOR, "tipo=bug&origem=diretor"))["entregas"]
+    @pytest.mark.parametrize("logado", [PEDRO, DIRETOR], ids=["desenvolvedor", "diretor"])
+    def test_nenhum_numero_de_issue_sai_na_resposta(self, entregas, logado):
+        """Nem para o Desenvolvedor (PRD #1689): diretor e Desenvolvedor
+        recebem a mesma resposta. Procura em toda a resposta, e nao so nos
+        campos conhecidos: o numero e o link da issue de nenhum card aparecem."""
+        folhas = list(_folhas(_corpo(entregas(logado))))
 
-        assert entrega["issue_numero"] is None
-        assert entrega["issue_url"] is None
+        assert NUMEROS_DAS_ISSUES.isdisjoint(f for f in folhas if isinstance(f, int))
+        assert not [f for f in folhas if isinstance(f, str) and "/issues/" in f]
 
 
 # ═══════════════════════════════════════════════════════════════════════════

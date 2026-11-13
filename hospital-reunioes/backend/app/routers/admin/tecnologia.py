@@ -24,11 +24,14 @@ O chat da aba (issues #1381, #1383 e #1384):
                                                 os filtros Tipo, Etapa,
                                                 Responsavel e Envio falhou
                                                 (issue #1551).
-- GET   /admin/tecnologia/entregas              a aba Entregas: os cards
-                                                entregues por semana ou por
-                                                mes, com filtros de periodo,
+- GET   /admin/tecnologia/entregas              a aba Entregas: o ritmo
+                                                (pedidos e entregas das 4
+                                                ultimas semanas e das 12 do
+                                                grafico) e os cards
+                                                entregues, com filtros de
                                                 tipo, Origem e Responsavel.
-                                                So leitura (issue #1556).
+                                                So leitura (issues #1556 e
+                                                #1701).
 - GET   /admin/tecnologia/desenvolvedores       o "Quem cuida disto?" do
                                                 resumo (ADR 0083).
 - POST  /admin/tecnologia/chat                  o primeiro turno: a Demanda
@@ -79,7 +82,7 @@ import json
 import logging
 import os
 import unicodedata
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from typing import Literal, NoReturn
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
@@ -784,40 +787,38 @@ async def listar_as_conversas(
     return _para_a_lista(supabase, visiveis, ator=ator)
 
 
+def agora_utc() -> datetime:
+    """O relogio das Entregas: as semanas contam a partir dele. O teste o congela."""
+    return datetime.now(UTC)
+
+
 @router.get("/entregas", response_model=EntregasResponse)
 async def listar_as_entregas(
-    agrupar: Literal["semana", "mes"] = "semana",
-    de: date | None = None,
-    ate: date | None = None,
     tipo: Literal["bug", "melhoria"] | None = None,
     origem: Literal["diretor", "vitta"] | None = None,
     responsavel: str | None = None,
     ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
-    """A aba Entregas (issue #1556, ADR 0084, decisao 8): os cards entregues,
-    contados por semana ou por mes. So leitura: ninguem move nada por aqui.
+    """A aba Entregas como ritmo semanal (issue #1701, ADR 0092, decisoes 1 e 7).
+    So leitura: ninguem move nada por aqui.
 
     Entra o que quem pede ve (`pode_ver`, a regra da lista do chat), fora a
-    lapide do Apagar e o card que nao foi entregue. Os filtros combinam: o
-    periodo (`de` e `ate`, dias do hospital, inclusive) sobre a data de
-    entrega, o `tipo`, a `origem` e o `responsavel`, que aqui e de todos: o id
-    do usuario, ou o login do dono no GitHub quando ele nao e usuario do app.
-    A contagem segue os filtros; as opcoes do Responsavel, nao, para o filtro
-    ligado poder trocar.
+    lapide do Apagar. O `topo` traz pedidos e entregas das ultimas 4 semanas e
+    das 4 anteriores; as `semanas`, as ultimas 12. Embaixo, a lista dos cards
+    entregues (Nao sera feita fica de fora), como antes. Os filtros `tipo`,
+    `origem` e `responsavel` (o id do usuario, ou o login do dono no GitHub
+    quando ele nao e usuario do app) combinam e valem para os tres. As opcoes
+    do Responsavel nao seguem o filtro, para o filtro ligado poder trocar.
 
-    Sai pelo `_para_a_lista`, o mesmo funil da lista do chat: o clique abre o
-    Documento do card sem outro pedido, e numero e link seguem so para o
-    Desenvolvedor.
+    Diretor e Desenvolvedor recebem a mesma coisa: o numero e o link da issue
+    nao saem daqui para ninguem (PRD #1689). A lista sai pelo `_para_a_lista`,
+    o funil da lista do chat, para o clique abrir o Documento do card.
     """
-    if de and ate and de > ate:
-        _recusar("O inicio do periodo vem depois do fim")
     result = supabase.table(TABELA_DEMANDAS).select("*").is_("apagada_em", "null").execute()
-    entregues = [
-        (dia, d)
-        for d in (result.data or [])
-        if pode_ver(ator, d) and (dia := tecnologia_entregas.dia_da_entrega(d)) is not None
-    ]
+    visiveis = [d for d in (result.data or []) if pode_ver(ator, d)]
+    filtros = tecnologia_entregas.Filtros(tipo=tipo, origem=origem, responsavel=responsavel)
+    entregues = [(dia, d) for d in visiveis if (dia := tecnologia_entregas.dia_da_entrega(d)) is not None]
     entregues.sort(key=lambda par: par[0], reverse=True)
     nomes = _nomes(supabase, {responsavel_da_demanda(d) for _, d in entregues})
     opcoes = {
@@ -825,19 +826,10 @@ async def listar_as_entregas(
         for _, d in entregues
         if (chave := tecnologia_entregas.chave_do_responsavel(d))
     }
-    filtradas = [
-        (dia, d)
-        for dia, d in entregues
-        if (de is None or dia >= de)
-        and (ate is None or dia <= ate)
-        and (tipo is None or chat_tecnologia.CLASSIFICACAO_DO_TIPO.get(str(d.get("tipo") or "")) == tipo)
-        and (origem is None or origem_da_demanda(d) == origem)
-        and (responsavel is None or tecnologia_entregas.chave_do_responsavel(d) == responsavel)
-    ]
+    lista = _para_a_lista(supabase, [d for _, d in entregues if filtros.deixa(d)], ator=ator)
     return {
-        "agrupar": agrupar,
-        "periodos": tecnologia_entregas.contagem([dia for dia, _ in filtradas], agrupar),
-        "entregas": _para_a_lista(supabase, [d for _, d in filtradas], ator=ator),
+        **tecnologia_entregas.ritmo(visiveis, agora=agora_utc(), filtros=filtros),
+        "entregas": [{**entrega, "issue_numero": None, "issue_url": None} for entrega in lista],
         "responsaveis": [
             {"valor": valor, "nome": nome} for valor, nome in sorted(opcoes.items(), key=lambda par: par[1].casefold())
         ],
