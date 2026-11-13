@@ -88,6 +88,10 @@ ROTAS_TOKENIZADAS = [
 PARAMS_DE_SEGREDO = {"token"}
 PARAMS_SEM_SEGREDO = {
     "anexo_id",
+    # Caminho de um arquivo do Retrato da Ana dentro de `retrato/` (issue
+    # #1720), como `assets/retrato.css`. Não é credencial: a rota exige
+    # require_super_admin e só aceita a página, os assets e os dados.
+    "caminho",
     # UUID da Avaliação do QR no botão "Avaliar no Google" (issue #1625). Não é
     # credencial: a rota pública só marca o clique da nota que viu o convite e
     # redireciona ao link da configuração, e o id não abre nada da avaliação.
