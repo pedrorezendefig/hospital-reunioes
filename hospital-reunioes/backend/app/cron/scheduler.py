@@ -282,6 +282,21 @@ def escalonar_prazos_ouvidoria() -> None:
     if subidos:
         logger.info(f"[Cron] {subidos} degrau(s) de escalonamento da Ouvidoria.")
 
+    # A cobrança do Recebido do Núcleo de Segurança do Paciente (issue #1621,
+    # ADR 0088, decisão 8): a mesma escada, sobre a ciência do Núcleo, que
+    # corre em paralelo ao caso.
+    from app.services import ouvidoria_nucleo
+
+    try:
+        do_nucleo = ouvidoria_nucleo.cobrar_o_recebido(
+            supabase, datetime.now(tz=ZoneInfo("UTC")), carregar_feriados(supabase)
+        )
+    except Exception as e:
+        logger.error(f"[Cron] Erro na cobrança do Núcleo de Segurança do Paciente: {e}", exc_info=True)
+        return
+    if do_nucleo:
+        logger.info(f"[Cron] {do_nucleo} degrau(s) de cobrança do Núcleo de Segurança do Paciente.")
+
 
 def reenviar_elogios_ouvidoria() -> None:
     """Reenvia, uma vez só, o elogio que o setor não confirmou em 5 dias úteis

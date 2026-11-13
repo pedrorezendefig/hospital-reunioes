@@ -1,0 +1,37 @@
+{% extends "email_base.html" %}
+
+{# A cobranca do Recebido do Nucleo de Seguranca do Paciente (issue #1621,
+   ADR 0088, decisao 8). Vai ao gestor do setor do Nucleo e depois a Diretoria
+   Executiva. Como o email do Nucleo, nao leva nada do caso alem do protocolo:
+   nem relato, nem justificativa, nem paciente. A Diretoria recebe o endereco do
+   caso no app, que so abre com login. #}
+
+{% block header_subtitle %}Ouvidoria{% endblock %}
+
+{% block title %}Ouvidoria {{ protocolo }}: o Núcleo ainda não confirmou o recebimento - Hospital São Matheus{% endblock %}
+
+{% block body %}
+  <p style="color:#475569;font-size:15px;margin:0 0 16px;">
+    Olá, <strong style="color:#1e293b;">{{ destinatario_nome }}</strong>!
+  </p>
+
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 16px;">
+    O caso {{ protocolo }} foi enviado ao Núcleo de Segurança do Paciente, e
+    <strong>{{ responsavel }}</strong> ainda não clicou em Recebido pelo NSP. O prazo para
+    confirmar já venceu.
+  </p>
+
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 16px;">
+    Peça a {{ responsavel }} que abra o link do email do Núcleo e confirme o recebimento.
+  </p>
+
+  {% if link %}
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 16px;">
+    O caso está no aplicativo: <a href="{{ link }}" style="color:#2B2E7E;">{{ link }}</a>
+  </p>
+  {% endif %}
+
+  <p style="font-size:12px;color:#64748b;margin:0;">
+    Protocolo {{ protocolo }}
+  </p>
+{% endblock %}

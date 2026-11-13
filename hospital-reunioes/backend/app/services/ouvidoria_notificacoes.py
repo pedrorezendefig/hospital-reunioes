@@ -141,6 +141,7 @@ GATILHO_CIENCIA_NSP = "ciencia_nsp"
 # corre em paralelo ao caso, em qualquer estado.
 GATILHO_COBRANCA_NSP_GESTOR = "cobranca_nsp_gestor"
 GATILHO_COBRANCA_NSP_DIRETORIA = "cobranca_nsp_diretoria"
+GATILHOS_DO_NUCLEO = (GATILHO_CIENCIA_NSP, GATILHO_COBRANCA_NSP_GESTOR, GATILHO_COBRANCA_NSP_DIRETORIA)
 GATILHOS = (
     GATILHO_NOVA_DEMANDA,
     GATILHO_ALERTA_SEM_TITULAR,
@@ -1089,6 +1090,34 @@ def montar_ciencia_nsp(
     return (f"Ouvidoria {protocolo}: caso para o Núcleo de Segurança do Paciente", html, texto)
 
 
+def montar_cobranca_nsp(
+    manifestacao: dict, destinatario_nome: str, responsavel: str | None, para_a_diretoria: bool
+) -> tuple[str, str, str]:
+    """Assunto, HTML e texto da cobrança do Recebido do Núcleo (issue #1621,
+    ADR 0088, decisão 8). Nada do caso além do protocolo; a Diretoria recebe o
+    endereço do caso no app, que só abre com login."""
+    from app.services.email_constants import get_logo_data_uri
+
+    protocolo = manifestacao.get("protocolo") or ""
+    quem = (responsavel or "").strip() or "a presidência do Núcleo"
+    link = _link_do_caso(manifestacao) if para_a_diretoria else None
+    html = jinja_env.get_template("email_ouvidoria_cobranca_nsp.html").render(
+        destinatario_nome=destinatario_nome,
+        protocolo=protocolo,
+        responsavel=quem,
+        link=link,
+        logo_base64=get_logo_data_uri(),
+    )
+    texto = (
+        f"Ola {destinatario_nome},\n\n"
+        f"O caso {protocolo} foi enviado ao Nucleo de Seguranca do Paciente, e {quem} ainda nao clicou em "
+        "Recebido pelo NSP. O prazo para confirmar ja venceu.\n\n"
+        f"Peca a {quem} que abra o link do email do Nucleo e confirme o recebimento.\n"
+        + (f"\nO caso esta no aplicativo: {link}\n" if link else "")
+    )
+    return (f"Ouvidoria {protocolo}: o Núcleo ainda não confirmou o recebimento", html, texto)
+
+
 def montar_acuse_recebimento(protocolo: str) -> tuple[str, str, str]:
     """Assunto, HTML e texto do acuse ao manifestante (issue #493, ADR 0042).
 
@@ -1544,7 +1573,17 @@ def _montar(
     if notificacao["gatilho"] == GATILHO_CIENCIA_NSP:
         # O prazo vem da ciência, e não do caso: o Recebido do Núcleo tem
         # relógio próprio, que não é o da área. Viaja no `detalhe` da linha.
-        return montar_ciencia_nsp(manifestacao, notificacao["destinatario_nome"], link or "", notificacao.get("detalhe"))
+        return montar_ciencia_nsp(
+            manifestacao, notificacao["destinatario_nome"], link or "", notificacao.get("detalhe")
+        )
+    if notificacao["gatilho"] in (GATILHO_COBRANCA_NSP_GESTOR, GATILHO_COBRANCA_NSP_DIRETORIA):
+        # Quem devia clicar viaja no `detalhe`, congelado no degrau.
+        return montar_cobranca_nsp(
+            manifestacao,
+            notificacao["destinatario_nome"],
+            notificacao.get("detalhe"),
+            para_a_diretoria=notificacao["gatilho"] == GATILHO_COBRANCA_NSP_DIRETORIA,
+        )
     if notificacao["gatilho"] == GATILHO_PRAZO_ROMPIDO:
         return montar_prazo_rompido(manifestacao, notificacao["destinatario_nome"], agora, feriados, link=link)
     if notificacao["gatilho"] == GATILHO_NOVA_DEMANDA:
@@ -1821,10 +1860,12 @@ def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozens
                 _marcar(supabase, notificacao["id"], {"status": FALHA, "ultimo_erro": ELOGIO_JA_CONFIRMADO})
                 return False
             link = ouvidoria_acionamentos.emitir_link(supabase, ciencia)
-        if notificacao["gatilho"] == GATILHO_CIENCIA_NSP:
+        if notificacao["gatilho"] in GATILHOS_DO_NUCLEO:
             # O link do Núcleo nasce aqui, como o do elogio, e só enquanto a
             # ciência espera o Recebido: o reenvio de um caso já recebido não
-            # emite link novo para uma tela que mostra o relato integral.
+            # emite link novo para uma tela que mostra o relato integral. A
+            # cobrança segue a mesma régua: retida pela janela comercial, ela
+            # não acusa de manhã quem clicou de madrugada.
             #
             # O import do `ouvidoria_acionamentos` repete o do ramo do elogio:
             # import dentro da função torna o nome local à função inteira.
@@ -1834,7 +1875,8 @@ def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozens
             if ciencia is None or ciencia.get("status") != "pendente":
                 _marcar(supabase, notificacao["id"], {"status": FALHA, "ultimo_erro": NUCLEO_JA_RECEBEU})
                 return False
-            link = ouvidoria_acionamentos.emitir_link(supabase, ciencia)
+            if notificacao["gatilho"] == GATILHO_CIENCIA_NSP:
+                link = ouvidoria_acionamentos.emitir_link(supabase, ciencia)
         assunto, html, texto = _montar(supabase, notificacao, manifestacao, agora, feriados, link=link)
         # Endereço de gente de fora não entra no log da aplicação: ele sairia ao
         # lado do assunto, que carrega o protocolo, e o par diria a quem lê o log

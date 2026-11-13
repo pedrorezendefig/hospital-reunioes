@@ -372,3 +372,188 @@ class TestOLinkDoNucleo:
         client, _supabase = _client(monkeypatch)
 
         assert _abrir_o_link_do_nucleo(client, "x" * 43).status_code == 404
+
+
+# =====================================================================
+# 5. Recebido pelo NSP funciona sem login e uma vez só
+# =====================================================================
+
+
+def _recebido(client, token: str):
+    return client.post(f"/api/ouvidoria-setor/nsp/{token}/recebido")
+
+
+class TestRecebidoPeloNucleo:
+    def test_recebido_pelo_nsp_funciona_sem_login(self, monkeypatch, emails):
+        client, supabase = _client(monkeypatch)
+        assert _enviar_ao_nucleo(client).status_code == 200
+        client.app.dependency_overrides.pop(get_current_user)
+
+        r = _recebido(client, _token_do_nucleo(_email_do_nucleo(emails)))
+
+        assert r.status_code == 200, r.text
+        assert r.json()["protocolo"] == "2026-0007"
+        ciencia = _ciencias_do_nucleo(supabase)[0]
+        assert ciencia["status"] == "ciente"
+        assert ciencia["respondido_em"] == DENTRO_DO_EXPEDIENTE.isoformat()
+        trilha = [m["observacao"] for m in supabase.tabelas["ouvidoria_movimentos"]]
+        assert any(o.startswith("Recebido pelo NSP: Dra. Helena Presidente") for o in trilha), trilha
+
+    def test_recebido_pelo_nsp_vale_uma_vez_so(self, monkeypatch, emails):
+        client, supabase = _client(monkeypatch)
+        assert _enviar_ao_nucleo(client).status_code == 200
+        token = _token_do_nucleo(_email_do_nucleo(emails))
+
+        primeiro = _recebido(client, token)
+        segundo = _recebido(client, token)
+
+        assert primeiro.status_code == 200, primeiro.text
+        assert segundo.status_code == 410
+        assert segundo.json()["detail"] == "O Núcleo já confirmou o recebimento deste caso."
+        recebidos = [m for m in supabase.tabelas["ouvidoria_movimentos"] if "Recebido pelo NSP" in m["observacao"]]
+        assert len(recebidos) == 1
+
+    def test_o_recebido_nao_mexe_no_estado_do_caso(self, monkeypatch, emails):
+        client, supabase = _client(monkeypatch)
+        assert _enviar_ao_nucleo(client).status_code == 200
+
+        _recebido(client, _token_do_nucleo(_email_do_nucleo(emails)))
+
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["status"] == "aguardando_area"
+
+    def test_depois_do_recebido_o_link_ainda_mostra_o_caso_com_a_marca(self, monkeypatch, emails):
+        client, _supabase = _client(monkeypatch)
+        assert _enviar_ao_nucleo(client).status_code == 200
+        token = _token_do_nucleo(_email_do_nucleo(emails))
+        _recebido(client, token)
+
+        tela = _abrir_o_link_do_nucleo(client, token).json()
+
+        assert tela["recebido"] is True
+        assert tela["recebido_em"] == DENTRO_DO_EXPEDIENTE.isoformat()
+
+    def test_o_link_do_nucleo_nao_confirma_elogio(self, monkeypatch, emails):
+        """O botão do elogio devolve o caso ao ouvidor como Pronto para
+        encerrar: o token do Núcleo não pode passar por ali."""
+        client, supabase = _client(monkeypatch)
+        assert _enviar_ao_nucleo(client).status_code == 200
+
+        r = client.post(f"/api/ouvidoria-setor/elogio/{_token_do_nucleo(_email_do_nucleo(emails))}/recebido")
+
+        assert r.status_code == 404
+        assert _ciencias_do_nucleo(supabase)[0]["status"] == "pendente"
+
+
+# =====================================================================
+# 6. Sem Recebido no prazo, a cobrança sobe ao gestor e à Diretoria
+# =====================================================================
+
+# O caso médio enviado na terça 14h tem o Recebido até o fim do dia útil
+# seguinte: quarta, 17h de Brasília. A escada é a da área: +24h úteis o gestor
+# (quinta 17h), +48h úteis a Diretoria (sexta 17h). Os instantes da cobrança
+# são a manhã seguinte a cada degrau, dentro do expediente: às 17h05 o email
+# já espera a próxima abertura, pela janela comercial.
+PRAZO_DO_RECEBIDO = dt.datetime(2026, 8, 26, 20, 0, tzinfo=dt.UTC)
+DEPOIS_DO_PRAZO = dt.datetime(2026, 8, 27, 12, 0, tzinfo=dt.UTC)  # quinta, 9h
+UM_DIA_UTIL_DEPOIS = dt.datetime(2026, 8, 28, 12, 0, tzinfo=dt.UTC)  # sexta, 9h
+DOIS_DIAS_UTEIS_DEPOIS = dt.datetime(2026, 8, 31, 12, 0, tzinfo=dt.UTC)  # segunda, 9h
+
+
+def _com_a_diretoria(supabase: _SupabaseFake) -> _SupabaseFake:
+    for participante in supabase.tabelas["participantes"]:
+        if participante["id"] == "P11":
+            participante["perfil_ouvidoria"] = "diretoria_executiva"
+    return supabase
+
+
+def _cobrar(supabase, agora: dt.datetime) -> int:
+    from app.services import ouvidoria_nucleo
+
+    return ouvidoria_nucleo.cobrar_o_recebido(supabase, agora, frozenset())
+
+
+def _destinatarios(emails: list[dict]) -> list[str]:
+    return [e["destinatario"] for e in emails]
+
+
+class TestCobrancaDoRecebido:
+    def _enviado(self, monkeypatch, emails):
+        client, supabase = _client(monkeypatch, _com_a_diretoria(_banco()))
+        assert _enviar_ao_nucleo(client).status_code == 200
+        emails.clear()
+        return client, supabase
+
+    def test_o_prazo_do_recebido_e_de_um_dia_util(self, monkeypatch, emails):
+        _client_, supabase = self._enviado(monkeypatch, emails)
+
+        assert _ciencias_do_nucleo(supabase)[0]["prazo"] == PRAZO_DO_RECEBIDO.isoformat()
+
+    def test_caso_critico_tem_o_recebido_pedido_na_hora(self, monkeypatch, emails):
+        client, supabase = _client(monkeypatch, _banco(_caso(gravidade="critico")))
+        assert _enviar_ao_nucleo(client).status_code == 200
+
+        assert _ciencias_do_nucleo(supabase)[0]["prazo"] == DENTRO_DO_EXPEDIENTE.isoformat()
+
+    def test_logo_depois_do_prazo_ninguem_e_cobrado_ainda(self, monkeypatch, emails):
+        _client_, supabase = self._enviado(monkeypatch, emails)
+
+        assert _cobrar(supabase, DEPOIS_DO_PRAZO) == 0
+        assert emails == []
+
+    def test_sem_recebido_a_cobranca_sobe_ao_gestor_e_depois_a_diretoria_executiva(self, monkeypatch, emails):
+        _client_, supabase = self._enviado(monkeypatch, emails)
+
+        assert _cobrar(supabase, UM_DIA_UTIL_DEPOIS) == 1
+        assert _destinatarios(emails) == ["g@hsm.br"]
+
+        assert _cobrar(supabase, DOIS_DIAS_UTEIS_DEPOIS) == 1
+        assert _destinatarios(emails) == ["g@hsm.br", "diretor@hsm.br"]
+
+    def test_cada_degrau_sobe_uma_vez_so(self, monkeypatch, emails):
+        _client_, supabase = self._enviado(monkeypatch, emails)
+
+        _cobrar(supabase, DOIS_DIAS_UTEIS_DEPOIS)
+        _cobrar(supabase, DOIS_DIAS_UTEIS_DEPOIS)
+
+        assert sorted(_destinatarios(emails)) == ["diretor@hsm.br", "g@hsm.br"]
+
+    def test_a_cobranca_nao_leva_o_relato(self, monkeypatch, emails):
+        _client_, supabase = self._enviado(monkeypatch, emails)
+
+        _cobrar(supabase, DOIS_DIAS_UTEIS_DEPOIS)
+
+        for email in emails:
+            assert "2026-0007" in email["assunto"]
+            assert "Recebido pelo NSP" in email["texto"]
+            assert RELATO not in email["html"] and RELATO not in email["texto"]
+
+    def test_com_o_recebido_ninguem_e_cobrado(self, monkeypatch, emails):
+        client, supabase = _client(monkeypatch, _com_a_diretoria(_banco()))
+        assert _enviar_ao_nucleo(client).status_code == 200
+        assert _recebido(client, _token_do_nucleo(_email_do_nucleo(emails))).status_code == 200
+        emails.clear()
+
+        assert _cobrar(supabase, DOIS_DIAS_UTEIS_DEPOIS) == 0
+        assert emails == []
+
+    def test_setor_do_nucleo_sem_gestor_leva_o_degrau_a_diretoria(self, monkeypatch, emails):
+        supabase = _com_a_diretoria(_banco())
+        supabase.tabelas["ouvidoria_setor_responsaveis"] = [
+            r for r in supabase.tabelas["ouvidoria_setor_responsaveis"] if r["papel"] != "gestor"
+        ]
+        client, supabase = _client(monkeypatch, supabase)
+        assert _enviar_ao_nucleo(client).status_code == 200
+        emails.clear()
+
+        _cobrar(supabase, UM_DIA_UTIL_DEPOIS)
+
+        assert _destinatarios(emails) == ["diretor@hsm.br"]
+
+    def test_a_cobranca_do_nucleo_roda_sozinha_no_scheduler(self):
+        """O degrau não depende de alguém lembrar: o job do escalonamento da
+        Ouvidoria chama a cobrança do Núcleo."""
+        import inspect
+
+        from app.cron import scheduler
+
+        assert "ouvidoria_nucleo.cobrar_o_recebido" in inspect.getsource(scheduler.escalonar_prazos_ouvidoria)

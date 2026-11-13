@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+from dataclasses import dataclass
 
 from app.services import ouvidoria_acionamentos
 from app.services.ouvidoria_prazos import DIAS_UTEIS, Prazo, calcular_vencimento
@@ -231,7 +232,200 @@ def descartar(supabase, *, caso: dict, motivo: str, autor: dict, agora: dt.datet
     """O ouvidor descarta o apontamento do agente, com o motivo de uma linha.
     Fica gravado no caso e na trilha, e o Núcleo não recebe nada."""
     _gravar_decisao(supabase, caso["id"], DESCARTADO, motivo, autor, agora)
-    _registrar_na_trilha(supabase, caso, autor, f"Envio ao Núcleo de Segurança do Paciente descartado. Motivo: {motivo}")
+    _registrar_na_trilha(
+        supabase, caso, autor, f"Envio ao Núcleo de Segurança do Paciente descartado. Motivo: {motivo}"
+    )
+
+
+# =====================================================================
+# A cobrança do Recebido (ADR 0088, decisão 8)
+# =====================================================================
+
+
+@dataclass(frozen=True)
+class DegrauDoNucleo:
+    """Um degrau da cobrança do Recebido: quando dispara (o mesmo instante da
+    escada da área, `ouvidoria_prazos.gatilhos_de_escalonamento`), o carimbo
+    de vez única na linha da ciência e o que a trilha diz."""
+
+    carimbo: str
+    atributo: str
+    gatilho: str
+    observacao: str
+
+
+def _degraus():
+    from app.services import ouvidoria_notificacoes
+
+    return (
+        DegrauDoNucleo(
+            carimbo="escalonado_gestor_em",
+            atributo="mais_24h",
+            gatilho=ouvidoria_notificacoes.GATILHO_COBRANCA_NSP_GESTOR,
+            observacao="Núcleo sem o Recebido: 24 horas úteis depois do prazo, cobrança enviada ao gestor do setor.",
+        ),
+        DegrauDoNucleo(
+            carimbo="escalonado_diretoria_em",
+            atributo="mais_48h",
+            gatilho=ouvidoria_notificacoes.GATILHO_COBRANCA_NSP_DIRETORIA,
+            observacao="Núcleo sem o Recebido: 48 horas úteis depois do prazo, caso levado à Diretoria Executiva.",
+        ),
+    )
+
+
+def cobrar_o_recebido(supabase, agora: dt.datetime, feriados: frozenset[dt.date]) -> int:
+    """Sobe os degraus da cobrança da ciência do Núcleo sem o Recebido.
+    Devolve quantos degraus subiram.
+
+    A escada é a da área (ADR 0088, decisão 8): 24 horas úteis depois do prazo,
+    o gestor do setor do Núcleo (sem gestor, a Diretoria Executiva); 48 horas
+    úteis depois, a Diretoria. Corre em qualquer estado do caso, porque a
+    ciência do Núcleo é paralela a ele. Idempotente: cada degrau tem carimbo na
+    linha da ciência, gravado por update condicional antes de qualquer email."""
+    try:
+        result = (
+            supabase.table(ouvidoria_acionamentos.TABELA)
+            .select(_CAMPOS)
+            .eq("tipo", ouvidoria_acionamentos.CIENCIA)
+            .eq("motivo_ciencia", MOTIVO_NSP)
+            .eq("status", ouvidoria_acionamentos.PENDENTE)
+            .is_("escalonado_diretoria_em", "null")
+            .execute()
+        )
+    except Exception:  # noqa: BLE001
+        logger.error("[Ouvidoria] Falha ao ler as ciências do Núcleo para a cobrança")
+        return 0
+
+    subidos = 0
+    for ciencia in result.data or []:
+        gatilhos = _gatilhos(ciencia, feriados)
+        if gatilhos is None:
+            continue
+        for degrau in _degraus():
+            if ciencia.get(degrau.carimbo):
+                continue
+            if agora < getattr(gatilhos, degrau.atributo):
+                break
+            if not _subir(supabase, ciencia, degrau, agora, feriados):
+                # O degrau seguinte não pula o que não subiu.
+                break
+            subidos += 1
+    return subidos
+
+
+def _gatilhos(ciencia: dict, feriados: frozenset[dt.date]):
+    from app.services.ouvidoria_prazos import gatilhos_de_escalonamento
+
+    try:
+        return gatilhos_de_escalonamento(
+            dt.datetime.fromisoformat(str(ciencia["enviado_em"])),
+            dt.datetime.fromisoformat(str(ciencia["prazo"])),
+            feriados,
+        )
+    except (KeyError, TypeError, ValueError):
+        logger.error("[Ouvidoria] Ciência do Núcleo %s com prazo ilegível", ciencia.get("id"))
+        return None
+
+
+def _subir(supabase, ciencia: dict, degrau: DegrauDoNucleo, agora: dt.datetime, feriados) -> bool:
+    """Carimbo, notificações, trilha e entrega. Devolve se o degrau subiu; um
+    degrau que não subiu não fica carimbado e volta na rodada seguinte."""
+    from app.services import ouvidoria_notificacoes
+
+    destinatarios = _destinatarios_do_degrau(supabase, ciencia, degrau, agora)
+    if not destinatarios:
+        logger.warning("[Ouvidoria] Cobrança do Núcleo %s sem destinatário", ciencia.get("id"))
+        return False
+    try:
+        lido = (
+            supabase.table("ouvidoria_protocolos")
+            .select("id, status, gravidade")
+            .eq("id", ciencia["manifestacao_id"])
+            .limit(1)
+            .execute()
+        )
+        carimbado = (
+            supabase.table(ouvidoria_acionamentos.TABELA)
+            .update({degrau.carimbo: agora.isoformat()})
+            .eq("id", ciencia["id"])
+            .eq("status", ouvidoria_acionamentos.PENDENTE)
+            .is_(degrau.carimbo, "null")
+            .execute()
+        )
+    except Exception:  # noqa: BLE001
+        logger.error("[Ouvidoria] Falha ao carimbar a cobrança do Núcleo %s", ciencia.get("id"))
+        return False
+    if not lido.data or not carimbado.data:
+        return False
+    caso = lido.data[0]
+
+    quando = ouvidoria_notificacoes.quando_enviar(agora, caso.get("gravidade"), feriados)
+    criadas = [
+        notificacao
+        for destinatario in destinatarios
+        if (
+            notificacao := ouvidoria_notificacoes.registrar(
+                supabase,
+                manifestacao_id=ciencia["manifestacao_id"],
+                gatilho=degrau.gatilho,
+                destinatario_nome=destinatario.nome,
+                destinatario_email=destinatario.email,
+                papel_destinatario=destinatario.papel,
+                enviar_a_partir_de=quando,
+                # Quem devia clicar em Recebido, que a cobrança nomeia.
+                detalhe=ciencia.get("responsavel_nome"),
+            )
+        )
+    ]
+    if not criadas:
+        logger.error("[Ouvidoria] Nenhuma cobrança do Núcleo gravou para a ciência %s", ciencia.get("id"))
+        (
+            supabase.table(ouvidoria_acionamentos.TABELA)
+            .update({degrau.carimbo: None})
+            .eq("id", ciencia["id"])
+            .eq(degrau.carimbo, agora.isoformat())
+            .execute()
+        )
+        return False
+
+    _registrar_na_trilha(supabase, caso, {"id": None, "nome_completo": "Sistema (escalonamento)"}, degrau.observacao)
+    for notificacao in criadas:
+        ouvidoria_notificacoes.despachar_agora_se_puder(supabase, notificacao, agora, feriados)
+    return True
+
+
+def _destinatarios_do_degrau(supabase, ciencia: dict, degrau: DegrauDoNucleo, agora: dt.datetime) -> list:
+    """Quem recebe o degrau. O do gestor sai do cadastro do setor do Núcleo e,
+    sem gestor vigente, cai na Diretoria, como na escada da área. Leitura que
+    falha devolve lista vazia: o degrau fica para a rodada seguinte."""
+    from app.services import ouvidoria_notificacoes
+    from app.services.ouvidoria_prazos import FUSO
+    from app.services.ouvidoria_responsaveis import CADEIA_DO_GESTOR, destinatarios_nos_papeis
+
+    if degrau.carimbo == "escalonado_gestor_em":
+        try:
+            responsaveis = (
+                supabase.table("ouvidoria_setor_responsaveis")
+                .select("setor, papel, nome, email, vigencia_inicio, vigencia_fim")
+                .eq("setor", ciencia.get("setor") or "")
+                .execute()
+            ).data or []
+        except Exception:  # noqa: BLE001
+            logger.error("[Ouvidoria] Falha ao ler o cadastro do setor do Núcleo")
+            return []
+        gestores = destinatarios_nos_papeis(responsaveis, agora.astimezone(FUSO).date(), CADEIA_DO_GESTOR)
+        if gestores:
+            return gestores
+    diretores = ouvidoria_notificacoes.ler_diretoria_executiva(supabase) or []
+    return [
+        Destinatario(
+            nome=d.get("nome_completo") or d["email"],
+            email=d["email"],
+            papel="diretoria_executiva",
+            alerta_diretoria=False,
+        )
+        for d in diretores
+    ]
 
 
 def _gravar_decisao(supabase, manifestacao_id: str, decisao: str, motivo: str | None, autor: dict, agora) -> None:
