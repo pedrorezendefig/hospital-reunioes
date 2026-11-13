@@ -23,6 +23,7 @@ from test_tecnologia_vinculo import BASE, DIRETOR, PEDRO, _demanda, _pessoa  # n
 
 from app.limiter import limiter  # noqa: E402
 from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
+from app.services import tecnologia_envio  # noqa: E402
 from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 from app.services.tecnologia_entregas import ritmo, tamanho_da_entrega  # noqa: E402
 
@@ -82,6 +83,10 @@ def _demandas() -> list[dict]:
             autor_id=DIRETOR["id"],
             responsavel_id=PEDRO["id"],
             em_producao_em="2026-11-02T18:00:00Z",
+            # Nasceu sem o Responsavel e ninguem passou pelo "Designar de novo":
+            # o motivo traz o numero da issue dentro do texto.
+            envio_estado=tecnologia_envio.ESTADO_DESIGNACAO_FALHOU,
+            envio_motivo=tecnologia_envio.motivo_da_designacao(903, ["pedrovitta"]),
         ),
         _entregue(
             "e-vitta-terceiro",
@@ -467,9 +472,26 @@ class TestLista:
         recebem a mesma resposta. Procura em toda a resposta, e nao so nos
         campos conhecidos: o numero e o link da issue de nenhum card aparecem."""
         folhas = list(_folhas(_corpo(entregas(logado))))
+        textos = [f for f in folhas if isinstance(f, str)]
 
         assert NUMEROS_DAS_ISSUES.isdisjoint(f for f in folhas if isinstance(f, int))
-        assert not [f for f in folhas if isinstance(f, str) and "/issues/" in f]
+        assert not [t for t in textos if "/issues/" in t]
+        assert not [t for t in textos for n in NUMEROS_DAS_ISSUES if str(n) in t]
+
+    def test_o_card_com_designacao_falhada_sai_igual_para_os_dois(self, entregas):
+        """O motivo da designacao falhada traz "#903" no texto: nao sai nem
+        para o Desenvolvedor, e o card sai igual para diretor e Desenvolvedor."""
+
+        def _card(logado):
+            [card] = [d for d in _corpo(entregas(logado))["entregas"] if d["id"] == "e-domingo"]
+            return card
+
+        dev, diretor = _card(PEDRO), _card(DIRETOR)
+
+        assert dev["envio_motivo"] is None
+        assert dev["designacao_falhou"] is False
+        assert dev["autor"] is None
+        assert {k: v for k, v in dev.items() if k != "minha"} == {k: v for k, v in diretor.items() if k != "minha"}
 
 
 # ═══════════════════════════════════════════════════════════════════════════

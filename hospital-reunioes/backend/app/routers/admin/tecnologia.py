@@ -792,6 +792,17 @@ def agora_utc() -> datetime:
     return datetime.now(UTC)
 
 
+# O que o `_para_a_lista` so manda ao Desenvolvedor, e que as Entregas nao
+# mandam a ninguem (PRD #1689).
+_SO_DO_DESENVOLVEDOR_NAS_ENTREGAS = {
+    "issue_numero": None,
+    "issue_url": None,
+    "envio_motivo": None,
+    "designacao_falhou": False,
+    "autor": None,
+}
+
+
 @router.get("/entregas", response_model=EntregasResponse)
 async def listar_as_entregas(
     tipo: Literal["bug", "melhoria"] | None = None,
@@ -813,7 +824,10 @@ async def listar_as_entregas(
 
     Diretor e Desenvolvedor recebem a mesma coisa: o numero e o link da issue
     nao saem daqui para ninguem (PRD #1689). A lista sai pelo `_para_a_lista`,
-    o funil da lista do chat, para o clique abrir o Documento do card.
+    o funil da lista do chat, para o clique abrir o Documento do card, e aqui
+    se apaga o que esse funil so manda ao Desenvolvedor: o motivo da falha
+    (o da designacao traz o numero da issue no texto), o selo da designacao
+    falhada e o autor.
     """
     result = supabase.table(TABELA_DEMANDAS).select("*").is_("apagada_em", "null").execute()
     visiveis = [d for d in (result.data or []) if pode_ver(ator, d)]
@@ -829,7 +843,7 @@ async def listar_as_entregas(
     lista = _para_a_lista(supabase, [d for _, d in entregues if filtros.deixa(d)], ator=ator)
     return {
         **tecnologia_entregas.ritmo(visiveis, agora=agora_utc(), filtros=filtros),
-        "entregas": [{**entrega, "issue_numero": None, "issue_url": None} for entrega in lista],
+        "entregas": [{**entrega, **_SO_DO_DESENVOLVEDOR_NAS_ENTREGAS} for entrega in lista],
         "responsaveis": [
             {"valor": valor, "nome": nome} for valor, nome in sorted(opcoes.items(), key=lambda par: par[1].casefold())
         ],
