@@ -6,7 +6,7 @@
 Lê o campo "musica" de todo docs/comunicacao/**/video/meta.json (o caminho da faixa relativo a
 ~/Sons/musica, como "tecnologia/faixa.mp3"), conta quantas vezes cada faixa dos climas pedidos já
 entrou e imprime o caminho inteiro da menos usada. No empate, a usada há mais tempo (a nunca usada
-vem antes) e depois a ordem do nome. O diretor vê várias demonstrações seguidas: trilha repetida
+vem antes), depois a ordem dos climas pedidos e a do nome. O diretor vê várias demonstrações seguidas: trilha repetida
 denuncia linha de montagem.
 """
 
@@ -52,7 +52,9 @@ def usos(raiz: Path) -> tuple[dict[str, int], dict[str, str]]:
 
 
 def escolher(candidatas: list[str], contagem: dict[str, int], ultimo: dict[str, str]) -> str:
-    return min(candidatas, key=lambda f: (contagem.get(f, 0), ultimo.get(f, ""), f))
+    # candidatas vem na ordem dos climas pedidos e, dentro de cada um, do nome: no empate, o primeiro clima vence.
+    ordem = {f: i for i, f in enumerate(candidatas)}
+    return min(candidatas, key=lambda f: (contagem.get(f, 0), ultimo.get(f, ""), ordem[f]))
 
 
 def main() -> int:
