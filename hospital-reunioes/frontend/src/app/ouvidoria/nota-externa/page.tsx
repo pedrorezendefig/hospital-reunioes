@@ -231,7 +231,9 @@ export default function NotaExternaPage() {
               )}
               <div className="text-xs text-slate-400 mt-0.5 min-h-[1rem]">
                 {!atual?.registrada_em
-                  ? "Nenhum registro até agora."
+                  ? FONTES_DIGITADAS.includes(fonte)
+                    ? "Nenhum registro ainda. A nota aparece aqui quando alguém registrar a primeira."
+                    : "Nenhuma leitura ainda. A nota do Google é buscada sozinha uma vez por semana."
                   : atual.origem === "automatica"
                     ? `Lida sozinha no Google em ${formatarDia(atual.registrada_em)}.`
                     : `Registrada em ${formatarDia(atual.registrada_em)}${

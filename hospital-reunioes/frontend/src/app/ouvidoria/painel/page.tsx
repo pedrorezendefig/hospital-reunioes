@@ -745,7 +745,7 @@ export default function PainelEmTempoRealPage() {
           {proximos === null ? (
             <NaoCarregou />
           ) : proximos.casos.length === 0 ? (
-            <Vazio texto="Nada a vencer agora." />
+            <Vazio texto="Nenhum caso aberto com prazo correndo agora." />
           ) : (
             <ul className="divide-y divide-slate-100">
               {proximos.casos.map((caso) => (

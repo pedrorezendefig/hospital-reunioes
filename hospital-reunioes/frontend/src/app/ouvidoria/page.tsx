@@ -632,7 +632,8 @@ export default function OuvidoriaPage() {
               <>
                 <p className="text-slate-500 font-medium">Nenhuma manifestação registrada</p>
                 <p className="text-slate-400 text-sm mt-1">
-                  As manifestações chegam pelo atendimento da Ana e pelo registro da ouvidoria.
+                  As manifestações chegam pelo QR, pelo formulário do site, pela Ana e pelo registro da
+                  Ouvidoria. A primeira aparece aqui assim que chegar.
                 </p>
               </>
             )}

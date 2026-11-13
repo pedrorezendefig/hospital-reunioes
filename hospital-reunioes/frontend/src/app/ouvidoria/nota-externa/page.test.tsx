@@ -106,4 +106,20 @@ describe("a tela de Nota externa", () => {
     await waitFor(() => expect(envios).toHaveLength(1));
     expect(envios[0].corpo).toEqual({ fonte: "reclame_aqui", nota: 8.1 });
   });
+
+  it("sem nota ainda, cada fonte diz por que está vazia (issue #1629, regra T7)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ notas: [] }), { status: 200 })),
+    );
+
+    render(<NotaExternaPage />);
+
+    expect(
+      await screen.findByText("Nenhuma leitura ainda. A nota do Google é buscada sozinha uma vez por semana.")
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Nenhum registro ainda. A nota aparece aqui quando alguém registrar a primeira.")
+    ).toBeTruthy();
+  });
 });

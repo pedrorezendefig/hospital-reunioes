@@ -126,6 +126,10 @@ describe("a lista da triagem", () => {
     montar({}, []);
 
     expect(await screen.findByText("Nenhum e-mail recebido para triar.")).toBeTruthy();
+    // E diz por que está vazia e o que esperar (issue #1629, regra T7).
+    expect(
+      screen.getByText("O que chegar em ouvidoria@ aparece aqui, para você decidir se vira caso.")
+    ).toBeTruthy();
   });
 
   it("perfil sem Ouvidoria vê a recusa, e não uma lista vazia", async () => {

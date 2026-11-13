@@ -177,6 +177,14 @@ describe("a orientação embutida do painel (issue #1629, regra T1)", () => {
 
     expect(screen.getByText("O que precisa de atenção agora, do mais urgente ao menos urgente.")).toBeTruthy();
   });
+
+  it("sem caso a vencer, a faixa diz por que está vazia (regra T7)", async () => {
+    await abrirOPainel();
+
+    expect(
+      within(faixa("Próximos vencimentos")).getByText("Nenhum caso aberto com prazo correndo agora.")
+    ).toBeTruthy();
+  });
 });
 
 describe("o painel conta o hospital inteiro, arquivados inclusive (issue #592, ADR 0047)", () => {
