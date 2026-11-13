@@ -21,7 +21,7 @@ Fecha uma entrega para o diretor e para o usuário funcional em **dois passos, u
 **O modo do vídeo.** Sem flag de modo (o caso do botão "Gerar demonstração" do PedroOS), a primeira coisa da sessão é uma pergunta só (AskUserQuestion), com três opções:
 
 - **Rápido (Recomendado):** o modelo de Demonstração do Motion studio, com música e legenda, sem voz e sem parada do Pedro. Seção "Modo rápido".
-- **Rápido com voz:** o mesmo, com a narração na voz do Pedro.
+- **Rápido com voz:** o mesmo, com a narração na voz oficial.
 - **Completo:** o filme feito à mão no Motion studio, narrado, com as duas paradas do Pedro (lista de tomadas e folha de quadros). Seção "Passo 1: o vídeo".
 
 `--rapido`, `--voz` e `--completo` respondem a pergunta e ela não aparece. O rápido existe para o volume: várias demonstrações em paralelo, cada uma em poucos minutos de render.
@@ -38,7 +38,7 @@ Fecha uma entrega para o diretor e para o usuário funcional em **dois passos, u
 
 - `video/`: a **fonte do vídeo**, versionada:
   - `roteiro.md`: o briefing da skill `copy`, os três ganchos e o escolhido, a narração final e a tabela de cenas (fala, tela capturada, transição de entrada, paradas planejadas em segundos).
-  - `narracao.txt`: o texto que a voz do Pedro lê (um parágrafo por cena). A voz aceita emoção por parágrafo: o parágrafo que começa com `[animada]` (ou outra marca da skill `narracao`) sai naquele tom.
+  - `narracao.txt`: o texto que a voz oficial lê (um parágrafo por cena). A voz aceita emoção por parágrafo: o parágrafo que começa com `[animada]` (ou outra marca da skill `narracao`) sai naquele tom.
   - `tempos.json`: o tempo de cada palavra, convertido do `narracao.json` do `narrar.py`. O filme lê este arquivo para prender cada evento a uma palavra.
   - `capturas/*.png`: as telas reais do app, capturadas pelo `playwright-cli`.
   - `cena/`: a cópia do filme do Motion studio (o `index.html` e a pasta `docs/` de `films/<pasta>/`, sem `assets/` nem `out/`). O estúdio não é versionado: esta cópia é a fonte que fica.
@@ -101,7 +101,7 @@ O `escolher_trilha.py` imprime o caminho da faixa e, no stderr, o valor do campo
 
 As capturas seguem o passo 1 do `LEIA.md` do modelo: em 2x, pela config do modelo, com o alvo de cada clique lido pelo `eval`. Para cada passo, capture a tela de antes do clique e, se a tela muda, a de depois. Monte o `cenas.json` na pasta do filme pela tabela do `LEIA.md`.
 
-Com `--voz`: grave a narração pela skill `narracao`, na voz do Pedro (`--voz pedro`), com um parágrafo para a Dor, um por passo e um para o Resultado, nesta ordem. Faça o `tempos.json` como no passo 4 do modo completo, em `$F/assets/`, e marque `"voz": true` no `cenas.json`. O VoiceStudio atende uma sessão por vez: com outra sessão narrando, a sua espera. Se ele falhar, pare e avise; nunca use outra voz.
+Com `--voz`: grave a narração pela skill `narracao`, na voz oficial, com um parágrafo para a Dor, um por passo e um para o Resultado, nesta ordem. Faça o `tempos.json` como no passo 4 do modo completo, em `$F/assets/`, e marque `"voz": true` no `cenas.json`. O VoiceStudio atende uma sessão por vez: com outra sessão narrando, a sua espera. Se ele falhar, pare e avise; nunca use outra voz.
 
 ### 5. Montar, uma crítica, render
 
@@ -129,7 +129,7 @@ Este é o **modo completo** (`--completo`): o filme feito à mão, narrado, com 
 
 **Antes de tudo, carregue a skill `motion-studio`** (Skill tool) e leia o que ela manda: o `CLAUDE.md` do estúdio inteiro, `prompts/produto.md` e `prompts/critica.md`. Leia também as skills globais `narracao`, `copy`, `som` e `marca-hsm`. As rules do estúdio (contrato de render, molas, look, som, crítica) são o padrão; esta receita só diz o que muda no Hospital. O filme é o `index.html` do estúdio, renderizado pelo `render.mjs` dele, sem outro framework de vídeo.
 
-**Especificação:** 1920x1080 (formato `16x9`), 60 fps constante no render final (`--final`), 45 a 90 s, narrado com a voz do Pedro e legível no mudo: a fala aparece na tela como texto cinético, palavra a palavra, quando é dita (presa ao `tempos.json`).
+**Especificação:** 1920x1080 (formato `16x9`), 60 fps constante no render final (`--final`), 45 a 90 s, narrado com a voz oficial e legível no mudo: a fala aparece na tela como texto cinético, palavra a palavra, quando é dita (presa ao `tempos.json`).
 
 **Duas paradas do Pedro** (ADR 0018 do PedroOS), e só essas: a **lista de tomadas**, antes de escrever o código do filme, e a **folha de quadros** com o `phone.png` e as notas, antes do render final. Em cada uma, mostre e espere o "pode". Ajuste pedido = nova lista ou nova folha, novo "pode".
 
@@ -171,11 +171,11 @@ cp video/capturas/*.png "$F/assets/"
 cp docs/comunicacao/_assets/logo-hsm.png docs/comunicacao/_assets/fonts/HPSimplified_Rg.ttf "$F/assets/"
 ```
 
-**O pedido do estúdio já está respondido por esta receita** (não pergunte de novo): 16:9 só, sem música, narração na voz do Pedro, marca do hospital, tela real do app. Grave isso em `docs/brief.md` do filme, com a lista das capturas.
+**O pedido do estúdio já está respondido por esta receita** (não pergunte de novo): 16:9 só, sem música, narração na voz oficial, marca do hospital, tela real do app. Grave isso em `docs/brief.md` do filme, com a lista das capturas.
 
 ### 4. Narração e tempos
 
-1. `python3 ~/.claude/voz/narrar.py --voz pedro --file video/narracao.txt --output "$F/assets/narracao.wav"` (voz do Pedro, o clone dele aprovado em 13/11/2026, skill `narracao`). Se o VoiceStudio falhar, pare e avise: nunca outra voz.
+1. `python3 ~/.claude/voz/narrar.py --file video/narracao.txt --output "$F/assets/narracao.wav"` (voz oficial, a única desde 13/11/2026, skill `narracao`). Ouça: parágrafo com pronúncia errada ganha `[semente 12]` no começo (depois 13, 14) e o mesmo comando refaz só ele. Se o VoiceStudio falhar, pare e avise: nunca outra voz.
 2. Converta o `narracao.json` (tempo de cada palavra) para o `tempos.json`: uma cena por parágrafo, com o `inicio_s` da primeira palavra da cena e a lista das palavras com início e fim em segundos. Corrija a grafia, não os tempos. Grave em `video/tempos.json` e copie para `$F/assets/`.
 3. `FILM.duration` do filme é a duração do `narracao.wav` mais a assinatura.
 
@@ -282,7 +282,7 @@ O script põe `<!-- demonstracao: <url> -->` no fim do corpo, troca o marcador s
 
 1. Todos os critérios de aceite têm passo na demonstração; as telas são capturas do app real.
 2. Roteiro pela `copy` e pelo `humanizer`; abre no gancho, sem tela de metadado; vocabulário do glossário, zero jargão, zero travessão, tudo em HP Simplified.
-3. Voz, quando houver, só a voz do Pedro; a fala aparece na tela quando é dita; uma transição diferente em cada corte; nada parado mais de 0,5 s fora da assinatura. No modo rápido, a trilha é a que o `escolher_trilha.py` deu e está no `meta.json`.
+3. Voz, quando houver, só a voz oficial; a fala aparece na tela quando é dita; uma transição diferente em cada corte; nada parado mais de 0,5 s fora da assinatura. No modo rápido, a trilha é a que o `escolher_trilha.py` deu e está no `meta.json`.
 4. Filme feito no Motion studio (no rápido, pelo modelo de Demonstração, com a Régua passando); no completo, "pode" do Pedro na lista de tomadas e na folha de quadros; `gate-video.sh` passou no MP4 final (60 fps).
 5. MP4 final em `~/Videos/Hospital/AAAA-MM-DD-<PRD>-<slug>.mp4`, nenhum MP4 no repositório nem no `out/` do filme; `video/` (no completo: roteiro, narração, tempos, capturas, cena, `meta.json`; no rápido: roteiro, `cenas.json`, capturas, `meta.json`) e `index.html` commitados.
 6. Página publicada e marcador da demonstração gravado na issue N. Se existe página de módulo do contexto, ela foi republicada com o MP4 novo.
