@@ -104,11 +104,14 @@ export const OUTRO_LUGAR = "Outro lugar do hospital";
 export const AVISO_SO_TELEFONE =
   "As respostas da Ouvidoria saem por e-mail. Só com o telefone, você não recebe o aviso de que a manifestação chegou nem a resposta final.";
 
-// Mesma régua do backend (`email_utilizavel`): oito dígitos é o menor
-// telefone que se disca, e o e-mail precisa de arroba e de um domínio que
-// termina em letras. O que passasse aqui e não lá voltaria como 422.
+// Mesma régua do backend: oito dígitos é o menor telefone que se disca, e o
+// e-mail é o `_EMAIL` de `app/services/ouvidoria_contato.py` copiado, só que
+// ancorado (o campo inteiro tem que ser o endereço). O que passasse aqui e
+// não lá voltaria como 422. Os dois lados leem os mesmos casos em
+// `backend/tests/emails_do_passo_a_passo.json`.
 const DIGITOS_DO_MENOR_TELEFONE = 8;
-const EMAIL = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/;
+const EMAIL =
+  /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
 
 function telefoneValido(telefone: string | undefined): boolean {
   return (telefone ?? "").replace(/\D/g, "").length >= DIGITOS_DO_MENOR_TELEFONE;

@@ -166,6 +166,11 @@ function FormularioPublico({ codigoDoCartaz }: { codigoDoCartaz: string | null }
   // O nome público do cartaz que a pessoa leu, que já chega escolhido em
   // "Onde". A URL traz só o código (ADR 0036, decisão 10): quem diz o nome é o
   // servidor, e nunca o nome interno do setor (ADR 0086, decisão 10).
+  //
+  // Só vale o que está na lista de locais. Cartaz sem nome público responde
+  // com o rótulo do ponto ("Poltrona 12"), que a lista não traz: escolhido
+  // aqui, ele iria para o caso anônimo, que não grava o ponto (issue #375,
+  // item 12). Nesse caso o lugar fica para a pessoa escolher.
   const [localDoCartaz, setLocalDoCartaz] = useState<string | null>(null);
 
   useEffect(() => {
@@ -193,8 +198,6 @@ function FormularioPublico({ codigoDoCartaz }: { codigoDoCartaz: string | null }
         const nomePublico: string | null = cartaz?.nome_publico ?? null;
         if (!vivo || !nomePublico) return;
         setLocalDoCartaz(nomePublico);
-        // Só preenche o que a pessoa ainda não escolheu.
-        setLocal((atual) => atual || nomePublico);
       })
       // Cartaz aposentado ou falha: o lugar fica para a pessoa escolher, e o
       // formulário, que é o que ela veio fazer, continua de pé.
@@ -203,6 +206,12 @@ function FormularioPublico({ codigoDoCartaz }: { codigoDoCartaz: string | null }
       vivo = false;
     };
   }, [codigoDoCartaz]);
+
+  useEffect(() => {
+    if (!localDoCartaz || !locais.some((l) => l.nome === localDoCartaz)) return;
+    // Só preenche o que a pessoa ainda não escolheu.
+    setLocal((atual) => atual || localDoCartaz);
+  }, [localDoCartaz, locais]);
 
   // Leva o foco ao título do passo novo: quem usa leitor de tela ouve onde
   // está, e no celular a pessoa não fica no meio do passo anterior.
@@ -218,11 +227,7 @@ function FormularioPublico({ codigoDoCartaz }: { codigoDoCartaz: string | null }
 
   const anonimo = identificacao === "anonimo";
   const nomesDaLista = locais.map((l) => l.nome);
-  const opcoesDeLocal = [
-    ...(localDoCartaz && !nomesDaLista.includes(localDoCartaz) ? [localDoCartaz] : []),
-    ...nomesDaLista,
-    OUTRO_LUGAR,
-  ];
+  const opcoesDeLocal = [...nomesDaLista, OUTRO_LUGAR];
   const localEhAla = locais.some((l) => l.nome === local && l.ala_internacao);
 
   const form: FormularioPublico = {

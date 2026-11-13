@@ -5,6 +5,7 @@
  * já pode seguir e o que vai no envio. A mesma régua vale de novo no backend.
  */
 
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   AVISO_SO_TELEFONE,
@@ -87,6 +88,20 @@ describe("cada passo só segue com o obrigatório", () => {
   it("passo 5 não aceita e-mail que não é e-mail nem telefone sem número", () => {
     expect(passoCompleto(5, respondido({ contato: "maria", telefone: "" }))).toBe(false);
     expect(passoCompleto(5, respondido({ contato: "", telefone: "não tenho" }))).toBe(false);
+  });
+
+  // Os mesmos casos que o pytest manda pela rota (backend/tests/
+  // emails_do_passo_a_passo.json): o e-mail que a tela libera e o servidor
+  // recusa volta como 422, e quem se identifica fica sem canal.
+  const { casos } = JSON.parse(
+    readFileSync(
+      new URL("../../../../backend/tests/emails_do_passo_a_passo.json", import.meta.url),
+      "utf8"
+    )
+  ) as { casos: { email: string; aceito: boolean }[] };
+
+  it.each(casos)("passo 5 concorda com o servidor sobre $email", ({ email, aceito }) => {
+    expect(passoCompleto(5, respondido({ contato: email, telefone: "" }))).toBe(aceito);
   });
 
   it("passo 5 do anônimo segue sem campo nenhum", () => {

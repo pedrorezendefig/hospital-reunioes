@@ -1,0 +1,20 @@
+{
+  "_sobre": "O e-mail do passo 5 da Manifestação guiada (issue #1620). Lido pelo pytest (test_ouvidoria_manifestacao_guiada.py, pela rota) e pelo vitest (manifestacao-guiada.test.ts, pelo Continuar): o que a tela libera e o servidor recusa vira 422 e canal fechado para quem se identifica. Os dois lados concordam em cada caso, ou um deles fica vermelho.",
+  "casos": [
+    { "email": "maria@exemplo.com", "aceito": true },
+    { "email": "Maria.Souza+ouvidoria@hospital.com.br", "aceito": true },
+    { "email": "joao_silva@gmail.com", "aceito": true },
+    { "email": "ana@sub-dominio.org", "aceito": true },
+    { "email": "  maria@exemplo.com  ", "aceito": true },
+    { "email": "maria@gmail,com.br", "aceito": false },
+    { "email": "maria@gmail..com", "aceito": false },
+    { "email": "maria.@gmail.com", "aceito": false },
+    { "email": "maria@ex_ample.com", "aceito": false },
+    { "email": "maria@-gmail.com", "aceito": false },
+    { "email": "maria@gmail", "aceito": false },
+    { "email": "maria@gmail.c0m", "aceito": false },
+    { "email": "maria", "aceito": false },
+    { "email": "maria@", "aceito": false },
+    { "email": "@gmail.com", "aceito": false }
+  ]
+}

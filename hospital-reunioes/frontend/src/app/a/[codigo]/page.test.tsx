@@ -131,6 +131,36 @@ describe("o endereço curto do cartaz (critério 4)", () => {
     expect(onde().value).toBe("");
   });
 
+  it("de cartaz sem nome público, não oferece nem escolhe o rótulo do ponto", async () => {
+    // Sem nome público, o servidor devolve o rótulo do ponto, que não está na
+    // lista de locais. No anônimo, "Poltrona 12" reidentifica (issue #375,
+    // item 12): o lugar fica para a pessoa escolher.
+    servidor({ nome_publico: "Poltrona 12" });
+    render(<EnderecoCurtoDoCartaz />);
+    await waitFor(() => expect(consultas).toHaveLength(1));
+
+    ateOQuandoEOnde();
+    await screen.findByRole("option", { name: "Centro Médico" });
+
+    expect(onde().value).toBe("");
+    expect(screen.queryByRole("option", { name: "Poltrona 12" })).toBeNull();
+    // O select em branco não basta: o estado escondido por trás dele é o que
+    // vai no envio. Com data e período, só falta o lugar que a pessoa escolhe.
+    fireEvent.click(botao("Tarde"));
+    expect(botao("Continuar").disabled).toBe(true);
+    fireEvent.change(onde(), { target: { value: "Centro Médico" } });
+    fireEvent.click(botao("Continuar"));
+    fireEvent.change(screen.getByLabelText("Seu relato"), {
+      target: { value: "Esperei duas horas." },
+    });
+    fireEvent.click(botao("Uma resposta"));
+    fireEvent.click(botao("Continuar"));
+    fireEvent.click(botao(/Enviar manifestação/));
+
+    await waitFor(() => expect(enviados).toHaveLength(1));
+    expect(enviados[0]).toMatchObject({ local_informado: "Centro Médico" });
+  });
+
   it("nunca preenche com o nome do setor", async () => {
     // Um servidor antigo devolvia o setor. A página só lê o nome público:
     // sem ele, o lugar fica para a pessoa escolher.

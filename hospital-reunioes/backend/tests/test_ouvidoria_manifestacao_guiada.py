@@ -16,6 +16,7 @@ Os testes sobem a rota real com o mesmo banco falso do formulário público.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -209,6 +210,21 @@ class TestContatoDeQuemSeIdentifica:
         assert r.status_code == 422
         assert banco.rows == []
 
+    @pytest.mark.parametrize(
+        "caso",
+        json.loads((Path(__file__).parent / "emails_do_passo_a_passo.json").read_text(encoding="utf-8"))["casos"],
+        ids=lambda caso: caso["email"],
+    )
+    def test_o_servidor_concorda_com_a_tela_em_cada_email(self, caso):
+        """A tela libera o Enviar pela mesma lista de casos (vitest em
+        `manifestacao-guiada.test.ts`). E-mail que a tela aceita e o servidor
+        recusa vira 422, e quem se identifica não consegue registrar."""
+        client, banco = _make_app()
+
+        r = client.post(ROTA, json=_guiada(contato=caso["email"]))
+
+        assert r.status_code == (201 if caso["aceito"] else 422), r.text
+
     def test_anonimo_passa_sem_contato_e_descarta_o_telefone_que_venha(self):
         client, banco = _make_app()
 
@@ -261,15 +277,20 @@ class TestAListaDeLocais:
             ]
         }
 
-    def test_nunca_mostra_o_nome_interno_do_setor(self):
-        """Sem nome público vale o rótulo do ponto, nunca o setor da taxonomia
-        ("Você leu o QR de Auditoria" era o defeito da especificação)."""
-        client, _banco = _make_app(_BancoFake(pontos=[_ponto("AAAAA2", "Recepção principal", None)]))
+    def test_cartaz_sem_nome_publico_fica_fora_da_lista(self):
+        """Sem nome público não há o que oferecer: o setor é nome interno ("Você
+        leu o QR de Auditoria" era o defeito da especificação) e o rótulo do
+        ponto ("Poltrona 12") é o detalhe que reidentifica o anônimo (issue
+        #375, item 12)."""
+        client, _banco = _make_app(
+            _BancoFake(pontos=[_ponto("AAAAA2", "Poltrona 12", None), _ponto("AAAAA3", "Hall", "Emergência adulta")])
+        )
 
         r = client.get("/api/ouvidoria/publico/locais")
 
-        assert r.json() == {"locais": [{"nome": "Recepção principal", "ala_internacao": False}]}
+        assert r.json() == {"locais": [{"nome": "Emergência adulta", "ala_internacao": False}]}
         assert "Auditoria" not in r.text
+        assert "Poltrona 12" not in r.text
 
 
 class TestOAnonimoNaoGravaOCartaz:
@@ -277,7 +298,9 @@ class TestOAnonimoNaoGravaOCartaz:
     confirmou, e não o código do cartaz nem o ponto."""
 
     def test_anonimo_vindo_do_cartaz_guarda_o_local_e_nao_o_codigo(self):
-        client, banco = _make_app(_BancoFake(pontos=[dict(CARTAZ)]))
+        """O envio que a tela monta: o "Onde" chega com o nome público do
+        cartaz, e é ele que fica."""
+        client, banco = _make_app(_BancoFake(pontos=[{**CARTAZ, "nome_publico": "Recepção"}]))
 
         r = client.post(
             ROTA,
@@ -291,6 +314,23 @@ class TestOAnonimoNaoGravaOCartaz:
         valores = " ".join(str(v) for v in gravado.values())
         assert "AB2CD3" not in valores
         assert "Poltrona 12" not in valores
+
+    def test_anonimo_nao_grava_o_rotulo_do_ponto_pelo_local(self):
+        """O cartaz sem nome público (toda linha anterior à migration 135 que
+        ninguém preencheu) se chama, para quem o lê, pelo rótulo do ponto. Se
+        esse rótulo chega como `local_informado` no anônimo, é o mesmo dado
+        que o `canal_ponto` descarta, gravado por outra coluna."""
+        client, banco = _make_app(_BancoFake(pontos=[dict(CARTAZ)]))
+
+        r = client.post(
+            ROTA,
+            json=_guiada(anonimo=True, nome=None, contato=None, p="AB2CD3", local_informado="Poltrona 12"),
+        )
+
+        assert r.status_code == 201, r.text
+        gravado = banco.inserts[0]
+        assert gravado["local_informado"] is None
+        assert "Poltrona 12" not in " ".join(str(v) for v in gravado.values())
 
     def test_identificado_vindo_do_cartaz_continua_guardando_o_ponto(self):
         """O par do teste de cima: sem ele, um cartaz que nunca resolvesse

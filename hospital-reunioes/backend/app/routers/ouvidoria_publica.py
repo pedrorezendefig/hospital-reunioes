@@ -483,6 +483,18 @@ async def registrar_manifestacao_publica(
     # ouvidor achar o cartaz, e isso não vale o risco de reidentificação. O
     # `canal_setor` fica: é a área inteira, não a poltrona.
     ponto = cartaz["ponto"] if (cartaz and not manifestacao.anonimo) else None
+    # O mesmo dado por outra coluna: o cartaz sem nome público se chama, para
+    # quem o lê, pelo rótulo do ponto, e é esse rótulo que chegaria aqui como o
+    # lugar escolhido. No anônimo ele sai, como o ponto acima (issue #1620).
+    local_informado = manifestacao.local_informado
+    if (
+        manifestacao.anonimo
+        and cartaz
+        and not cartaz.get("nome_publico")
+        and local_informado is not None
+        and local_informado.strip().casefold() == cartaz["ponto"].strip().casefold()
+    ):
+        local_informado = None
 
     linha = {
         "categoria": CATEGORIA_PENDENTE,
@@ -509,7 +521,7 @@ async def registrar_manifestacao_publica(
         "data_ocorrencia": _iso(manifestacao.data_ocorrencia),
         "periodo": manifestacao.periodo,
         "hora_aprox": _iso(manifestacao.hora_aprox),
-        "local_informado": manifestacao.local_informado,
+        "local_informado": local_informado,
         "quarto": manifestacao.quarto,
         "profissionais": manifestacao.profissionais,
         "paciente_nascimento": _iso(paciente_nascimento),
