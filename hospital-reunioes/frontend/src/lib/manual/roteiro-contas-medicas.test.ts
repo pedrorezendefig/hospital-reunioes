@@ -108,7 +108,7 @@ describe("o seed da página de Contas médicas", () => {
 describe("a guarda do dado real nos prints", () => {
   it("acha o nome de fora do seed mesmo quando a tela o mostra em caixa alta", () => {
     const tela = "ATENDIMENTO 172401 · JOSÉ M. · CONTA 72401";
-    expect(nomesDeForaNoTexto(tela, ["José M.", "Bianca Torres"])).toEqual(["José M."]);
+    expect(nomesDeForaNoTexto(tela, ["José M.", "Yara Quintela"])).toEqual(["José M."]);
   });
 
   it("compara em casefold, não só em minúscula", () => {
