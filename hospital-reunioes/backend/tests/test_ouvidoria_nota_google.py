@@ -293,6 +293,46 @@ class TestResumoDoMes:
         assert resumo["tendencia"] == "igual"
         assert resumo["total"] == 1635
 
+    def test_devolve_as_leituras_do_mes_e_do_anterior_para_o_grafico(self):
+        """O gráfico do mês (issue #1699) desenha cada leitura semanal, a nota
+        e o total acumulado, contra as do mês anterior."""
+        supabase = SupabaseFalso(
+            [
+                _leitura("2026-09-28T09:45:00+00:00", 2.2, 1580),
+                _leitura("2026-10-05T09:45:00+00:00", 2.3, 1590),
+                _leitura("2026-10-20T12:00:00+00:00", 2.4, None, origem="manual"),
+                _leitura("2026-11-02T09:45:00+00:00", 2.5, 1629),
+                _leitura("2026-11-09T09:45:00+00:00", 2.6, 1635),
+            ]
+        )
+
+        resumo = ouvidoria_nota_google.resumo_do_mes(supabase, HOJE, medida=True)
+
+        assert resumo["leituras_do_mes"] == [
+            {"lida_em": "2026-11-02T09:45:00+00:00", "nota": 2.5, "total": 1629},
+            {"lida_em": "2026-11-09T09:45:00+00:00", "nota": 2.6, "total": 1635},
+        ]
+        assert resumo["leituras_mes_anterior"] == [
+            {"lida_em": "2026-10-05T09:45:00+00:00", "nota": 2.3, "total": 1590},
+            {"lida_em": "2026-10-20T12:00:00+00:00", "nota": 2.4, "total": None},
+        ]
+
+    def test_sem_leitura_no_mes_a_serie_do_mes_vem_vazia(self):
+        supabase = SupabaseFalso([_leitura("2026-10-26T09:45:00+00:00", 2.4, 1620)])
+
+        resumo = ouvidoria_nota_google.resumo_do_mes(supabase, HOJE, medida=True)
+
+        assert resumo["leituras_do_mes"] == []
+        assert resumo["leituras_mes_anterior"] == [{"lida_em": "2026-10-26T09:45:00+00:00", "nota": 2.4, "total": 1620}]
+
+    def test_sem_a_chave_nenhuma_leitura_vai_para_o_grafico(self):
+        supabase = SupabaseFalso([_leitura("2026-11-09T09:45:00+00:00", 2.5, 1635)])
+
+        resumo = ouvidoria_nota_google.resumo_do_mes(supabase, HOJE, medida=False)
+
+        assert resumo["leituras_do_mes"] == []
+        assert resumo["leituras_mes_anterior"] == []
+
 
 class _SupabaseDaCentral(SupabaseFalso):
     """O gate da Central lê `participantes`; a nota, o diário."""

@@ -75,7 +75,10 @@ def resumo_do_mes(supabase, hoje: dt.date, *, medida: bool) -> dict:
       Com menos de duas leituras automáticas no mês, nada: a diferença seria
       zero e leria como "ninguém avaliou".
     - `tendencia`: a última nota do mês contra a última do mês anterior, que
-      pode ser digitada (o histórico digitado fica, ADR 0089, decisão 2)."""
+      pode ser digitada (o histórico digitado fica, ADR 0089, decisão 2).
+    - `leituras_do_mes` e `leituras_mes_anterior`: cada leitura, em ordem, com
+      a nota e o total acumulado (nulo na digitada), para o gráfico do mês
+      (issue #1699)."""
     vazio = {
         "medida": medida,
         "nota": None,
@@ -85,6 +88,8 @@ def resumo_do_mes(supabase, hoje: dt.date, *, medida: bool) -> dict:
         "avaliacoes_do_mes": None,
         "nota_mes_anterior": None,
         "tendencia": None,
+        "leituras_do_mes": [],
+        "leituras_mes_anterior": [],
     }
     if not medida:
         return vazio
@@ -116,6 +121,16 @@ def resumo_do_mes(supabase, hoje: dt.date, *, medida: bool) -> dict:
         "avaliacoes_do_mes": totais_do_mes[-1] - totais_do_mes[0] if len(totais_do_mes) >= 2 else None,
         "nota_mes_anterior": nota_anterior,
         "tendencia": _tendencia(nota_do_mes, nota_anterior),
+        "leituras_do_mes": [_ponto_do_grafico(li) for li in do_mes],
+        "leituras_mes_anterior": [_ponto_do_grafico(li) for li in do_anterior],
+    }
+
+
+def _ponto_do_grafico(leitura: dict) -> dict:
+    return {
+        "lida_em": leitura["registrada_em"],
+        "nota": float(leitura["nota"]),
+        "total": leitura.get("total_avaliacoes"),
     }
 
 
