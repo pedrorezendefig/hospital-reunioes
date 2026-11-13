@@ -7,6 +7,7 @@ import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { isSuperAdmin } from "@/lib/auth";
 import { paginasVisiveis, type PaginaDoManual } from "@/lib/manual/paginas";
 import { MarkdownDoManual } from "./MarkdownDoManual";
+import { RetratoDaAna } from "./RetratoDaAna";
 
 type Aba = "aplicativo" | "ana";
 
@@ -15,8 +16,8 @@ type Aba = "aplicativo" | "ana";
  * #1718, ADR 0094, decisões 1, 2 e 4).
  *
  * A aba Aplicativo do Hospital lista só as páginas dos módulos que a pessoa
- * tem no menu. A aba Ana é só do Super admin e, até a fatia dela trazer o
- * Retrato, diz "Em preparação".
+ * tem no menu. A aba Ana é só do Super admin e mostra o Retrato da Ana
+ * (issue #1720, ADR 0094, decisão 3).
  *
  * No celular, a lista de páginas fica em cima e a página embaixo, numa coluna;
  * a partir do `md`, lado a lado.
@@ -69,11 +70,8 @@ export function Manual({ paginas }: { paginas: readonly PaginaDoManual[] }) {
       </div>
 
       {abaAberta === "ana" ? (
-        <div role="tabpanel" aria-label="Ana" className="rounded-2xl border border-border bg-surface p-8 text-center">
-          <p className="text-base font-semibold text-text">Em preparação</p>
-          <p className="mt-1 text-sm text-text-secondary">
-            Esta aba vai mostrar como a Ana funciona por dentro.
-          </p>
+        <div role="tabpanel" aria-label="Ana">
+          <RetratoDaAna />
         </div>
       ) : (
         <div role="tabpanel" aria-label="Aplicativo do Hospital">
