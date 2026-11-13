@@ -375,9 +375,9 @@ test('sessão de fundo não abre o painel sem novidade', async ($, on) => {
 })
 
 test('cor da duração: amarelo no p75, vermelho no p90, etapa sem teto sem cor', () => {
-  expect(corDaDuracao('hr-implementador', 29 * 60_000)).toBeUndefined()
-  expect(corDaDuracao('hr-implementador', 30 * 60_000)).toBe('warning')
-  expect(corDaDuracao('hr-implementador', 35 * 60_000)).toBe('error')
+  expect(corDaDuracao('onda-implementador', 29 * 60_000)).toBeUndefined()
+  expect(corDaDuracao('onda-implementador', 30 * 60_000)).toBe('warning')
+  expect(corDaDuracao('onda-implementador', 35 * 60_000)).toBe('error')
   expect(corDaDuracao('CI', 12 * 60_000)).toBe('error')
   expect(corDaDuracao('subida', 10 * 60_000)).toBe('warning')
   expect(corDaDuracao('no ar', 999 * 60_000)).toBeUndefined()
