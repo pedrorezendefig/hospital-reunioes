@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T04:37+0000 -->
+<!-- last_update: 2026-11-13T05:28+0000 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -789,7 +789,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## ouvidoria_pontos
 
-> Origem: `085_ouvidoria_pontos_de_escuta.sql` (alterada em: 135_ouvidoria_ponto_nome_publico_cartaz_a4.sql)
+> Origem: `085_ouvidoria_pontos_de_escuta.sql` (alterada em: 135_ouvidoria_ponto_nome_publico_cartaz_a4.sql, 142_ouvidoria_convite_google_no_qr.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -806,6 +806,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `titulo_cartaz` | `TEXT` | NOT NULL | `'atendimento_hoje'` | — |
 | `codigo_controle` | `TEXT` | — | — | — |
 | `ala_internacao` | `BOOLEAN` | NOT NULL | `FALSE` | — |
+| `google_teste_ativo` | `BOOLEAN` | NOT NULL | `FALSE` | — |
 
 **Indexes:**
 - `idx_ouvidoria_pontos_codigo` em `(codigo)` (de `085_ouvidoria_pontos_de_escuta.sql`)
@@ -1820,7 +1821,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## ouvidoria_config
 
-> Origem: `137_ouvidoria_nota_do_google_automatica.sql` (alterada em: 139_ouvidoria_envio_ao_nucleo.sql)
+> Origem: `137_ouvidoria_nota_do_google_automatica.sql` (alterada em: 139_ouvidoria_envio_ao_nucleo.sql, 142_ouvidoria_convite_google_no_qr.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -1829,6 +1830,8 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `google_review_url` | `TEXT` | NOT NULL | `''` | — |
 | `atualizada_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
 | `nsp_setor` | `TEXT` | NOT NULL | `''` | — |
+| `google_teste_global` | `BOOLEAN` | NOT NULL | `FALSE` | — |
+| `google_teste_ligado_em` | `TIMESTAMPTZ` | — | — | — |
 
 ## ouvidoria_avaliacoes
 
@@ -1856,7 +1859,26 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 **Indexes:**
 - `idx_ouvidoria_avaliacoes_ponto` em `(ponto_id, criada_em)` (de `140_ouvidoria_avaliacao_do_qr.sql`)
 - `idx_ouvidoria_avaliacoes_comentario` em `(criada_em)` (de `140_ouvidoria_avaliacao_do_qr.sql`)
+- `idx_ouvidoria_avaliacoes_convite_google` em `(criada_em, ponto_id)` (de `142_ouvidoria_convite_google_no_qr.sql`)
+
+## ouvidoria_convite_google_auditoria
+
+> Origem: `142_ouvidoria_convite_google_no_qr.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `chave` | `TEXT` | NOT NULL | — | — |
+| `e` | `a` | — | — | — |
+| `valor_anterior` | `BOOLEAN` | NOT NULL | — | — |
+| `valor_novo` | `BOOLEAN` | NOT NULL | — | — |
+| `alterado_por` | `VARCHAR(10)` | — | — | — |
+| `alterado_por_nome` | `TEXT` | NOT NULL | — | — |
+| `alterado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `idx_ouvidoria_convite_google_auditoria_em` em `(alterado_em DESC)` (de `142_ouvidoria_convite_google_no_qr.sql`)
 
 ---
 
-**Resumo:** 90 tabelas vivas.
+**Resumo:** 91 tabelas vivas.

@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T04:48+0000 -->
+<!-- last_update: 2026-11-13T05:28+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -268,6 +268,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| PUT | `/ouvidoria/convite-google` | A chave geral do teste do convite ao Google (issue #1625, ADR 0089 | ✅ |
 | GET | `/ouvidoria/feriados` | Os dias que saem do calendário útil (RN-22). | ✅ |
 | POST | `/ouvidoria/feriados` | Cadastra um feriado. A partir daqui o motor deixa de contar esse dia. | ✅ |
 | DELETE | `/ouvidoria/feriados/{data}` | Remove um feriado: o dia volta a contar no calendário útil. | ✅ |
@@ -307,6 +308,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/ouvidoria/pontos` | Cria o cartaz e devolve o código sorteado. | ✅ |
 | PATCH | `/ouvidoria/pontos/{ponto_id}` | Renomeia o cartaz, aposenta ou traz de volta. | ✅ |
 | GET | `/ouvidoria/pontos/{ponto_id}/cartaz.pdf` | O cartaz pronto para a gráfica: A4 por padrão, no modelo aprovado pela | ✅ |
+| PUT | `/ouvidoria/pontos/{ponto_id}/convite-google` | A chave de um cartaz no teste do convite ao Google (issue #1625). Mesmo | ✅ |
 | GET | `/ouvidoria/pontos/{ponto_id}/qr.png` | O PNG do QR, para quem quer montar o próprio material. | ✅ |
 | GET | `/ouvidoria/prazos` | A tabela de prazos por gravidade que alimenta o motor. Leitura para | ✅ |
 | GET | `/ouvidoria/prazos/historico` | Quem mudou qual prazo, quando, de quanto para quanto. | ✅ |
@@ -324,6 +326,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
 | POST | `/ouvidoria/publico/acompanhamento` | Página pública de acompanhamento (issue #1623, seção 4.3 do anexo). | ❌ |
+| GET | `/ouvidoria/publico/avaliacoes/{avaliacao_id}/convite-google` | O botão "Avaliar no Google" da tela N3 (issue #1625, ADR 0089 decisão | ❌ |
 | GET | `/ouvidoria/publico/locais` | A lista de "Onde" da Manifestação guiada (issue #1620): o nome público | ❌ |
 | POST | `/ouvidoria/publico/manifestacoes` | Registra a manifestação do canal aberto e devolve o protocolo ANO-NNNN. | ❌ |
 | GET | `/ouvidoria/publico/pontos/{codigo}` | De qual cartaz veio quem está com o formulário aberto. | ❌ |
@@ -545,4 +548,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 314 endpoints em 45 routers · 92% exigem auth.
+**Totais:** 317 endpoints em 45 routers · 92% exigem auth.
