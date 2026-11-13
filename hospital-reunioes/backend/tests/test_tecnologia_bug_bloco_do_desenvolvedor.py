@@ -240,3 +240,16 @@ class TestOPrompt:
         assert re.search(r"`onde_mexe_no_codigo` e `cuidados`[^\n]*código que você leu", roteiro)
         formato = instrucao.split("## Formato de resposta", 1)[1]
         assert '"para_o_desenvolvedor": null' in formato
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. O Kit de conhecimento diz o comportamento novo
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def test_o_kit_diz_que_o_card_do_bug_leva_uma_parte_para_quem_programa():
+    texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+
+    conversa = texto.split("## A conversa com o Assistente", 1)[1].split("\n## ", 1)[0]
+    [paragrafo_do_bug] = [p for p in conversa.split("\n\n") if "resolvido" in p and "Criar o card" in p]
+    assert re.search(r"parte escrita para quem programa, abaixo da (sua parte|parte do diretor)", paragrafo_do_bug)
