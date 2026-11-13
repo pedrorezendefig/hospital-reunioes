@@ -3,7 +3,7 @@ modulo: reunioes-e-pendencias
 titulo: Reuniões e Pendências
 ---
 
-Aqui o hospital marca as reuniões, guarda a Ata de cada uma e acompanha as Pendências que saem delas. Quem conduz a reunião (o Facilitador) marca, anexa a transcrição, revisa a Ata e manda para assinatura. Cada ação combinada vira uma Pendência, com responsável e prazo.
+Aqui o hospital marca as reuniões, guarda a Ata de cada uma e acompanha as Pendências que saem delas. Quem conduz a reunião é o Facilitador: ele marca a data, anexa a transcrição depois, revisa a Ata e a manda para assinatura. Cada ação combinada na Ata vira uma Pendência, com responsável e prazo.
 
 Os números nas imagens mostram onde clicar em cada passo.
 

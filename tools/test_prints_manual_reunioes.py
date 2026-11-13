@@ -64,7 +64,7 @@ def test_print_so_com_dado_de_exemplo_sai():
 
 def test_o_seed_recusa_banco_que_nao_e_o_local(tmp_path):
     env = tmp_path / ".env"
-    env.write_text("SUPABASE_URL=https://supabase.hospitalsaomatheus.cloud\nSUPABASE_SERVICE_KEY=x\n")
+    env.write_text("SUPABASE_URL=https://supabase.hospitalsaomatheus.cloud\nSUPABASE_SERVICE_KEY=x\n", encoding="utf-8")
 
     with pytest.raises(SystemExit, match="não é o Supabase local"):
         roteiro.credenciais_locais(env)
