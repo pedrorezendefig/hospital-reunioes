@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T15:08:59-03:00",
+      "sha": "071ad2e3ce8b118f4862132154d334ef9e04584d",
+      "app_version": "0.290.0",
+      "subject": "Onda entregas-onda3: Clique na semana filtra as Entregas e Ver semanas anteriores",
+      "raw_subject": "chore(deploy): registro da onda entregas-onda3 (#1752)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1689
+      ],
+      "result": "healthy",
+      "duration_seconds": 260,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta entregas-onda3: PR #1752 (issue #1704), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 19,
+          "frontend": 200
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T15:00:44-03:00",
       "sha": "1ae865fb57bf3c195b5554328ec651624aab1fec",
       "app_version": "0.289.0",
