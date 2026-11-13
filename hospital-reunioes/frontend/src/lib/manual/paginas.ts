@@ -108,6 +108,13 @@ export function imagensCitadas(corpo: string): string[] {
   return Array.from(corpo.matchAll(IMAGEM), (m) => m[1]);
 }
 
+const FLUXOGRAMA = /^```fluxograma[^\n]*\n([\s\S]*?)^```/gm;
+
+/** O texto de cada bloco ```fluxograma do Markdown, na ordem da página. */
+export function fluxogramasCitados(corpo: string): string[] {
+  return Array.from(corpo.matchAll(FLUXOGRAMA), (m) => m[1]);
+}
+
 /**
  * O endereço de uma imagem da página: o print ao lado do Markdown vira
  * `/manual/<pasta>/<arquivo>`; endereço que já começa por `/` fica como está.

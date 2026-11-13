@@ -51,7 +51,7 @@ const POPS: PaginaDoManual = {
   pasta: "pops",
   modulo: "pops",
   titulo: "POPs",
-  corpo: "Texto dos POPs.\n\n```fluxograma\npasso A: Abrir o POP\n```",
+  corpo: "Texto dos POPs.\n\n```fluxograma\ninicio abrir 1,1: Abrir o POP\n```",
 };
 
 const PAGINAS = [POPS, REUNIOES];
@@ -145,13 +145,13 @@ describe("o desenho da página", () => {
     );
   });
 
-  it("o bloco fluxograma aparece cru, no lugar que o componente do fluxograma vai ocupar", () => {
+  it("o bloco fluxograma da página vira o desenho do Fluxograma", () => {
     sessao.participante = pessoa({ access_profile: null, perfil_pop: "coordenador" });
 
     const { container } = render(<Manual paginas={PAGINAS} />);
 
-    const bloco = container.querySelector('[data-bloco="fluxograma"]');
-    expect(bloco?.textContent).toContain("passo A: Abrir o POP");
+    const passo = container.querySelector('[data-fluxograma] [data-passo="abrir"]');
+    expect(passo?.textContent).toContain("Abrir o POP");
   });
 
   it("o título da página e os títulos das tarefas saem como títulos", () => {

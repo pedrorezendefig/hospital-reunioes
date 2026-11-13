@@ -13,10 +13,12 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { lerFluxograma } from "@/components/manual/fluxograma/fluxo";
 import type { CurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { carregarPaginasDoManual } from "./carregar";
 import {
   enderecoDaImagem,
+  fluxogramasCitados,
   imagensCitadas,
   lerPagina,
   moduloEstaNoMenu,
@@ -55,6 +57,33 @@ describe("as páginas do manual no repositório", () => {
     );
     expect(citadas.length).toBeGreaterThan(0);
     expect(citadas.filter((endereco) => !existsSync(join(PUBLICO, endereco)))).toEqual([]);
+  });
+});
+
+describe("os fluxogramas das páginas", () => {
+  it("todo bloco fluxograma de toda página se lê sem erro", () => {
+    const comErro = PAGINAS.flatMap((pagina) =>
+      fluxogramasCitados(pagina.corpo).flatMap((bloco) => {
+        const leitura = lerFluxograma(bloco);
+        return leitura.ok ? [] : [`${pagina.pasta}: ${leitura.erros.join(" ")}`];
+      })
+    );
+    expect(comErro).toEqual([]);
+  });
+
+  it("o bloco fluxograma sai do Markdown inteiro, e outro bloco de código não entra", () => {
+    const corpo = [
+      "Texto.",
+      "```fluxograma",
+      "inicio a 1,1: Começo",
+      "fim b 2,1: Fim",
+      "a -> b",
+      "```",
+      "```bash",
+      "echo oi",
+      "```",
+    ].join("\n");
+    expect(fluxogramasCitados(corpo)).toEqual(["inicio a 1,1: Começo\nfim b 2,1: Fim\na -> b\n"]);
   });
 });
 
