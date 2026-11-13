@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T05:28+0000 -->
+<!-- last_update: 2026-11-13T06:08+0000 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -1879,6 +1879,15 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 **Indexes:**
 - `idx_ouvidoria_convite_google_auditoria_em` em `(alterado_em DESC)` (de `142_ouvidoria_convite_google_no_qr.sql`)
 
+## ouvidoria_agente_cota
+
+> Origem: `143_ouvidoria_agente_de_triagem.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `dia` | `DATE` | PK | — | — |
+| `chamadas` | `INTEGER` | NOT NULL | `0` | — |
+
 ---
 
-**Resumo:** 91 tabelas vivas.
+**Resumo:** 92 tabelas vivas.

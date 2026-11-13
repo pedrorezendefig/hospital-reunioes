@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T05:28+0000 -->
+<!-- last_update: 2026-11-13T06:08+0000 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -1001,6 +1001,10 @@ erDiagram
         TEXT alterado_por_nome
         TIMESTAMPTZ alterado_em
     }
+    ouvidoria_agente_cota {
+        DATE dia PK
+        INTEGER chamadas
+    }
 ```
 
 ## Indexes principais
@@ -1162,4 +1166,4 @@ erDiagram
 | `ouvidoria_convite_google_auditoria` | `idx_ouvidoria_convite_google_auditoria_em` | `alterado_em DESC` | `142_ouvidoria_convite_google_no_qr.sql` |
 
 ---
-**Resumo:** 91 tabelas · 132 relacionamentos FK detectados.
+**Resumo:** 92 tabelas · 132 relacionamentos FK detectados.
