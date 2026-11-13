@@ -1588,8 +1588,14 @@ describe("O Quadro na tela larga (issue #1642, ADR 0090)", () => {
     expect(within(card).getByRole("progressbar", { name: "Partes entregues" }).getAttribute("aria-valuenow")).toBe("2");
     expect(within(card).getByText("2 de 5 partes")).toBeTruthy();
     expect(within(card).getByText("v0.207.0")).toBeTruthy();
-    expect(within(card).getByText("Tem demonstração")).toBeTruthy();
     expect(within(card).getByText("Envio falhou")).toBeTruthy();
+    // O vídeo abre direto do card, num link fora do botão que abre a Demanda.
+    expect(within(card).queryByText("Tem demonstração")).toBeNull();
+    const video = within(colunaDe("Entregue")).getByRole("link", { name: "Assistir à demonstração" });
+    expect(video.getAttribute("href")).toBe("https://youtu.be/demo");
+    expect(video.getAttribute("target")).toBe("_blank");
+    expect(video.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(card.contains(video)).toBe(false);
     // Data, quem pediu e o Conversar ficam na Demanda aberta (ADR 0090, decisão 4).
     expect(within(card).queryByText(/Aberto/)).toBeNull();
     expect(within(card).queryByText("Felipe Malafaia")).toBeNull();
@@ -1599,6 +1605,7 @@ describe("O Quadro na tela larga (issue #1642, ADR 0090)", () => {
     expect(within(semNada).queryByRole("progressbar")).toBeNull();
     expect(within(semNada).queryByText(/^(Bug|Melhoria|Tem demonstração|Envio falhou)$/)).toBeNull();
     expect(within(semNada).queryByText(/^v\d/)).toBeNull();
+    expect(within(colunaDe("Planejada")).queryByRole("link", { name: "Assistir à demonstração" })).toBeNull();
   });
 
   it("o Ampliar do painel leva a Demanda à largura toda, e Voltar ao quadro volta (issue #1643)", async () => {
