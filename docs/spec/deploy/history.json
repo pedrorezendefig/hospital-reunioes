@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-12T23:41:25-03:00",
+      "sha": "d57fd9ffae69dd98a08b2424d855f1dfb52a7eef",
+      "app_version": "0.266.0",
+      "subject": "Onda hsm-conector-onda2: Issue do bug nasce com o bloco Para o desenvolvedor; Comando da passada única que põe o bloco Para o desenvolvedor nas Demandas abertas",
+      "raw_subject": "chore(deploy): registro da onda hsm-conector-onda2 (#1667 #1668)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1632
+      ],
+      "result": "healthy",
+      "duration_seconds": 133,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-conector-onda2: PR #1667 (issue #1634), PR #1668 (issue #1636), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 6,
+        "build_s": {
+          "backend": 18
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-12T23:36:21-03:00",
       "sha": "0bda2f0cc83939e4fd23d841f06ec73006312d94",
       "app_version": "0.265.0",
