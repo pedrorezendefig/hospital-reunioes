@@ -117,7 +117,9 @@ class _Resultado:
 class _Consulta:
     """O pedaço do cliente do PostgREST que as portas usam. Leitura filtra as
     linhas da tabela; escrita fica anotada no banco (tabela, método e linha) e
-    não muda nada. `falha_no_insert` faz o insert daquela tabela explodir."""
+    não muda nada. `falha_no_insert` faz o insert daquela tabela explodir. Em
+    `participantes` a leitura devolve só as colunas pedidas no select, como o
+    PostgREST: coluna que o gate não lê não chega ao registro de acesso."""
 
     def __init__(self, banco: BancoFalso, nome: str):
         self._banco = banco
@@ -127,12 +129,14 @@ class _Consulta:
         self._faixa: tuple[int, int] | None = None
         self._limite: int | None = None
         self._escrita: tuple[str, Any] | None = None
+        self._campos = "*"
 
     def _filtra(self, filtro) -> _Consulta:
         self._filtros.append(filtro)
         return self
 
-    def select(self, _campos: str = "*", count: str | None = None) -> _Consulta:
+    def select(self, campos: str = "*", count: str | None = None) -> _Consulta:
+        self._campos = campos
         return self
 
     def eq(self, coluna: str, valor: Any) -> _Consulta:
@@ -180,6 +184,9 @@ class _Consulta:
             linhas = linhas[self._faixa[0] : self._faixa[1] + 1]
         if self._limite is not None:
             linhas = linhas[: self._limite]
+        if self._nome == "participantes" and self._campos != "*":
+            colunas = [c.strip() for c in self._campos.split(",")]
+            linhas = [{c: r.get(c) for c in colunas} for r in linhas]
         return _Resultado(linhas)
 
 

@@ -342,8 +342,10 @@ def jwks_do_emissor(cfg: ConfiguracaoMCP) -> dict:
 
 # Só os campos que o gate e as ferramentas leem. O `perfil_ouvidoria` é coluna
 # opcional (`_COLUNAS_OPCIONAIS`): num banco sem ela, o `selecionar_participantes`
-# a tira do select, ninguém tem `diretoria_executiva` e só a Central abre.
-_CAMPOS_DO_GATE = "id, email, ativo, is_super_admin, access_profile, perfil_ouvidoria"
+# a tira do select, ninguém tem `diretoria_executiva` e só a Central abre. O
+# `nome_completo` é o ator que a ferramenta do caso da Ouvidoria grava no
+# histórico de acesso (`registrar_acesso`); sem ele, a linha sairia com o id.
+_CAMPOS_DO_GATE = "id, email, nome_completo, ativo, is_super_admin, access_profile, perfil_ouvidoria"
 
 
 def tem_diretoria_executiva(participante: dict | None) -> bool:
