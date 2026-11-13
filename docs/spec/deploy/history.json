@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T00:03:15-03:00",
+      "sha": "688bb3beffb6c2d696ccd9e82170a822817e68f7",
+      "app_version": "0.270.0",
+      "subject": "Onda hsm-conector-onda3: Email ao Responsável quando o card do diretor nasce",
+      "raw_subject": "chore(deploy): registro da onda hsm-conector-onda3 (#1670)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1632
+      ],
+      "result": "healthy",
+      "duration_seconds": 58,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-conector-onda3: PR #1670 (issue #1635), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 18
+        },
+        "health_s": 20
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-12T23:55:51-03:00",
       "sha": "4e358df2f6553be90d89b95354ef499b183a5579",
       "app_version": "0.269.0",
