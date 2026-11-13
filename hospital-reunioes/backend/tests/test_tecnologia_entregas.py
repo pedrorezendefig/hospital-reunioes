@@ -754,3 +754,20 @@ class TestKit:
             "O clique deixa a entrega aberta",
         ):
             assert trecho in secao, trecho
+
+    def test_o_kit_diz_como_ver_uma_semana_so_e_as_semanas_antigas(self):
+        """O clique na barra filtra a lista para a semana, o botao desfaz, e
+        Ver semanas anteriores traz as mais antigas (issue #1704, ADR 0092,
+        decisoes 1 e 4)."""
+        secao = _secao("As Entregas")
+        for trecho in (
+            "Clicar numa semana do gráfico",
+            "só as entregas daquela semana",
+            "mostrar todas",
+            "Clicar de novo na barra",
+            "Nenhuma entrega nesta semana.",
+            "**Ver semanas anteriores**",
+            "12 semanas mais antigas",
+            "some quando não há entrega mais antiga",
+        ):
+            assert trecho in secao, trecho
