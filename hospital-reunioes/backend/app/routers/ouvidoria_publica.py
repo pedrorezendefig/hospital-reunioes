@@ -469,6 +469,7 @@ async def avaliar_pelo_cartaz(
     request: Request,
     codigo: str,
     avaliacao: AvaliacaoPublica,
+    tarefas: BackgroundTasks,
     supabase=Depends(get_supabase_client),
 ):
     """Grava a nota de um cartaz (issue #1622). Não abre caso nem protocolo: a
@@ -496,6 +497,9 @@ async def avaliar_pelo_cartaz(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Não foi possível registrar sua avaliação agora. Tente novamente em instantes.",
         )
+    # O agente lê o comentário depois da resposta e marca Para revisar quando
+    # ele sugere gravidade (issue #1624, ADR 0087). Sem comentário, nada sai.
+    ouvidoria_agente_triagem.agendar_avaliacao(tarefas, supabase, linha)
     return {"id": linha["id"], "nota": linha["nota"]}
 
 

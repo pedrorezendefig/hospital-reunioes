@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.dependencies import get_supabase_client, require_ana_api_key
 from app.limiter import limiter
-from app.services import ouvidoria_acuse
+from app.services import ouvidoria_acuse, ouvidoria_agente_triagem
 from app.services.ouvidoria_taxonomia import SETOR_PENDENTE, nasce_sigilosa
 from app.utils.ana_resposta import filtrar_por_termo, montar_resposta
 from app.utils.text_sanitizer import sanitizar_travessao, texto_ou_nulo
@@ -397,6 +397,9 @@ async def registrar_protocolo(
     # Regra Híbrida do lado da Ana deixaria o paciente sem número por causa de
     # um email que não saiu.
     ouvidoria_acuse.acusar_recebimento(supabase, row, dt.datetime.now(tz=dt.UTC), tarefas)
+    # O agente de triagem lê o caso da Ana também (issue #1624, ADR 0087,
+    # decisão 1), depois da resposta: a Ana não espera o modelo.
+    ouvidoria_agente_triagem.agendar_caso(tarefas, supabase, row)
     return {campo: row.get(campo) for campo in _CAMPOS_PROTOCOLO_TUPLA}
 
 

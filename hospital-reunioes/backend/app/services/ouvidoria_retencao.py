@@ -280,6 +280,9 @@ CAMPOS_DO_DOSSIE: dict[str, str | None] = {
     # dela, cinco anos depois de criada: o caso apagado antes disso (pela
     # Diretoria) não pode continuar apontando para ele.
     "avaliacao_id": None,
+    # O assunto que o agente de triagem escreveu (issue #1624, migration 143).
+    # Não traz nome, mas é um resumo do relato: sai com ele.
+    "assunto": None,
 }
 
 # `resumo` é NOT NULL com CHECK anti-vazio desde a migration 063: não pode ir a

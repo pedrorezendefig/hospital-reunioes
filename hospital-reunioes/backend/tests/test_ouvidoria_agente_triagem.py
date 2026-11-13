@@ -74,7 +74,9 @@ class _Banco(_BancoComAvaliacoes):
 class _QueryDoAgente(_QueryComAvaliacoes):
     def execute(self):
         if self._tabela == "ouvidoria_protocolos" and self._pending_update is not None:
-            self._banco.updates_do_caso.append(dict(self._pending_update))
+            # O carimbo do acuse também é update do caso; o teste lê só o resto.
+            if not any(coluna.startswith("acuse") for coluna in self._pending_update):
+                self._banco.updates_do_caso.append(dict(self._pending_update))
             alvo = [r for r in self._banco.rows if all(r.get(c) == v for c, v in self._filters.items())]
             for linha in alvo:
                 linha.update(self._pending_update)
@@ -135,3 +137,249 @@ class TestAChegadaGravaAssuntoENucleo:
             "Queda do leito; internação, quarto 204; madrugada; dano potencial."
         )
         assert modelo.chamadas[0]["model"] == "claude-sonnet-5-5"
+
+    def test_relato_que_nao_e_do_nucleo_ganha_so_o_assunto(self, modelo):
+        modelo.texto = json.dumps(
+            {"assunto": "Demora na recepção", "nsp_sugerido": False, "nsp_justificativa_simples": None}
+        )
+        client, banco = _app()
+
+        _enviar(client, "Esperei duas horas na recepção sem informação nenhuma.")
+
+        caso = banco.rows[0]
+        assert caso["assunto"] == "Demora na recepção"
+        assert caso.get("nsp_sugerido") is not True
+        assert banco.updates_do_caso == [{"assunto": "Demora na recepção"}]
+
+    def test_apontamento_sem_as_duas_justificativas_nao_acende_o_alerta(self, modelo):
+        modelo.texto = json.dumps(
+            {"assunto": "Queda na internação", "nsp_sugerido": True, "nsp_justificativa_simples": "Queda."}
+        )
+        client, banco = _app()
+
+        _enviar(client)
+
+        assert banco.updates_do_caso == [{"assunto": "Queda na internação"}]
+
+
+class TestOModeloLeOTextoPseudonimizado:
+    """Critério 2: o texto enviado ao modelo é o pseudonimizado."""
+
+    def test_nome_e_cpf_do_relato_nao_saem_do_app(self, modelo):
+        client, _banco = _app()
+
+        _enviar(client)
+
+        enviado = _texto_enviado(modelo)
+        assert "Maria Aparecida Souza" not in enviado
+        assert "123.456.789-09" not in enviado
+        assert "[NOME]" in enviado
+        assert "[CPF]" in enviado
+        assert "caiu do leito no quarto 204" in enviado
+
+    def test_nome_que_o_modelo_escreva_no_assunto_vira_marcador(self, modelo):
+        modelo.texto = json.dumps({"assunto": "Queda da paciente Maria Aparecida Souza", "nsp_sugerido": False})
+        client, banco = _app()
+
+        _enviar(client)
+
+        assert banco.rows[0]["assunto"] == "Queda da paciente [NOME]"
+
+
+class TestFalhaETetoNaoTravamOCaso:
+    """Critério 3: falha do modelo e teto estourado deixam o caso sem assunto e
+    sem alerta, e o envio público responde normal."""
+
+    def test_modelo_fora_do_ar_deixa_o_caso_sem_assunto_e_o_envio_responde(self, modelo):
+        modelo.texto = RuntimeError("API fora do ar")
+        client, banco = _app()
+
+        r = _enviar(client)
+
+        assert r.status_code == 201
+        assert r.json()["protocolo"] == "2026-0001"
+        caso = banco.rows[0]
+        assert caso.get("assunto") is None
+        assert caso.get("nsp_sugerido") is not True
+        assert banco.updates_do_caso == []
+        assert banco.movimentos[-1]["autor_nome"] == "Agente de triagem"
+        assert banco.movimentos[-1]["observacao"] == "Assunto não gerado: o agente de triagem não respondeu."
+
+    def test_resposta_que_nao_e_json_conta_como_falha(self, modelo):
+        modelo.texto = "Não consigo ajudar com isso."
+        client, banco = _app()
+
+        r = _enviar(client)
+
+        assert r.status_code == 201
+        assert banco.updates_do_caso == []
+        assert banco.movimentos[-1]["observacao"] == "Assunto não gerado: o agente de triagem não respondeu."
+
+    def test_teto_do_dia_estourado_nao_chama_o_modelo(self, modelo):
+        client, banco = _app(_Banco(cota_livre=False))
+
+        r = _enviar(client)
+
+        assert r.status_code == 201
+        assert modelo.chamadas == []
+        assert banco.updates_do_caso == []
+        assert banco.movimentos[-1]["observacao"] == (
+            "Assunto não gerado: o limite de 300 leituras por dia foi atingido."
+        )
+
+    def test_cada_caso_gasta_uma_chamada_da_cota(self, modelo):
+        client, banco = _app()
+
+        _enviar(client)
+        _enviar(client, "Outro relato sobre a recepção.")
+
+        assert banco.reservas == 2
+        assert len(modelo.chamadas) == 2
+
+
+class TestOAgenteSoSugere:
+    """Critério 4: a saída do agente nunca altera tipo, gravidade, sigilo ou
+    área."""
+
+    def test_campos_de_classificacao_na_resposta_sao_ignorados(self, modelo):
+        modelo.texto = json.dumps(
+            {
+                "assunto": "Queda do leito",
+                "nsp_sugerido": False,
+                "tipo_manifestacao": "elogio",
+                "gravidade": "baixa",
+                "sigilo_reforcado": False,
+                "setor": "Recepção",
+                "categoria": "Elogio",
+                "status": "encerrado",
+            }
+        )
+        client, banco = _app()
+
+        _enviar(client)
+
+        assert banco.updates_do_caso == [{"assunto": "Queda do leito"}]
+        caso = banco.rows[0]
+        assert caso["sigilo_reforcado"] is True
+        assert caso["status"] == "em_classificacao"
+        assert caso.get("tipo_manifestacao") is None
+        assert caso.get("gravidade") is None
+
+
+class TestParaRevisarNaAvaliacao:
+    """Critério 5: avaliação com comentário grave recebe Para revisar com
+    motivo; sem comentário, o agente não é chamado."""
+
+    def test_comentario_grave_marca_para_revisar_com_motivo(self, modelo):
+        modelo.texto = json.dumps({"revisar": True, "revisar_motivo": "Relata agressão de um funcionário."})
+        client, banco = _app()
+
+        r = client.post(ROTA_AVALIACAO, json={"nota": 4, "comentario": "O segurança empurrou meu pai na porta."})
+
+        assert r.status_code == 201
+        avaliacao = banco.avaliacoes[0]
+        assert avaliacao["revisar"] is True
+        assert avaliacao["revisar_motivo"] == "Relata agressão de um funcionário."
+        assert "O segurança empurrou meu pai" in _texto_enviado(modelo)
+
+    def test_comentario_comum_nao_marca(self, modelo):
+        modelo.texto = json.dumps({"revisar": False, "revisar_motivo": None})
+        client, banco = _app()
+
+        client.post(ROTA_AVALIACAO, json={"nota": 5, "comentario": "Equipe muito atenciosa."})
+
+        assert banco.avaliacoes[0].get("revisar") is not True
+        assert len(modelo.chamadas) == 1
+
+    def test_nota_sem_comentario_nao_chama_o_agente(self, modelo):
+        client, banco = _app()
+
+        r = client.post(ROTA_AVALIACAO, json={"nota": 2, "motivos": ["tempo_espera"]})
+
+        assert r.status_code == 201
+        assert modelo.chamadas == []
+        assert banco.reservas == 0
+
+    def test_o_comentario_vai_pseudonimizado(self, modelo):
+        modelo.texto = json.dumps({"revisar": False})
+        client, _banco = _app()
+
+        client.post(ROTA_AVALIACAO, json={"nota": 1, "comentario": "A enfermeira Joana Ribeiro gritou comigo."})
+
+        assert "Joana Ribeiro" not in _texto_enviado(modelo)
+
+
+@pytest.fixture
+def agendados(monkeypatch) -> list[dict]:
+    """Os casos que as rotas puseram na fila do agente."""
+    casos: list[dict] = []
+    monkeypatch.setattr(ouvidoria_agente_triagem, "agendar_caso", lambda _t, _sb, caso: casos.append(caso))
+    return casos
+
+
+class TestTodoCanalPassaPeloAgente:
+    """A chegada de toda manifestação, de qualquer canal, passa pelo agente
+    (ADR 0087, decisão 1): o balcão do ouvidor e a Ana, além do canal aberto."""
+
+    def test_o_registro_do_balcao_vai_ao_agente(self, monkeypatch, agendados):
+        from test_ouvidoria_registro_manual import OUVIDOR, REGISTRO
+        from test_ouvidoria_registro_manual import _client as cliente_manual
+
+        client, _supabase = cliente_manual(monkeypatch, OUVIDOR)
+
+        r = client.post("/api/ouvidoria/manifestacoes", json=REGISTRO)
+
+        assert r.status_code == 201
+        assert [caso["relato_integral"] for caso in agendados] == [REGISTRO["relato_integral"]]
+
+    def test_o_protocolo_da_ana_vai_ao_agente(self, monkeypatch, agendados):
+        from test_ana_ouvidoria_protocolos import CHAVE_CORRETA, _payload_valido
+        from test_ana_ouvidoria_protocolos import _make_app as app_da_ana
+
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        client = app_da_ana()
+
+        r = client.post("/api/ana/ouvidoria/protocolos", json=_payload_valido(), headers={"X-API-Key": CHAVE_CORRETA})
+
+        assert r.status_code == 201
+        assert [caso["protocolo"] for caso in agendados] == [r.json()["protocolo"]]
+
+
+class TestAFilaMostraOAssunto:
+    """Critério 6 (lado do servidor): a fila da Ouvidoria traz o assunto, e o
+    nome do paciente não viaja na linha."""
+
+    def test_a_ouvidoria_le_o_assunto_na_fila_sem_o_paciente(self, monkeypatch):
+        from test_ouvidoria_sigilo import OUVIDOR, _client, _manifestacao, _SupabaseFake
+
+        caso = _manifestacao(7, assunto="Queda do leito na internação", paciente_nome="José Pereira Lima")
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake([caso]))
+
+        resposta = client.get("/api/ouvidoria/protocolos")
+
+        linha = resposta.json()["protocolos"][0]
+        assert linha["assunto"] == "Queda do leito na internação"
+        assert "José Pereira Lima" not in resposta.text
+
+    def test_caso_sem_assunto_chega_com_o_assunto_vazio(self, monkeypatch):
+        from test_ouvidoria_sigilo import OUVIDOR, _client, _manifestacao, _SupabaseFake
+
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake([_manifestacao(7)]))
+
+        linha = client.get("/api/ouvidoria/protocolos").json()["protocolos"][0]
+
+        assert "assunto" in linha
+        assert linha["assunto"] is None
+
+    def test_quem_esta_fora_da_ouvidoria_nao_recebe_o_assunto(self, monkeypatch):
+        from test_ouvidoria_sigilo import SECRETARIA, _client, _manifestacao, _SupabaseFake
+
+        caso = _manifestacao(7, tipo_manifestacao="reclamacao", assunto="Demora na recepção")
+        client, _ = _client(monkeypatch, SECRETARIA, _SupabaseFake([caso]))
+
+        resposta = client.get("/api/ouvidoria/protocolos")
+
+        assert "assunto" not in resposta.json()["protocolos"][0]
+        assert "Demora na recepção" not in resposta.text
