@@ -216,3 +216,27 @@ class TestPelaRota:
         assert f"**Onde mexe no código:** {PARTES['onde_mexe_no_codigo']}" in _bloco(corpo)
         assert "Onde mexe" not in bloco_para_o_diretor(corpo)
         assert corpo.rstrip().endswith(f'<!-- demanda-vitta id="{demanda_id}" -->')
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. O prompt do chat pede as seis partes so no fechamento do Roteiro
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestOPrompt:
+    def test_o_prompt_pede_as_seis_partes_so_no_pronto_e_o_codigo_pelo_que_leu(self, monkeypatch):
+        client, _, _ = _cenario(monkeypatch)
+        _repositorio(monkeypatch)
+        demanda_id = _comecar(client, monkeypatch)
+        modelo = _modelo(monkeypatch, [], _turno(mensagem="Em que tela?"))
+        assert client.post(f"{CHAT}/{demanda_id}", json={"texto": "O botão sumiu"}).status_code == 200
+
+        instrucao = "\n".join(b["text"] for b in modelo.chamadas[0]["system"][:-1])
+        roteiro = instrucao.split("## O Roteiro do bug", 1)[1].split("\n## ", 1)[0]
+        assert re.search(r"Com `pronto: true`, devolva também `para_o_desenvolvedor`", roteiro)
+        assert re.search(r"Antes disso, `para_o_desenvolvedor` é `null`", roteiro)
+        for chave in PARTES:
+            assert f"`{chave}`" in roteiro, chave
+        assert re.search(r"`onde_mexe_no_codigo` e `cuidados`[^\n]*código que você leu", roteiro)
+        formato = instrucao.split("## Formato de resposta", 1)[1]
+        assert '"para_o_desenvolvedor": null' in formato
