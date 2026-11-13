@@ -94,7 +94,7 @@ import { useTelaLarga } from "@/hooks/useTelaLarga";
 
 import { ChatDaTecnologia, Fala } from "./ChatDaTecnologia";
 import { ConversaDaDemanda } from "./ConversaDaDemanda";
-import { DocumentoDoCard } from "./DocumentoDoCard";
+import { CabecalhoDaDemanda, DocumentoDoCard } from "./DocumentoDoCard";
 import { QuadroDaTecnologia } from "./QuadroDaTecnologia";
 import { SeloDeEtapa } from "./SeloDeEtapa";
 import {
@@ -1381,7 +1381,15 @@ export function ConversasDaTecnologia({
                 ) : aberta && abreNoAcompanhamento(aberta) ? (
                   <Acompanhamento key={chave} demanda={aberta} token={token} />
                 ) : (
-                  <ChatDaTecnologia key={chave} token={token} demandaId={aberta?.id ?? null} onMudou={aoMudar} />
+                  <div className="space-y-3">
+                    {/* A Demanda que abre no chat tem o mesmo cabeçalho do Documento (issue #1669). */}
+                    {aberta && (
+                      <div className="px-4 py-3 rounded-2xl border border-border bg-white space-y-2">
+                        <CabecalhoDaDemanda key={chave} demanda={aberta} />
+                      </div>
+                    )}
+                    <ChatDaTecnologia key={chave} token={token} demandaId={aberta?.id ?? null} onMudou={aoMudar} />
+                  </div>
                 )}
               </div>
               {aberta && (

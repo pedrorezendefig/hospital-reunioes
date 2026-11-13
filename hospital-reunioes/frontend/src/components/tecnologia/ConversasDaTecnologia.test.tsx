@@ -1964,3 +1964,114 @@ describe("O card do Quadro abre num painel à direita (issue #1643, ADR 0090, de
     expect(regra[2]).toMatch(/animation:\s*none/);
   });
 });
+
+/**
+ * O Número e o Copiar link no topo do chat (issue #1669): a conversa Registrada
+ * do próprio autor e o card em revisão abrem no chat do Assistente, e não no
+ * Documento do card, mas são Demandas e mostram o mesmo cabeçalho dele.
+ */
+describe("O Número e o Copiar link no chat (issue #1669)", () => {
+  const REGISTRADA_DO_AUTOR = demanda("r-1", "Escala some no domingo", { numero: 40, minha: true });
+  const EM_REVISAO = demanda("r-2", "Retorno marcado na saída", {
+    etapa: "em_analise",
+    tem_vinculo: true,
+    numero: 41,
+    minha: true,
+    em_revisao: true,
+  });
+
+  function comAs(lidas: Demanda[]) {
+    return montar((url) => {
+      if (url === LISTA) return { status: 200, corpo: lidas };
+      if (url.startsWith(`${LISTA}/`)) return { status: 200, corpo: conversa(url.slice(LISTA.length + 1)) };
+      return { status: 404, corpo: {} };
+    });
+  }
+
+  function areaDeTransferencia() {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    return writeText;
+  }
+
+  async function abrirNoChat(titulo: RegExp) {
+    fireEvent.click(await within(lista()).findByRole("button", { name: titulo }));
+    const aberta = screen.getByRole("region", { name: "Conversa aberta" });
+    // Abriu no chat, não no Documento do card.
+    expect(await within(aberta).findByText("Onde isso aconteceu?")).toBeTruthy();
+    expect(within(aberta).queryByRole("region", { name: "Documento do card" })).toBeNull();
+    return aberta;
+  }
+
+  it("o autor vê Demanda N e copia as duas linhas na própria conversa Registrada", async () => {
+    const writeText = areaDeTransferencia();
+    comAs([REGISTRADA_DO_AUTOR]);
+
+    const aberta = await abrirNoChat(/Escala some no domingo/);
+
+    expect(within(aberta).getByText("Demanda 40")).toBeTruthy();
+    fireEvent.click(within(aberta).getByRole("button", { name: "Copiar link" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText).toHaveBeenCalledWith(
+      "Demanda 40: Escala some no domingo\nhttp://localhost:3000/admin/tecnologia?demanda=r-1",
+    );
+    expect((await within(aberta).findByText("Link copiado")).getAttribute("role")).toBe("status");
+  });
+
+  it("o autor vê Demanda N e copia as duas linhas no card em revisão", async () => {
+    const writeText = areaDeTransferencia();
+    comAs([EM_REVISAO]);
+
+    const aberta = await abrirNoChat(/Retorno marcado na saída/);
+
+    expect(within(aberta).getByText("Demanda 41")).toBeTruthy();
+    fireEvent.click(within(aberta).getByRole("button", { name: "Copiar link" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText).toHaveBeenCalledWith(
+      "Demanda 41: Retorno marcado na saída\nhttp://localhost:3000/admin/tecnologia?demanda=r-2",
+    );
+  });
+
+  it("trocar de Demanda depois de copiar não leva o Link copiado para a outra", async () => {
+    areaDeTransferencia();
+    const OUTRA = demanda("r-3", "Senha do ponto expira", { numero: 42, minha: true });
+    comAs([REGISTRADA_DO_AUTOR, OUTRA]);
+
+    const aberta = await abrirNoChat(/Escala some no domingo/);
+    fireEvent.click(within(aberta).getByRole("button", { name: "Copiar link" }));
+    expect(await within(aberta).findByText("Link copiado")).toBeTruthy();
+
+    await abrirNoChat(/Senha do ponto expira/);
+    const outra = screen.getByRole("region", { name: "Conversa aberta" });
+    expect(within(outra).getByText("Demanda 42")).toBeTruthy();
+    expect(within(outra).queryByText("Link copiado")).toBeNull();
+  });
+
+  it("trocar de Demanda depois de o navegador recusar a cópia não mostra o link da anterior", async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error("negado"));
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const OUTRA = demanda("r-3", "Senha do ponto expira", { numero: 42, minha: true });
+    comAs([REGISTRADA_DO_AUTOR, OUTRA]);
+
+    const aberta = await abrirNoChat(/Escala some no domingo/);
+    fireEvent.click(within(aberta).getByRole("button", { name: "Copiar link" }));
+    expect(await within(aberta).findByRole("textbox", { name: "Link da Demanda" })).toBeTruthy();
+
+    await abrirNoChat(/Senha do ponto expira/);
+    const outra = screen.getByRole("region", { name: "Conversa aberta" });
+    expect(within(outra).getByText("Demanda 42")).toBeTruthy();
+    expect(within(outra).queryByRole("textbox", { name: "Link da Demanda" })).toBeNull();
+  });
+
+  it("a conversa nova, que ainda não é Demanda, segue sem o cabeçalho", async () => {
+    comAs([REGISTRADA_DO_AUTOR]);
+    await within(lista()).findByText("Escala some no domingo");
+
+    fireEvent.click(screen.getByRole("button", { name: NOVA_CONVERSA }));
+
+    const aberta = screen.getByRole("region", { name: "Conversa aberta" });
+    expect(await within(aberta).findByText(ABERTURA)).toBeTruthy();
+    expect(within(aberta).queryByRole("button", { name: "Copiar link" })).toBeNull();
+  });
+});
