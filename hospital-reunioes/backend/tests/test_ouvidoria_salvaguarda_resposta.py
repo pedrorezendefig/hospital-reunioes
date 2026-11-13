@@ -88,3 +88,48 @@ class TestOCasoComSeloMostraOTrecho:
         assert "erro da enfermagem" in enviado
         assert "Ana Maria Souza" not in enviado
         assert "admitam ou neguem falha" in chamada["system"]
+
+
+class TestOCasoSemSeloNaoChamaOAgente:
+    """Critério 2: caso sem selo não chama o agente."""
+
+    @pytest.mark.parametrize("decisao", [None, "descartado"])
+    def test_caso_sem_selo_responde_sem_leitura(self, monkeypatch, modelo, decisao):
+        client, _ = _client(monkeypatch, _banco(_caso(nsp_decisao=decisao, nsp_sugerido=True)))
+
+        r = _pedir(client)
+
+        assert r.status_code == 200, r.text
+        assert r.json() == {"analisada": False, "trechos": []}
+        assert modelo.chamadas == []
+
+
+class TestAFalhaDoAgenteNaoTravaOEnvio:
+    """Critério 3: falha do agente deixa enviar normalmente."""
+
+    @pytest.mark.parametrize(
+        "resposta",
+        [RuntimeError("timeout"), "isto não é JSON", json.dumps({"sem": "trechos"})],
+        ids=["erro", "texto", "formato"],
+    )
+    def test_falha_do_agente_responde_sem_leitura(self, monkeypatch, modelo, resposta):
+        modelo.texto = resposta
+        client, _ = _client(monkeypatch, _banco(_caso(nsp_decisao="confirmado")))
+
+        r = _pedir(client)
+
+        assert r.status_code == 200, r.text
+        assert r.json() == {"analisada": False, "trechos": []}
+
+    def test_o_caso_com_selo_encerra_com_a_resposta_depois_da_falha(self, monkeypatch, modelo):
+        modelo.texto = RuntimeError("timeout")
+        client, supabase = _client(monkeypatch, _banco(_caso(nsp_decisao="confirmado", status="respondido")))
+        assert _pedir(client).json()["analisada"] is False
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/transicoes",
+            json={"estado": "encerrado", "desfecho": "procedente", "desfecho_descricao": RESPOSTA_QUE_ADMITE},
+        )
+
+        assert r.status_code == 200, r.text
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["status"] == "encerrado"
