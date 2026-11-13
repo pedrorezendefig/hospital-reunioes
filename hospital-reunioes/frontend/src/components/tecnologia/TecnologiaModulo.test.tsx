@@ -38,7 +38,15 @@ function montar({ desenvolvedor = false }: { desenvolvedor?: boolean } = {}) {
       const corpo = url.endsWith("/eu")
         ? { desenvolvedor }
         : url.includes("/entregas")
-          ? { agrupar: "semana", periodos: [], entregas: [], responsaveis: [] }
+          ? {
+              topo: {
+                pedidos: { total: 0, anteriores: 0, bugs: 0, melhorias: 0 },
+                entregas: { total: 0, anteriores: 0, g: 0, m: 0, p: 0 },
+              },
+              semanas: [],
+              entregas: [],
+              responsaveis: [],
+            }
           : [];
       return { ok: true, status: 200, json: async () => corpo } as unknown as Response;
     }),
