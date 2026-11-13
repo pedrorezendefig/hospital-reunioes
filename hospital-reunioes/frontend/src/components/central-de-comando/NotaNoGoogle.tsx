@@ -12,6 +12,9 @@
  * Sem a chave da Places API, o backend diz `medida: false`, e a tela avisa
  * que a nota não está sendo medida, sem número.
  *
+ * Abaixo dos números, o gráfico do mês (issue #1699): as leituras semanais
+ * da nota e das avaliações acumuladas contra as do mês anterior.
+ *
  * Abaixo da nota, o teste do convite ao Google no QR (issue #1625, ADR 0089
  * decisão 7): por ponto e período, os convites exibidos, os cliques e a taxa
  * de clique, e o aviso de reavaliar depois de 60 dias. O seletor de período
@@ -28,6 +31,7 @@ import { formatarInteiro } from "@/lib/central-de-comando/formato";
 import { PERIODO_PADRAO, type Periodo } from "@/lib/central-de-comando/periodo";
 import { formatarNota } from "@/lib/ouvidoria/nota-externa";
 
+import { GraficoDoMesDaNota, type LeituraDaNota } from "./GraficoDoMesDaNota";
 import { CAMINHO_OBJETIVOS } from "./Objetivos";
 import { SeletorDePeriodo } from "./SeletorDePeriodo";
 
@@ -45,6 +49,9 @@ export type NotaNoGooglePayload = {
     avaliacoes_do_mes: number | null;
     nota_mes_anterior: number | null;
     tendencia: "melhorou" | "piorou" | "igual" | null;
+    /** As leituras do mês e do anterior, para o gráfico (issue #1699). */
+    leituras_do_mes: LeituraDaNota[];
+    leituras_mes_anterior: LeituraDaNota[];
   };
   /** O teste do convite ao Google no período (issue #1625). */
   convite?: {
@@ -174,7 +181,7 @@ function Lente({ dados }: { dados: NotaNoGooglePayload }) {
           <PlugZap className="mt-0.5 h-5 w-5 shrink-0" />
           <div className="space-y-1">
             <p className="font-semibold">A nota do Google não está sendo medida</p>
-            <p className="text-sm">A busca semanal da nota ainda não foi ligada. Quando for, a nota aparece aqui.</p>
+            <p className="text-sm">A busca semanal da nota ainda não foi ligada. Quando for, a nota e o gráfico do mês aparecem aqui.</p>
           </div>
         </div>
       ) : reputacao.nota === null ? (
@@ -226,6 +233,14 @@ function Lente({ dados }: { dados: NotaNoGooglePayload }) {
               )}
             </li>
           </ul>
+          <GraficoDoMesDaNota
+            doMes={reputacao.leituras_do_mes}
+            anterior={reputacao.leituras_mes_anterior}
+            escala={reputacao.escala}
+            nota={reputacao.nota}
+            notaAnterior={reputacao.nota_mes_anterior}
+            tendencia={reputacao.tendencia}
+          />
         </>
       )}
     </div>
