@@ -11,6 +11,7 @@ import {
   EXPECTATIVAS,
   PERIODOS,
   montarEnvio,
+  oQueOPassoAPassoContou,
   passoCompleto,
   precisaDoAvisoDoEmail,
   type FormularioPublico,
@@ -178,5 +179,49 @@ describe("o envio do passo a passo", () => {
     expect(
       montarEnvio(respondido({ anonimo: true, pacienteNascimento: "1980-01-15" }))
     ).not.toHaveProperty("paciente_nascimento");
+  });
+});
+
+describe("o que o passo a passo contou, para o Dossiê", () => {
+  it("diz quando, onde, quem atendeu, o nascimento, o telefone e o que a pessoa espera", () => {
+    expect(
+      oQueOPassoAPassoContou({
+        data_ocorrencia: "2026-11-10",
+        periodo: "noite",
+        hora_aprox: "22:15:00",
+        local_informado: "Internação · Ala 2A",
+        quarto: "Apto 204",
+        profissionais: "Enfermeira do plantão",
+        paciente_nascimento: "1948-03-02",
+        expectativa: "providencia",
+        manifestante_telefone: "(21) 98888-7777",
+      })
+    ).toEqual([
+      { rotulo: "Quando", valor: "10/11/2026, noite, por volta das 22:15" },
+      { rotulo: "Onde", valor: "Internação · Ala 2A, quarto Apto 204" },
+      { rotulo: "Profissionais citados", valor: "Enfermeira do plantão" },
+      { rotulo: "Nascimento do paciente", valor: "02/03/1948" },
+      { rotulo: "O que espera", valor: "Uma providência" },
+      { rotulo: "Telefone", valor: "(21) 98888-7777" },
+    ]);
+  });
+
+  it("o que não foi informado não vira linha", () => {
+    expect(
+      oQueOPassoAPassoContou({
+        data_ocorrencia: "2026-11-10",
+        periodo: "tarde",
+        local_informado: "Emergência adulta",
+        expectativa: "registro",
+      })
+    ).toEqual([
+      { rotulo: "Quando", valor: "10/11/2026, tarde" },
+      { rotulo: "Onde", valor: "Emergência adulta" },
+      { rotulo: "O que espera", valor: "Só registrar" },
+    ]);
+  });
+
+  it("o caso de antes do passo a passo não tem nada a contar", () => {
+    expect(oQueOPassoAPassoContou({})).toEqual([]);
   });
 });

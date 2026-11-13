@@ -291,3 +291,52 @@ export function montarEnvio(form: FormularioPublico): EnvioPublico {
   return envio;
 }
 
+/** O que a Manifestação guiada gravou no caso, como o Dossiê o recebe. */
+export interface CamposDoPassoAPasso {
+  data_ocorrencia?: string | null;
+  periodo?: string | null;
+  hora_aprox?: string | null;
+  local_informado?: string | null;
+  quarto?: string | null;
+  profissionais?: string | null;
+  paciente_nascimento?: string | null;
+  expectativa?: string | null;
+  manifestante_telefone?: string | null;
+}
+
+/** "2026-11-10" em "10/11/2026", sem passar pelo fuso do navegador. */
+function dataDoBrasil(iso: string): string {
+  const [ano, mes, dia] = iso.split("-");
+  return dia && mes && ano ? `${dia}/${mes}/${ano}` : iso;
+}
+
+/**
+ * As linhas que o Dossiê mostra do que a pessoa contou no passo a passo
+ * (issue #1620). O que não foi informado não vira linha, e o caso de antes do
+ * passo a passo não tem linha nenhuma.
+ */
+export function oQueOPassoAPassoContou(caso: CamposDoPassoAPasso): { rotulo: string; valor: string }[] {
+  const rotuloDe = <T extends string>(lista: { valor: T; rotulo: string }[], valor: string) =>
+    lista.find((item) => item.valor === valor)?.rotulo ?? valor;
+
+  const quando = [
+    caso.data_ocorrencia ? dataDoBrasil(caso.data_ocorrencia) : null,
+    caso.periodo ? rotuloDe(PERIODOS, caso.periodo).toLowerCase() : null,
+    caso.hora_aprox ? `por volta das ${caso.hora_aprox.slice(0, 5)}` : null,
+  ].filter(Boolean);
+  const onde = [caso.local_informado, caso.quarto ? `quarto ${caso.quarto}` : null].filter(Boolean);
+
+  const linhas: { rotulo: string; valor: string | null | undefined }[] = [
+    { rotulo: "Quando", valor: quando.join(", ") },
+    { rotulo: "Onde", valor: onde.join(", ") },
+    { rotulo: "Profissionais citados", valor: caso.profissionais },
+    {
+      rotulo: "Nascimento do paciente",
+      valor: caso.paciente_nascimento ? dataDoBrasil(caso.paciente_nascimento) : null,
+    },
+    { rotulo: "O que espera", valor: caso.expectativa ? rotuloDe(EXPECTATIVAS, caso.expectativa) : null },
+    { rotulo: "Telefone", valor: caso.manifestante_telefone },
+  ];
+  return linhas.filter((linha): linha is { rotulo: string; valor: string } => Boolean(linha.valor));
+}
+

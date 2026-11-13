@@ -187,6 +187,60 @@ describe("o Dossiê e o Paciente do caso (issue #666)", () => {
 });
 
 /**
+ * O que a Manifestação guiada perguntou, na tela do ouvidor (issue #1620).
+ * A régua das linhas tem teste em `lib/ouvidoria/manifestacao-guiada.test.ts`;
+ * aqui é a fiação: o bloco aparece no caso do passo a passo e some no de antes.
+ */
+describe("o Dossiê e o que o passo a passo contou (issue #1620)", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  function valorDaLinha(rotulo: string): string {
+    return screen.getByText(rotulo).nextElementSibling?.textContent ?? "";
+  }
+
+  it("mostra quando, onde, quem atendeu, o nascimento, o telefone e o que a pessoa espera", async () => {
+    montarComDossie(
+      dossie({
+        anonimo: false,
+        manifestante_nome: "Joana",
+        data_ocorrencia: "2026-11-10",
+        periodo: "noite",
+        hora_aprox: "22:15:00",
+        local_informado: "Internação · Ala 2A",
+        quarto: "Apto 204",
+        profissionais: "Enfermeira do plantão",
+        paciente_nascimento: "1948-03-02",
+        expectativa: "providencia",
+        manifestante_telefone: "(21) 98888-7777",
+      })
+    );
+
+    expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
+    expect(valorDaLinha("Quando")).toBe("10/11/2026, noite, por volta das 22:15");
+    expect(valorDaLinha("Onde")).toBe("Internação · Ala 2A, quarto Apto 204");
+    expect(valorDaLinha("Profissionais citados")).toBe("Enfermeira do plantão");
+    expect(valorDaLinha("Nascimento do paciente")).toBe("02/03/1948");
+    expect(valorDaLinha("O que espera")).toBe("Uma providência");
+    expect(valorDaLinha("Telefone")).toBe("(21) 98888-7777");
+  });
+
+  it("o caso de antes do passo a passo não desenha o bloco", async () => {
+    montarComDossie(dossie());
+
+    expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
+    expect(screen.queryByText("Quando")).toBeNull();
+    expect(screen.queryByText("O que espera")).toBeNull();
+  });
+});
+
+/**
  * O aviso do relato em nome de outra pessoa sem o nome do paciente
  * (issue #662, PRD #659, ADR 0052 decisão 5).
  *

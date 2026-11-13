@@ -58,6 +58,7 @@ import { descreverOrigem } from "@/lib/ouvidoria/origem";
 import { descreverTempoDesdeOMarco, type EventoDaTrilha } from "@/lib/ouvidoria/trilha";
 import { avisosDeDegradacao, calendarioUtilFoiLido } from "@/lib/ouvidoria/painel";
 import { descreverNaturezaInformada } from "@/lib/ouvidoria/natureza-informada";
+import { oQueOPassoAPassoContou, type CamposDoPassoAPasso } from "@/lib/ouvidoria/publico";
 import { devolucaoAOuvidoria } from "@/lib/ouvidoria/devolucao-a-ouvidoria";
 import { podeRedirecionar } from "@/lib/ouvidoria/acoes";
 import {
@@ -88,7 +89,10 @@ interface Anexo {
   enviado_por_nome: string;
 }
 
-export interface Dossie {
+// Os campos da Manifestação guiada (issue #1620) entram por `CamposDoPassoAPasso`,
+// opcionais pelo mesmo motivo dos marcos: um frontend servido enquanto o
+// backend ainda é o da versão anterior apenas não desenha o bloco.
+export interface Dossie extends CamposDoPassoAPasso {
   id: string;
   protocolo: string;
   data_abertura: string;
@@ -914,6 +918,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
 
   const origem = dossie ? descreverOrigem(dossie) : null;
   const naturezaInformada = dossie ? descreverNaturezaInformada(dossie) : null;
+  const passoAPasso = dossie ? oQueOPassoAPassoContou(dossie) : [];
   // O caso apagado (issue #593). O carimbo decide, e o crédito vem da trilha,
   // que é onde mora o nome de quem apagou. Trilha que não voltou dá crédito
   // nulo, e o aviso continua sendo dito com a data do próprio caso: o
@@ -1212,6 +1217,22 @@ export function Dossie({ protocolo, token }: DossieProps) {
               }
             />
           </dl>
+
+          {/* O que a pessoa contou na Manifestação guiada (issue #1620): quando,
+              onde, quem atendeu, o nascimento do paciente, o que ela espera e o
+              telefone. O caso de antes do passo a passo não desenha o bloco. */}
+          {passoAPasso.length > 0 && (
+            <div className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                Contado no formulário
+              </h3>
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {passoAPasso.map(({ rotulo, valor }) => (
+                  <Linha key={rotulo} rotulo={rotulo} valor={valor} />
+                ))}
+              </dl>
+            </div>
+          )}
 
           {/* Os quatro marcos com o tempo decorrido em cada trecho (issue
               #480, RN-55, diagnóstico D-05 e D-10). O prazo da área e a data
