@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T02:31:46-03:00",
+      "sha": "4c288f5b6aff0ca9568350cd214a748d639635ad",
+      "app_version": "0.276.0",
+      "subject": "Onda hsm-qr-onda3: Teste do convite ao Google no QR",
+      "raw_subject": "chore(deploy): registro da onda hsm-qr-onda3 (#1681)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1527
+      ],
+      "result": "healthy",
+      "duration_seconds": 506,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "142_ouvidoria_convite_google_no_qr.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-qr-onda3: PR #1681 (issue #1625), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 16,
+          "frontend": 180
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T01:50:58-03:00",
       "sha": "76438d873569fb5b0c7f393c61d0d16d8484f605",
       "app_version": "0.275.0",
