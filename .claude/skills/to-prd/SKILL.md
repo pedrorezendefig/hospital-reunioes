@@ -87,6 +87,12 @@ NÃO inclua caminhos de arquivo nem trechos de código: envelhecem rápido. Exce
 
 Lista de decisões de teste. Inclua: o que faz um bom teste (testar só comportamento externo, não detalhes de implementação), em quais **seams** os testes observam o comportamento (os acordados no passo 2), quais módulos serão testados, e exemplos análogos já existentes no código.
 
+## Manual: páginas que mudam
+
+As páginas do manual dentro do app que esta entrega muda, uma por módulo (no Hospital, `hospital-reunioes/frontend/public/manual/<módulo>/pagina.md`, ADR 0094). É desta seção que o `/to-issues` tira a fatia de manual, então ela é lista, não promessa: para cada módulo, as tarefas que nascem ou mudam e se o fluxograma muda. A fatia é sem vídeo.
+
+PRD que não muda tela, ou de Projeto sem manual no app, escreve **"Nenhuma: este PRD não muda tela"**, e o `/to-issues` não cria a fatia.
+
 ## Fora de escopo
 
 O que está fora de escopo deste PRD.
