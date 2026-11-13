@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import UTC, datetime
 
 import pytest
 
@@ -22,7 +23,7 @@ from test_tecnologia_vinculo import BASE, DIRETOR, PEDRO, _demanda, _pessoa  # n
 
 from app.limiter import limiter  # noqa: E402
 from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
-from app.services.tecnologia_entregas import tamanho_da_entrega  # noqa: E402
+from app.services.tecnologia_entregas import ritmo, tamanho_da_entrega  # noqa: E402
 
 ENTREGAS = f"{BASE}/entregas"
 
@@ -169,6 +170,85 @@ class TestTamanhoDaEntrega:
         """Ate 1 parte e P, de 2 a 5 e M, 6 ou mais e G. O bug sem sub-issue
         (partes nulas na sincronizacao) e P."""
         assert tamanho_da_entrega(partes) == tamanho
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 0b. O ritmo, na regra pura (ADR 0092, decisoes 1 e 3)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Sexta 13/11/2026, meio-dia no hospital. A semana corrente comeca na segunda
+# 09/11; as 4 do topo vao de 19/10 a 15/11, e as 4 anteriores de 21/09 a 18/10.
+AGORA = datetime(2026, 11, 13, 15, 0, tzinfo=UTC)
+
+
+def _card(did: str, **campos) -> dict:
+    """Uma Demanda com card, pedida pelo diretor bem antes da janela."""
+    campos.setdefault("github_issue_numero", 700)
+    campos.setdefault("criado_em", "2026-01-05T12:00:00Z")
+    return _demanda(did, **campos)
+
+
+def _fechado(did: str, fechada_em: str, **campos) -> dict:
+    campos.setdefault("etapa", "em_producao")
+    return _card(did, github_foto={"fechada_em": fechada_em, **campos.pop("foto", {})}, **campos)
+
+
+def _semana(resultado: dict, inicio: str) -> dict:
+    [semana] = [s for s in resultado["semanas"] if s["inicio"] == inicio]
+    return semana
+
+
+class TestRitmo:
+    def test_a_semana_comeca_na_segunda_pelo_fuso_de_sao_paulo(self):
+        """Fechado no domingo 08/11 as 22h do hospital, que ja e segunda 09/11
+        em UTC: conta na semana que termina naquele domingo, a de 02/11."""
+        resultado = ritmo([_fechado("domingo", "2026-11-09T01:00:00Z", titulo="Fechado no domingo")], agora=AGORA)
+
+        assert _semana(resultado, "2026-11-02")["entregas"] == [{"titulo": "Fechado no domingo", "tamanho": "P"}]
+        assert _semana(resultado, "2026-11-09")["entregas"] == []
+
+    def test_o_topo_conta_as_4_semanas_com_a_corrente_e_as_4_anteriores(self):
+        """A borda e a meia-noite de segunda no hospital: 00h30 de 19/10 entra
+        nas 4 do topo, e 23h de 18/10 ja e das anteriores. Antes de 21/09 nao
+        conta em nenhuma das duas."""
+        resultado = ritmo(
+            [
+                _fechado("corrente", "2026-11-12T15:00:00Z"),
+                _fechado("borda-de-dentro", "2026-10-19T03:30:00Z"),
+                _fechado("borda-de-fora", "2026-10-19T02:00:00Z"),
+                _fechado("anterior", "2026-09-21T12:00:00Z"),
+                _fechado("antes-de-tudo", "2026-09-20T12:00:00Z"),
+            ],
+            agora=AGORA,
+        )
+
+        assert resultado["topo"]["entregas"]["total"] == 2
+        assert resultado["topo"]["entregas"]["anteriores"] == 2
+
+    def test_o_pedido_conta_na_semana_em_que_o_card_nasceu(self):
+        """Na Origem Vitta, a criacao da issue-raiz que a foto guarda
+        (`criada_em`); sem ela, a criacao da Demanda. Na Origem diretor, o
+        Criar o card, e nao o comeco da conversa. Conversa sem card nao e
+        pedido."""
+        resultado = ritmo(
+            [
+                _card(
+                    "vitta-com-data",
+                    origem="vitta",
+                    criado_em="2026-11-10T12:00:00Z",
+                    github_foto={"criada_em": "2026-10-07T12:00:00Z"},
+                ),
+                _card("vitta-sem-data", origem="vitta", criado_em="2026-10-28T12:00:00Z", github_foto={}),
+                _card("diretor", criado_em="2026-09-23T12:00:00Z", envio_em="2026-11-03T12:00:00Z"),
+                _demanda("so-conversa", criado_em="2026-11-11T12:00:00Z"),
+            ],
+            agora=AGORA,
+        )
+
+        pedidos = {s["inicio"]: s["pedidos"] for s in resultado["semanas"] if s["pedidos"]}
+        assert pedidos == {"2026-10-05": 1, "2026-10-26": 1, "2026-11-02": 1}
+        assert resultado["topo"]["pedidos"]["total"] == 2
+        assert resultado["topo"]["pedidos"]["anteriores"] == 1
 
 
 # ═══════════════════════════════════════════════════════════════════════════
