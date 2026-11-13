@@ -113,11 +113,17 @@ Esse texto vem do planejamento da Vitta, ou das suas decisões quando a melhoria
 
 ## As Entregas
 
-A aba **Entregas**, ao lado de Conversas, mostra o que já foi entregue: quantos pedidos ficaram prontos por semana ou por mês, e a lista deles, do mais recente para o mais antigo. A semana começa na segunda-feira, e o dia conta pelo horário do hospital. Cada pedido conta uma vez, mesmo quando foi feito em partes.
+A aba **Entregas**, ao lado de Conversas, mostra o ritmo do trabalho: quantos pedidos chegam e quantas entregas saem por semana. A semana começa na segunda-feira, e o dia conta pelo horário do hospital. Cada pedido conta uma vez, mesmo quando foi feito em partes.
 
-Em cada linha aparecem o título, a data de entrega (o dia em que o pedido ficou pronto), a data em que entrou em produção, quando já entrou, e o Responsável, a pessoa da Vitta que cuidou dele. Clicar num pedido abre o mesmo Documento do card da conversa, com as partes e as datas de cada uma.
+No alto ficam dois números: os **pedidos** que chegaram e as **entregas** que saíram nas últimas 4 semanas, contando a semana de hoje. Embaixo de cada um, uma frase compara com as 4 anteriores, por exemplo "+6 contra as 4 anteriores". Passar o mouse num número mostra do que ele é feito: nos pedidos, quantos são bugs e melhorias; nas entregas, quantas são G, M e P. O pedido conta na semana em que o card nasceu: no pedido do diretor, o dia do Criar o card; no da Vitta, o dia em que ela abriu o card no desenvolvimento.
 
-No alto há os filtros: o período (de um dia até outro), **Bug** ou **Melhoria**, a Origem (**Pedido do diretor** ou **Vitta**) e o Responsável. Eles combinam entre si, por exemplo as melhorias da Vitta que ficaram prontas em outubro, e a contagem por semana ou por mês acompanha os filtros. Ali entram os mesmos pedidos que você vê na lista das conversas: os seus e os que a Vitta abriu. Pedido apagado e pedido que ainda não foi entregue não aparecem.
+Abaixo dos números, o gráfico das últimas 12 semanas mostra, em cada semana, a barra dos pedidos e a das entregas lado a lado. A barra das entregas se divide em G, M e P, do azul mais escuro para o mais claro. Passar o mouse numa semana mostra o que saiu nela, com o título e o tamanho de cada entrega.
+
+O **Tamanho da entrega** diz quanto trabalho a entrega levou, pelo número de partes em que a Vitta dividiu o pedido: **P** é o pedido de até 1 parte, **M**, de 2 a 5, e **G**, de 6 partes em diante. O aplicativo calcula o tamanho sozinho, pelo desenvolvimento, e ninguém estima nem digita nada.
+
+Embaixo do gráfico fica a lista do que já foi entregue, do mais recente para o mais antigo. Em cada linha aparecem o título, a data de entrega (o dia em que o pedido ficou pronto), a data em que entrou em produção, quando já entrou, e o Responsável, a pessoa da Vitta que cuidou dele. Clicar num pedido abre o mesmo Documento do card da conversa, com as partes e as datas de cada uma.
+
+Os filtros são **Bug** ou **Melhoria**, a Origem (**Pedido do diretor** ou **Vitta**) e o Responsável. Eles combinam entre si, por exemplo as melhorias da Vitta, e valem para os números, o gráfico e a lista. Ali entram os mesmos pedidos que você vê na lista das conversas: os seus e os que a Vitta abriu. Pedido apagado não aparece. O que fechou como Não será feita conta como pedido, mas nunca como entrega.
 
 A aba é só para acompanhar: nada se move por ali. Ninguém muda a Etapa nem o Responsável pelas Entregas.
 
@@ -164,7 +170,8 @@ No fim, o resumo traz o botão **Atualizar o card** no lugar do Criar o card. El
 ## O que já foi decidido
 
 - A aba mora dentro do aplicativo e só quem é Super admin a vê.
-- A aba tem Conversas, a conversa com o Assistente, que pergunta se é bug ou melhoria e confirma antes de seguir, e Entregas, que conta o que foi entregue por semana e por mês e não move nada.
+- A aba tem Conversas, a conversa com o Assistente, que pergunta se é bug ou melhoria e confirma antes de seguir, e Entregas, que mostra o ritmo da semana, os pedidos que chegam e as entregas que saem, e não move nada.
+- O Tamanho da entrega sai do número de partes do pedido (P até 1 parte, M de 2 a 5, G de 6 em diante), calculado pelo aplicativo e nunca estimado.
 - O pedido nasce da conversa do diretor ou de um card do aplicativo que a Vitta abre pelo desenvolvimento, que aparece na lista com o selo Vitta, sem conversa com a IA; os ajustes internos da Vitta não aparecem, e os pedidos da Vitta ao hospital continuam no WhatsApp.
 - Cada pedido tem a Conversa da Demanda, entre quem pediu e a Vitta, separada da conversa com a IA e guardada só dentro do aplicativo.
 - Na Conversa da Demanda, quem é marcado pelo nome é avisado no sino e por e-mail, e sem marcação a mensagem de quem pediu avisa o Responsável e a da Vitta avisa quem pediu.

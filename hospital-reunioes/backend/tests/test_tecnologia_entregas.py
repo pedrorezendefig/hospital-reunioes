@@ -512,17 +512,43 @@ class TestKit:
     def test_o_kit_explica_as_entregas(self):
         secao = _secao("As Entregas")
         for trecho in (
-            "por semana",
-            "por mês",
+            "últimas 4 semanas",
+            "4 anteriores",
+            "12 semanas",
             "segunda-feira",
             "data de entrega",
             "em produção",
             "Responsável",
-            "período",
             "Origem",
             "combinam",
             "apagado",
+            "Não será feita",
             "Documento do card",
             "nada se move",
         ):
             assert trecho in secao, trecho
+
+    def test_o_kit_diz_o_que_os_numeros_e_o_grafico_mostram(self):
+        """Os dois numeros, o que o mouse abre neles e a previa da semana no
+        grafico (ADR 0092, decisoes 1 e 4)."""
+        secao = _secao("As Entregas")
+        for trecho in (
+            "**pedidos**",
+            "**entregas**",
+            "bugs e melhorias",
+            "lado a lado",
+            "o título e o tamanho",
+        ):
+            assert trecho in secao, trecho
+
+    def test_o_kit_explica_o_tamanho_da_entrega(self):
+        """P ate 1 parte, M de 2 a 5, G de 6 em diante, sem estimativa (ADR
+        0092, decisao 3). O seletor de periodo e o "por mes" sairam da aba."""
+        secao = _secao("As Entregas")
+
+        assert "**Tamanho da entrega**" in secao
+        assert "**P** é o pedido de até 1 parte" in secao
+        assert "**M**, de 2 a 5" in secao
+        assert "**G**, de 6 partes em diante" in secao
+        assert "ninguém estima" in secao
+        assert "por mês" not in _kit()
