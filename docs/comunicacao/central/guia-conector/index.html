@@ -270,12 +270,78 @@
   }
   .note b { color: #8a5410; }
 
+  /* titulo de secao */
+  .sec {
+    margin-top: 5mm;
+    font-size: 17px;
+    font-weight: 800;
+    color: var(--marinho);
+    break-after: avoid;
+  }
+  .sec-lead {
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--cinza);
+  }
+  .sec-lead b { color: var(--tinta); font-weight: 700; }
+
+  /* ferramentas por perfil */
+  .perfis {
+    margin-top: 4mm;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    break-inside: avoid;
+  }
+  .perfil {
+    border: 1px solid var(--linha);
+    border-radius: 12px;
+    padding: 13px 14px;
+    background: var(--branco);
+  }
+  .perfil .k {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--royal);
+  }
+  .perfil .s {
+    font-size: 11.5px;
+    color: var(--cinza);
+    margin-bottom: 8px;
+  }
+  .ferr {
+    margin-top: 5px;
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: var(--cinza);
+  }
+  .ferr code {
+    display: inline-block;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--marinho);
+    background: var(--fundo);
+    border-radius: 6px;
+    padding: 1px 6px;
+    margin-bottom: 2px;
+  }
+  .step, .callout, .sees, .note { break-inside: avoid; }
+  /* abre a segunda folha do PDF com respiro no topo */
+  .perfis.folha { break-before: page; margin-top: 0; padding-top: 8mm; }
+  .sec + .callout { margin-top: 3mm; }
+  .callout + .sees { margin-top: 3mm; }
+  .note + .note { margin-top: 3mm; }
+
   /* Rodape (marca em negativo sobre marinho) */
   .footer {
-    margin-top: 6mm;
+    margin-top: 5mm;
     background: var(--marinho);
     color: #fff;
-    padding: 7mm 16mm;
+    padding: 6mm 16mm;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -340,19 +406,20 @@
           <span class="sub">Central de Comando</span>
         </span>
       </div>
-      <span class="chip">Guia do Super admin</span>
+      <span class="chip">Guia do Conector</span>
     </div>
 
     <div class="rule"></div>
 
     <div class="body">
-      <h1 class="title">Converse com os números do hospital,<br /><em>direto no seu Claude</em></h1>
+      <h1 class="title">Converse com os dados do hospital,<br /><em>direto no seu Claude</em></h1>
       <p class="lead">
         A <b>Central de Comando</b> pode ser adicionada ao seu Claude como um conector.
-        Você pergunta, em português mesmo, como está o site e as redes do hospital e recebe a
-        resposta na hora, com os <b>números reais</b> do painel. É <b>só leitura</b>, roda na
-        <b>sua própria assinatura</b> do Claude, sem custo extra para o hospital, e está liberada
-        para quem é <b>Super admin</b> no app.
+        Você faz a pergunta em português, do jeito que falaria com uma pessoa, e o Claude responde
+        com os <b>dados reais</b> do app do hospital. O conector <b>só lê</b> (não altera nada no app) e
+        roda na <b>sua própria assinatura</b> do Claude, sem custo extra para o hospital. O que você
+        pode perguntar depende do seu perfil no app: o <b>Super admin</b> vê os números do site e do
+        Instagram, e a <b>diretoria executiva</b> vê Reuniões e Ouvidoria.
       </p>
 
       <div class="steps">
@@ -378,19 +445,56 @@
           <div class="txt">
             <h3>Entre com o e-mail do seu cadastro</h3>
             <p>Vai abrir uma tela de login. Entre com o <b>mesmo e-mail que você usa para acessar o
-              app do hospital</b>, o do seu cadastro. É por esse e-mail que a Central reconhece você
-              como Super admin e libera os números. Se você entrar com outro e-mail, o acesso não passa.</p>
+              app do hospital</b>, o do seu cadastro. É por esse e-mail que a Central descobre o seu
+              perfil e libera as perguntas que cabem a ele. Com outro e-mail, o acesso não passa.</p>
           </div>
         </div>
         <div class="step">
           <div class="num">4</div>
           <div class="txt">
+            <h3>Diretoria executiva: desligue o treino com as suas conversas</h3>
+            <p>As respostas sobre Reuniões e Ouvidoria trazem dados pessoais de pacientes,
+              manifestantes e colaboradores. No claude.ai, abra <b>Settings, Privacy</b> e veja se está
+              ligada a opção que deixa as suas conversas serem usadas para melhorar os modelos
+              (<b>Help improve Claude</b>). Se estiver, <b>desligue</b>.</p>
+            <p class="hint">A opção vale para a conta inteira: navegador, Desktop e celular. Quem é só
+              Super admin pode pular este passo.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">5</div>
+          <div class="txt">
             <h3>Pronto, é só perguntar</h3>
-            <p>A partir daí, basta escrever sua pergunta em linguagem natural, como você falaria com uma pessoa.</p>
+            <p>A partir daí, basta escrever sua pergunta como você falaria com uma pessoa.</p>
           </div>
         </div>
       </div>
 
+      <h2 class="sec">O que cada perfil vê</h2>
+      <p class="sec-lead">
+        Os nomes a seguir são os que aparecem no Claude, na lista de ferramentas do conector. Quem tem os
+        dois perfis vê as sete. É da diretoria executiva quem tem, no cadastro do app
+        (<b>Administração, Usuários</b>), o campo <b>Acesso à Ouvidoria</b> em <b>Diretoria executiva</b>.
+      </p>
+      <div class="perfis folha">
+        <div class="perfil">
+          <div class="k">Super admin</div>
+          <div class="s">Central de Comando</div>
+          <div class="ferr"><code>get_active_now</code><br />Quantas pessoas estão no site agora.</div>
+          <div class="ferr"><code>get_site_analytics</code><br />O site em 7, 28 ou 90 dias.</div>
+          <div class="ferr"><code>get_instagram_analytics</code><br />O Instagram em 7 ou 28 dias.</div>
+        </div>
+        <div class="perfil">
+          <div class="k">Diretoria executiva</div>
+          <div class="s">Reuniões e Ouvidoria</div>
+          <div class="ferr"><code>get_pendencias</code><br />As Pendências, com situação, responsável e prazo.</div>
+          <div class="ferr"><code>get_reunioes</code><br />As Reuniões, com a Ata e as Pendências de cada uma.</div>
+          <div class="ferr"><code>get_ouvidoria_prazo_estourado</code><br />Os casos da Ouvidoria e o prazo de cada um, por setor.</div>
+          <div class="ferr"><code>get_ouvidoria_dossie</code><br />Um caso da Ouvidoria inteiro, pelo protocolo.</div>
+        </div>
+      </div>
+
+      <h2 class="sec">Super admin: o site e o Instagram</h2>
       <div class="callout">
         <h4>Experimente perguntar</h4>
         <div class="q">Quantas pessoas estão no site do hospital agora?</div>
@@ -417,11 +521,30 @@
         ainda não é medido, ele diz que não é medido, em vez de mostrar um zero.
       </p>
 
+      <h2 class="sec">Diretoria executiva: Reuniões e Ouvidoria</h2>
+      <div class="callout">
+        <h4>Experimente perguntar</h4>
+        <div class="q">Quais pendências estão atrasadas, e de quem são?</div>
+        <div class="q">Quais casos da Ouvidoria estão com o prazo estourado, e em qual setor?</div>
+        <div class="q">Como foi a última reunião da diretoria, e o que saiu dela?</div>
+        <div class="q">Me mostra o caso 2026-0123 da Ouvidoria.</div>
+      </div>
+      <p class="sees-hint">
+        O Claude mostra só <b>o que o app já mostra para você</b>: uma Reunião que não aparece para
+        você no app também não aparece no Claude.
+      </p>
+
       <div class="note">
-        <b>Se o login não passar:</b> o acesso é só de quem é <b>Super admin ativo</b> no app. Não existe
-        lista à parte para pedir inclusão: quem manda é o seu cadastro. Confira se você entrou com o
-        <b>e-mail do seu cadastro no app</b> e se ele está confirmado. Se você deixou de ser Super admin,
-        ou a conta foi desativada, o acesso é retirado na hora.
+        <b>Abrir um caso fica registrado.</b> Quando você pede um caso da Ouvidoria pelo protocolo, a
+        consulta entra no <b>histórico de acesso</b> do caso, com o seu nome, como acontece quando você
+        abre o Dossiê no app. As listas (pendências, reuniões, prazos estourados) não geram esse registro.
+      </div>
+
+      <div class="note">
+        <b>Se o login não passar:</b> o acesso é de quem está <b>ativo</b> no app e é <b>Super admin</b>
+        ou <b>diretoria executiva</b>. Não existe lista à parte para pedir inclusão: quem manda é o seu
+        cadastro. Confira se você entrou com o <b>e-mail do seu cadastro no app</b> e se ele está
+        confirmado. Se você perdeu o perfil, ou a conta foi desativada, o acesso é retirado na hora.
       </div>
     </div>
 
