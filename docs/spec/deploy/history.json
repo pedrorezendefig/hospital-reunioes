@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T01:39:49-03:00",
+      "sha": "ed1ecc620e5477a359ecda2a21743a19ff4c0d64",
+      "app_version": "0.274.0",
+      "subject": "Onda hsm-qr-onda2: Tela de nota pública e gravação da Avaliação",
+      "raw_subject": "chore(deploy): registro da onda hsm-qr-onda2 (#1676)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1527
+      ],
+      "result": "healthy",
+      "duration_seconds": 196,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "140_ouvidoria_avaliacao_do_qr.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-qr-onda2: PR #1676 (issue #1622), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 16,
+          "frontend": 177
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T01:31:07-03:00",
       "sha": "204f959a7f14b09f5bef08cf7163fe105111ec3c",
       "app_version": "0.273.0",
