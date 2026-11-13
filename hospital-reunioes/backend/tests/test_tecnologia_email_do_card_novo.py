@@ -170,6 +170,27 @@ class TestOEmailQueNaoSai:
         assert "Resend respondeu 500" in caplog.text
         assert _desenvolvedores_avisados(sb, demanda_id) == ["P1", "P5"]
 
+    def test_transporte_que_devolve_false_cria_o_card_e_avisa_cada_desenvolvedor(self, monkeypatch):
+        # Em producao o Resend fora do ar nao levanta: `_enviar_via_resend` pega
+        # a excecao e devolve False. E esse False que tem que acender o sino.
+        client, sb, gh, demanda_id, _ = _bug_resumido(monkeypatch, para_o_desenvolvedor=PARTES_DO_BUG)
+        sb.tabelas["participantes"].append(dict(LUCAS))
+        tentativas: list[str] = []
+
+        def _nao_saiu(destinatario, *_a, **_kw):
+            tentativas.append(destinatario)
+            return False
+
+        monkeypatch.setattr(tecnologia_email, "_enviar_email", _nao_saiu)
+
+        resposta = client.post(f"{CHAT}/{demanda_id}/criar-card", json={"responsavel_id": "P5"})
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["estado"] == "enviado"
+        assert len(gh.criadas) == 1
+        assert tentativas == ["P5@hsm.com"]
+        assert _desenvolvedores_avisados(sb, demanda_id) == ["P1", "P5"]
+
     def test_responsavel_sem_email_no_cadastro_cria_o_card_e_avisa_no_sino(self, monkeypatch, emails):
         client, sb, gh, demanda_id, _ = _bug_resumido(monkeypatch, para_o_desenvolvedor=PARTES_DO_BUG)
         sb.tabelas["participantes"].append({**LUCAS, "email": None})
