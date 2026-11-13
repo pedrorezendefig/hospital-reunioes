@@ -56,6 +56,39 @@ def test_print_com_nome_de_fora_do_seed_nao_sai():
         roteiro.exigir_so_dado_de_exemplo(tela, ["Marcos Teixeira Lopes", "Ana"], "pendencias")
 
 
+def test_print_com_nome_de_fora_em_caixa_alta_nao_sai():
+    # O CSS põe botão, cabeçalho e etiqueta em caixa alta, e o innerText
+    # devolve o texto já transformado.
+    tela = "PENDÊNCIAS\nMARCOS TEIXEIRA LOPES\nCOMISSÃO DE ÉTICA MÉDICA\n"
+
+    with pytest.raises(roteiro.DadoRealNoPrint, match="Marcos Teixeira Lopes"):
+        roteiro.exigir_so_dado_de_exemplo(tela, ["Marcos Teixeira Lopes"], "pendencias")
+    with pytest.raises(roteiro.DadoRealNoPrint, match="Comissão de Ética Médica"):
+        roteiro.exigir_so_dado_de_exemplo(tela, ["Comissão de Ética Médica"], "pendencias")
+
+
+def test_a_lista_de_fora_do_seed_le_o_banco_alem_do_teto_do_postgrest(monkeypatch):
+    # O PostgREST local corta cada resposta em max_rows = 1000.
+    teto = 1000
+    participantes = [{"id": f"X{i}", "nome_completo": f"Pessoa Real {i}"} for i in range(2500)]
+    reunioes = [{"id_reuniao": f"R{i}", "titulo": f"Reunião Real {i}"} for i in range(1200)]
+
+    def rest_com_teto(caminho, metodo="GET", corpo=None, prefer=None):
+        tabela = participantes if caminho.startswith("participantes") else reunioes
+        params = dict(p.split("=", 1) for p in caminho.split("?", 1)[1].split("&"))
+        inicio = int(params.get("offset", 0))
+        limite = min(int(params.get("limit", teto)), teto)
+        return tabela[inicio : inicio + limite]
+
+    monkeypatch.setattr(roteiro, "_rest", rest_com_teto)
+
+    de_fora = roteiro.nomes_de_fora_do_seed()
+
+    assert "Pessoa Real 2499" in de_fora
+    assert "Reunião Real 1199" in de_fora
+    assert len(de_fora) == 3700
+
+
 def test_print_so_com_dado_de_exemplo_sai():
     tela = "Pendências\nCalibrar as bombas\nFábio Guimarães\nAnalisar o estoque\n"
 

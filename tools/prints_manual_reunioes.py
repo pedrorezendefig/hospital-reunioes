@@ -101,10 +101,13 @@ def exigir_so_dado_de_exemplo(texto_visivel: str, nomes_de_fora: list[str], nome
 
     `nomes_de_fora` são os nomes completos dos participantes e os títulos das
     reuniões do banco local que este roteiro não semeou. Nome de uma palavra só
-    fica de fora da conta: casaria com qualquer texto de tela.
+    fica de fora da conta: casaria com qualquer texto de tela. A conta é em
+    caixa normalizada: o CSS põe botão, cabeçalho e etiqueta em caixa alta e o
+    `innerText` devolve o texto já transformado.
     """
+    tela = texto_visivel.casefold()
     achados = sorted(
-        {n for n in nomes_de_fora if len(n.split()) >= 2 and n in texto_visivel}
+        {n for n in nomes_de_fora if len(n.split()) >= 2 and n.casefold() in tela}
     )
     if achados:
         raise DadoRealNoPrint(
@@ -157,6 +160,21 @@ def _pedir(caminho: str, metodo: str = "GET", corpo=None, prefer: str | None = N
 
 def _rest(caminho: str, metodo: str = "GET", corpo=None, prefer: str | None = None):
     return _pedir(f"/rest/v1/{caminho}", metodo, corpo, prefer)
+
+
+def _rest_tudo(caminho: str, por_pagina: int = 500) -> list:
+    """Todas as linhas de um GET, de página em página.
+
+    O PostgREST corta cada resposta em `max_rows` (1000 no `config.toml`
+    local), sem aviso. A página fica abaixo do teto e o laço só para na
+    página que veio incompleta.
+    """
+    linhas: list = []
+    while True:
+        pagina = _rest(f"{caminho}&limit={por_pagina}&offset={len(linhas)}")
+        linhas.extend(pagina)
+        if len(pagina) < por_pagina:
+            return linhas
 
 
 def _login_de_exemplo(email: str, nome: str) -> str:
@@ -353,8 +371,8 @@ def por_reuniao(**campos) -> None:
 def nomes_de_fora_do_seed() -> list[str]:
     """Os nomes e títulos do banco local que não são deste roteiro."""
     meus = {p[0] for p in PESSOAS}
-    pessoas = _rest("participantes?select=id,nome_completo")
-    reunioes = _rest("reunioes?select=id_reuniao,titulo")
+    pessoas = _rest_tudo("participantes?select=id,nome_completo&order=id")
+    reunioes = _rest_tudo("reunioes?select=id_reuniao,titulo&order=id_reuniao")
     return [p["nome_completo"] for p in pessoas if p["id"] not in meus and p["nome_completo"]] + [
         r["titulo"]
         for r in reunioes
