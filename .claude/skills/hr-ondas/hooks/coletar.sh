@@ -122,7 +122,7 @@ for linha in $(echo "$agentes" | jq -r '.[] | "\(.nome)=\(.sessao)"'); do
   done
 done
 
-# O filtro: sessão `onda-*`, ou sessão com sub-agente hr-* vivo ou recém-terminado. As demais
+# O filtro: sessão `onda-*`, ou sessão com sub-agente da onda vivo ou recém-terminado. As demais
 # saem, com os sub-agentes delas.
 agentes=$(echo "$agentes" | jq -c --argjson subs "$sub_agentes" --argjson agora "$(( $(date +%s) * 1000 ))" '
   map(select(.onda or (.nome as $n | any($subs[]; .sessao == $n and (.tipo | test("^(hr|onda)-"))

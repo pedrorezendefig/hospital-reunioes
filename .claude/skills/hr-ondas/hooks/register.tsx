@@ -287,9 +287,9 @@ export const nomeModelo = (m: string | null) => {
 
 /** Tetos em minutos (amarelo, vermelho): p75 e p90 do histórico desta máquina em 13/10/2026. */
 export const TETOS: Record<string, [number, number]> = {
-  'hr-implementador': [30, 35],
-  'hr-revisor': [5, 10],
-  'hr-corretor': [10, 15],
+  'onda-implementador': [30, 35],
+  'onda-revisor': [5, 10],
+  'onda-corretor': [10, 15],
   CI: [8, 12],
   subida: [10, 25],
 }
@@ -383,7 +383,7 @@ export const etapas = (
 ) => {
   // passo humano fechado (ou issue encerrada sem código): não houve esteira para mostrar
   if (i.fase === 'encerrada_sem_pr') return [{ nome: 'fechada sem PR', estado: 'feita' as EstadoEtapa }]
-  // o papel conta, não o prefixo: hr-revisor e onda-revisor são a mesma etapa
+  // o papel conta, não o prefixo: o nome antigo dos agentes (hr) e o novo (onda) são a mesma etapa
   const de = (tipo: string) => ags.filter(a => papelDoAgente(a.tipo) === papelDoAgente(tipo))
   const estado = (tipo: string, feita: boolean): EstadoEtapa => {
     const lista = de(tipo)
@@ -402,11 +402,11 @@ export const etapas = (
   const subiu = ['mergeada', 'em_producao'].includes(i.fase)
   const ciMs = extra.ci ? (extra.ci.fim ?? agora) - extra.ci.inicio : undefined
   const lista: Etapa[] = [
-    com('implementar', estado('hr-implementador', depoisDoPr), gasto('hr-implementador'), 'hr-implementador'),
+    com('implementar', estado('onda-implementador', depoisDoPr), gasto('onda-implementador'), 'onda-implementador'),
     com('CI', subiu || i.ci === 'verde' ? 'feita' : i.ci === 'vermelho' ? 'falhou' : i.pr ? 'agora' : 'falta', ciMs),
-    com('revisar', estado('hr-revisor', subiu || !!i.veredito), gasto('hr-revisor'), 'hr-revisor'),
+    com('revisar', estado('onda-revisor', subiu || !!i.veredito), gasto('onda-revisor'), 'onda-revisor'),
   ]
-  if (de('hr-corretor').length) lista.push(com('corrigir', estado('hr-corretor', subiu), gasto('hr-corretor'), 'hr-corretor'))
+  if (de('onda-corretor').length) lista.push(com('corrigir', estado('onda-corretor', subiu), gasto('onda-corretor'), 'onda-corretor'))
   const s = extra.subida
   const subidaMs = s ? (s.fim ?? agora) - s.inicio : extra.subidaS !== undefined ? extra.subidaS * 1000 : undefined
   lista.push(
