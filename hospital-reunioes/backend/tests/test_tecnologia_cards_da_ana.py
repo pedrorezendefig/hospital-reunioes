@@ -23,7 +23,9 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from test_tecnologia_chat import CHAT, _cenario  # noqa: E402
 from test_tecnologia_vinculo import PEDRO  # noqa: E402
+from test_tecnologia_vinculo import _demanda as _demanda_da_aba  # noqa: E402
 from test_tecnologia_webhook_github import (  # noqa: E402
     _demanda,
     _demandas,
@@ -38,6 +40,7 @@ from test_tecnologia_webhook_github import (  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.services import github_client, tecnologia_espelho  # noqa: E402
 from app.services.tecnologia_espelho import CRIA, IGNORA, decidir  # noqa: E402
+from app.services.tecnologia_vinculo import ETAPA_PLANEJADA  # noqa: E402
 
 REPO_ANA = "pedrorezendefig/programa-ana"
 HOSPITAL = "hospital"
@@ -267,3 +270,49 @@ class TestOBlocoParaQuemDecide:
 
         assert mudanca["o_que_muda"] == "**O que muda:** a Ana responde o preparo."
         assert [p["o_que_muda"] for p in mudanca["partes"]] == ["O preparo do jejum.", None]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. O painel do card da Ana, pela rota que a tela le
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _cards_do_painel() -> list[dict]:
+    """O card da Ana e o card Vitta do Hospital, os dois Planejados e da
+    melhoria: a Etapa e o tipo em que o Hospital mostra o Apagar."""
+    comum = {"origem": "vitta", "tipo": "novo", "autor_id": PEDRO["id"], "etapa": ETAPA_PLANEJADA}
+    return [
+        _demanda_da_aba("d-ana", projeto=ANA, github_issue_numero=12, **comum),
+        _demanda_da_aba("d-hospital", projeto=HOSPITAL, github_issue_numero=1700, **comum),
+    ]
+
+
+def _painel(monkeypatch, logado: dict = PEDRO):
+    client, sb, gh = _cenario(monkeypatch, logado=logado, participantes=[PEDRO], demandas=_cards_do_painel())
+    resposta = client.get(CHAT)
+    assert resposta.status_code == 200, resposta.text
+    return client, sb, gh, {d["id"]: d for d in resposta.json()}
+
+
+class TestOPainelDoCardDaAna:
+    def test_o_card_da_ana_nao_tem_apagar_nem_revisar_e_o_link_aponta_para_a_ana(self, monkeypatch):
+        """O Desenvolvedor, que ve o Apagar no card Vitta do Hospital na mesma
+        Etapa, nao o ve no da Ana (ADR 0093, decisao 5)."""
+        _, _, _, cards = _painel(monkeypatch)
+
+        ana, hospital = cards["d-ana"], cards["d-hospital"]
+        assert (ana["pode_apagar"], ana["pode_revisar"]) == (False, False)
+        assert ana["issue_url"] == f"https://github.com/{REPO_ANA}/issues/12"
+        assert hospital["pode_apagar"] is True
+
+    def test_o_apagar_do_card_da_ana_e_recusado_sem_tocar_no_github(self, monkeypatch):
+        client, sb, _, _ = _painel(monkeypatch)
+        fechadas: list = []
+        monkeypatch.setattr(github_client, "fechar_como_nao_planejada", lambda *a, **kw: fechadas.append((a, kw)))
+
+        resposta = client.delete(f"{CHAT}/d-ana")
+
+        assert resposta.status_code == 409
+        assert "acompanhar" in resposta.json()["detail"]
+        assert not next(d for d in sb.tabelas["tecnologia_demandas"] if d["id"] == "d-ana").get("apagada_em")
+        assert fechadas == []
