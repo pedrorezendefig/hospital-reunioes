@@ -164,28 +164,32 @@ beforeEach(() => {
 });
 
 describe("a linha empilha em três alturas abaixo de 768px (RN-75, D-02)", () => {
-  it("a linha é coluna no celular e volta a ser linha no computador", async () => {
+  it("a linha do prazo e a ação são coluna no celular e voltam a ser linha no computador", async () => {
+    // Desde o card de caso padrão (issue #1628, seção 4.12), a terceira altura
+    // é a do prazo, e a ação desce para baixo dela no celular.
     montar([caso(7, "aguardando_area")]);
     const linha = await linhaDe("2026-0007");
 
-    expect(linha.className).toContain("flex-col");
-    expect(linha.className).toContain("md:flex-row");
+    const acoes = within(linha).getByRole("button", { name: "Cobrar" }).closest("div.w-full")!;
+    const nivel3 = acoes.parentElement!.parentElement!;
+    expect(nivel3.className).toContain("flex-col");
+    expect(nivel3.className).toContain("md:flex-row");
   });
 
-  it("o assunto ganha altura própria no celular, abaixo do protocolo", async () => {
-    // No desktop protocolo, gravidade e assunto dividem o nível 1. Num corredor
-    // de 360px isso sobra um punhado de pixels para o assunto, que é justamente
-    // o que o ouvidor lê para decidir se abre o caso.
+  it("o assunto ganha altura própria, abaixo do protocolo", async () => {
+    // Num corredor de 360px, protocolo e assunto lado a lado sobrariam um
+    // punhado de pixels para o assunto, que é justamente o que o ouvidor lê
+    // para decidir se abre o caso.
     montar([caso(7, "aguardando_area")]);
     const linha = await linhaDe("2026-0007");
 
     const assunto = within(linha).getByText(ASSUNTO_LONGO);
-    const nivel1 = assunto.parentElement!;
-    expect(nivel1.className).toContain("flex-col");
-    expect(nivel1.className).toContain("md:flex-row");
-    // A altura de cima é o grupo do protocolo, irmão do assunto e não pai dele.
-    expect(nivel1.firstElementChild!.textContent).toContain("2026-0007");
-    expect(nivel1.firstElementChild!.textContent).not.toContain(ASSUNTO_LONGO);
+    // O assunto é filho do card, e a altura de cima (a do protocolo) é irmã
+    // dele, e não pai.
+    expect(assunto.parentElement).toBe(linha);
+    const nivel1 = linha.firstElementChild!;
+    expect(nivel1.textContent).toContain("2026-0007");
+    expect(nivel1.textContent).not.toContain(ASSUNTO_LONGO);
   });
 
   it("o assunto continua cortado em uma linha mesmo empilhado", async () => {

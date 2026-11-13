@@ -296,12 +296,17 @@ describe("a linha de dois níveis substitui a tabela (RN-72, RN-73)", () => {
     expect(within(linha).queryByText("Sem responsável")).toBeNull();
   });
 
-  it("a gravidade aparece na pílula, e é a única cor de urgência da linha", async () => {
+  it("a linha é o card de caso padrão: o ponto de gravidade nas cores do anexo e o assunto (issue #1628)", async () => {
+    // Seção 4.12 do anexo da Demanda #1527: o mesmo card na fila, no Painel e
+    // na aba Avaliações. A gravidade vira o ponto colorido (Crítico em
+    // `hsm-danger`), e não mais a pílula da fila antiga.
     montar([caso(7, "aguardando_area", { gravidade: "critico" })]);
     const linha = await linhaDe("2026-0007");
 
-    const pilula = within(linha).getByText("Crítico");
-    expect(pilula.className).toContain("red");
+    expect(linha.getAttribute("data-card")).toBe("padrao");
+    const ponto = within(linha).getByText("Crítico").querySelector("[aria-hidden='true']");
+    expect(ponto?.className).toContain("bg-[#B3352B]");
+    expect(within(linha).getByText(ASSUNTO_LONGO)).toBeTruthy();
     // O nome do estado é da faixa do grupo (RN-71), nunca da linha.
     expect(within(linha).queryByText("Aguardando área")).toBeNull();
   });

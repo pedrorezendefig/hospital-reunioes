@@ -43,19 +43,10 @@ import {
   tomDaCobranca,
   type ResultadoDaCobranca,
 } from "@/lib/ouvidoria/cobranca";
-import {
-  ASSUNTO_NAO_GERADO,
-  MARCA_PRONTO_PARA_ENCERRAR,
-  prontoParaEncerrar,
-  type ManifestacaoIndice,
-} from "@/lib/ouvidoria/fila";
+import { CardDeCaso } from "@/components/ouvidoria/CardDeCaso";
+import { type ManifestacaoIndice } from "@/lib/ouvidoria/fila";
 import { classificarPrazoDaManifestacao, type ClassePrazo } from "@/lib/ouvidoria/prazo";
-import {
-  classeDaGravidade,
-  responsavelDoSetor,
-  rotuloDaGravidade,
-  type Responsavel,
-} from "@/lib/ouvidoria/validacao";
+import { responsavelDoSetor, type Responsavel } from "@/lib/ouvidoria/validacao";
 
 function formatarData(iso: string): string {
   return new Date(`${iso}T12:00:00`).toLocaleDateString("pt-BR");
@@ -386,9 +377,13 @@ function LinhaDaFila({
   onDesarquivar: (m: ManifestacaoIndice) => void;
 }) {
   const classe = hoje ? classificarPrazoDaManifestacao(m, hoje) : "normal";
-  const gravidade = rotuloDaGravidade(m.gravidade);
   // Cadastro não lido é `null`, e disso não sai afirmação nenhuma sobre o
   // setor. A linha só fala de responsável quando ela leu o cadastro.
+  //
+  // Setor órfão é o que mais atrasa, e o branco ali não denuncia nada (issue
+  // #325). Mas "Sem responsável" só pode ser dito por quem leu o cadastro:
+  // para quem está fora da Ouvidoria, que nunca o lê, a frase apareceria em
+  // TODA linha e deixaria de denunciar coisa alguma.
   const cadastroLido = responsaveis !== null && hoje !== null;
   const responsavel = cadastroLido ? responsavelDoSetor(responsaveis!, m.setor, hoje!) : null;
   // O modo da lista entra na régua junto com o estado (issue #592): a mesma
@@ -396,124 +391,22 @@ function LinhaDaFila({
   const primaria = acaoPrimariaDoStatus(m.status, arquivados);
   const secundarias = acoesSecundariasDoStatus(m.status, arquivados);
 
+  // O card de caso padrão (issue #1628, seção 4.12), o mesmo do Painel. A fila
+  // põe nele o semáforo do prazo (issue #488), a novidade (issue #484) e as
+  // ações do estado; o nome do estado fica na faixa do grupo (RN-71).
   return (
-    <li
-      data-protocolo={m.protocolo}
-      // Coluna no celular, linha no computador (issue #496, RN-75): abaixo de
-      // 768px não há corredor para dois níveis lado a lado com a ação à
-      // direita, e insistir nisso espremeria o resumo a um punhado de pixels.
-      className={`flex flex-col md:flex-row md:items-center gap-2 md:gap-3 px-4 md:px-5 py-2.5 min-h-16 ${
-        classe === "estourado" || classe === "vence_hoje" ? "bg-red-50/50" : ""
-      }`}
-    >
-      {/* `min-w-0` é o que autoriza o filho a encolher: sem ele o resumo
-          empurraria a linha para fora da tela em vez de truncar, que é a
-          rolagem horizontal que a RN-73 proíbe. */}
-      <div className="min-w-0 flex-1">
-        {/* Empilhado, o nível 1 vira duas alturas: protocolo e gravidade em
-            cima, resumo embaixo com a largura toda da tela para ele. Junto com
-            o nível 2, são as três alturas da RN-75. */}
-        <div className="flex flex-col md:flex-row md:items-center gap-0.5 md:gap-2 min-w-0">
-          <div className="flex items-center gap-2 shrink-0">
-            {/* O marcador de novidade (issue #484, RN-68). Sinal permanente, e
-                não intermitente: piscar cansa, atrapalha a acessibilidade e
-                some justo quando o olho chega. O ponto é cor, e cor sozinha
-                não conta a história para quem não a enxerga, então ele anda
-                com o rótulo em sr-only ao lado. */}
-            {m.tem_novidade && (
-              <span className="inline-flex items-center shrink-0">
-                <span
-                  aria-hidden="true"
-                  className="inline-block w-2 h-2 rounded-full bg-primary align-middle"
-                />
-                <span className="sr-only">Movimentação nova</span>
-              </span>
-            )}
-            <span className="font-mono text-sm font-semibold text-slate-800 shrink-0">
-              {m.protocolo}
-            </span>
-            {gravidade && (
-              <span
-                // Rótulo de escala, não texto: vai em caixa alta junto com o
-                // carimbo do prazo e a faixa do estado (issue #489, RN-76).
-                className={`shrink-0 px-2 py-0.5 rounded-full border text-[11px] font-semibold uppercase tracking-wide ${classeDaGravidade(m.gravidade)}`}
-              >
-                {gravidade}
-              </span>
-            )}
-            {/* O elogio que o setor confirmou pelo botão Elogio recebido
-                (issue #1618, ADR 0088): só falta o ouvidor encerrar. */}
-            {prontoParaEncerrar(m) && (
-              <span className="shrink-0 px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-emerald-50 text-emerald-700 border-emerald-200">
-                {MARCA_PRONTO_PARA_ENCERRAR}
-              </span>
-            )}
-          </div>
-          {/* Uma linha só, com reticências (RN-72). O assunto que o agente de
-              triagem escreveu, e não o começo do relato (issue #1624, ADR
-              0087): o resumo do canal aberto é recorte literal do que a pessoa
-              escreveu, nome de paciente incluído. Sem o assunto, a linha diz
-              que ele não foi gerado; quem está fora da Ouvidoria nem recebe a
-              chave, e a linha fica sem texto. Peso médio quando há novidade
-              (issue #484, RN-68): é o segundo sinal, para o ponto não ficar
-              sozinho carregando a cor. */}
-          {m.assunto !== undefined && (
-            <span
-              className={`truncate text-sm ${
-                m.assunto ? (m.tem_novidade ? "font-medium text-slate-800" : "text-slate-600") : "italic text-slate-400"
-              }`}
-            >
-              {m.assunto || ASSUNTO_NAO_GERADO}
-            </span>
-          )}
-        </div>
-        {/* `overflow-hidden` é a rede da RN-73 no nível 2: o prazo é a última
-            coisa da linha e não encolhe, então numa janela estreita ele
-            empurraria a linha para fora em vez de ser cortado. O que não cabe
-            sai da linha e continua no Dossiê. Empilhada, esta é a terceira e
-            última altura da linha (issue #496, RN-75). */}
-        <div className="flex items-center gap-2 mt-1 text-xs text-slate-500 min-w-0 overflow-hidden">
-          <span className="truncate">{m.setor}</span>
-          <span aria-hidden="true" className="text-slate-300">
-            ·
-          </span>
-          {/* Setor órfão é o que mais atrasa, e o branco ali não denuncia nada
-              (issue #325). Mas "Sem responsável" só pode ser dito por quem leu
-              o cadastro: para quem está fora da Ouvidoria, que nunca o lê, a
-              frase apareceria em TODA linha e deixaria de denunciar coisa
-              alguma. Sem leitura, o nível 2 fica com setor e prazo. */}
-          {cadastroLido && (
-            <>
-              <span className="truncate">
-                {responsavel ? responsavel.nome : "Sem responsável"}
-              </span>
-              <span aria-hidden="true" className="text-slate-300">
-                ·
-              </span>
-            </>
-          )}
-          <Prazo m={m} classe={classe} />
-        </div>
-      </div>
-
-      {podeAbrirDossie && (
-        // No celular as ações descem para baixo do conteúdo e tomam a largura
-        // toda (issue #496, RN-75). O aviso da cobrança também empilha ali: ao
-        // lado do botão, num corredor estreito, ele roubaria a largura da
-        // única ação da linha.
-        <div className="w-full md:w-auto flex flex-col md:flex-row md:items-center gap-1.5 shrink-0">
-          {cobranca && (
-            <span
-              role="status"
-              className={`text-xs md:max-w-xs ${
-                { ok: "text-emerald-600", alerta: "text-amber-700", neutro: "text-slate-500" }[
-                  tomDaCobranca(cobranca)
-                ]
-              }`}
-            >
-              {textoDaCobranca(cobranca)}
-            </span>
-          )}
+    <CardDeCaso
+      caso={m}
+      novidade={m.tem_novidade}
+      mostrarEstado={false}
+      podeAbrir={podeAbrirDossie}
+      className={classe === "estourado" || classe === "vence_hoje" ? "bg-red-50/50" : ""}
+      prazo={<Prazo m={m} classe={classe} />}
+      atrasado={classe === "estourado"}
+      responsavel={cadastroLido ? (responsavel ? responsavel.nome : "Sem responsável") : null}
+      acao={
+        podeAbrirDossie && (
+          // No celular as ações tomam a largura toda (issue #496, RN-75).
           <div className="w-full md:w-auto flex items-center gap-1.5">
             <Acao
               chave={primaria}
@@ -540,9 +433,24 @@ function LinhaDaFila({
               />
             )}
           </div>
-        </div>
-      )}
-    </li>
+        )
+      }
+      aviso={
+        podeAbrirDossie &&
+        cobranca && (
+          <p
+            role="status"
+            className={`mt-1 text-xs ${
+              { ok: "text-emerald-600", alerta: "text-amber-700", neutro: "text-slate-500" }[
+                tomDaCobranca(cobranca)
+              ]
+            }`}
+          >
+            {textoDaCobranca(cobranca)}
+          </p>
+        )
+      }
+    />
   );
 }
 

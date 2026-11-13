@@ -24,10 +24,11 @@
  * para ele andar. O dublê guarda o que o componente pediu a cada render.
  */
 
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { INTERVALO_BASE_MS } from "@/lib/ouvidoria/painel";
+import { ALTURA_DE_TOQUE } from "@/lib/toque";
 import PainelEmTempoRealPage from "./page";
 
 const polling = vi.hoisted(() => ({
@@ -85,6 +86,9 @@ function casoVencido(overrides: Record<string, unknown> = {}) {
     prazo_estourado: true,
     rotulo_prazo: "vencido ha 2 dias uteis",
     sigilo_reforcado: false,
+    assunto: "Demora no resultado de exame",
+    tipo_manifestacao: "reclamacao",
+    data_abertura: "2025-12-29",
     ...overrides,
   };
 }
@@ -99,28 +103,43 @@ function resposta(corpo: unknown, ok = true, status = 200) {
 interface Roteiro {
   metricas: ReturnType<typeof resposta>;
   protocolos: ReturnType<typeof resposta>;
+  revisar: ReturnType<typeof resposta>;
+  cobrar: ReturnType<typeof resposta>;
 }
 
-/** O que cada uma das duas portas responde. Trocável no meio do teste. */
+/** O que cada porta responde. Trocável no meio do teste. */
 let roteiro: Roteiro;
 
 /** As URLs que o painel pediu, na ordem. */
 let urls: string[] = [];
+
+/** As escritas (POST) que o painel fez, com a URL. */
+let escritas: string[] = [];
 
 beforeEach(() => {
   polling.intervalos = [];
   polling.ativos = [];
   polling.carga = null;
   urls = [];
+  escritas = [];
   roteiro = {
     metricas: resposta(METRICAS_VAZIAS),
     protocolos: resposta({ protocolos: [] }),
+    revisar: resposta({ total: 0 }),
+    cobrar: resposta({ id: "n1", destinatario: "Carlos Titular", entregue: true }, true, 201),
   };
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (url: string) => {
-      urls.push(String(url));
-      return String(url).includes("/metricas") ? roteiro.metricas : roteiro.protocolos;
+    vi.fn(async (url: string, init?: RequestInit) => {
+      const endereco = String(url);
+      if (init?.method === "POST") {
+        escritas.push(endereco);
+        return roteiro.cobrar;
+      }
+      urls.push(endereco);
+      if (endereco.includes("/metricas")) return roteiro.metricas;
+      if (endereco.includes("/avaliacoes/para-revisar")) return roteiro.revisar;
+      return roteiro.protocolos;
     })
   );
   visibilidade("visible");
@@ -152,80 +171,269 @@ async function abrirOPainel() {
   await screen.findByText("Painel em tempo real");
 }
 
-/**
- * O card de um estado, pelo rótulo que ele desenha embaixo do número.
- * Devolve o número como texto, que é o que o olho de quem está na sala lê.
- */
-function cardDoEstado(rotulo: string): string {
-  const legenda = screen.getByText(rotulo);
-  const card = legenda.parentElement;
-  if (!card) throw new Error(`o card de ${rotulo} não tem número`);
-  return card.querySelector("p")?.textContent ?? "";
-}
-
 describe("o painel conta o hospital inteiro, arquivados inclusive (issue #592, ADR 0047)", () => {
-  /**
-   * O servidor falso se comporta como o de verdade: a lista de TRABALHO
-   * (`arquivados=nao`, ou sem parâmetro) esconde o arquivado, e só
-   * `arquivados=todos` devolve os dois. É isso que faz o teste morrer se o
-   * painel esquecer o parâmetro, em vez de passar sobre um fake complacente.
-   */
-  function servidorComUmArquivado() {
-    const vivo = casoVencido({ id: "id-1", protocolo: "OUV-2026-0001", status: "encerrado" });
-    const arquivado = casoVencido({ id: "id-2", protocolo: "OUV-2026-0002", status: "encerrado" });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        const endereco = String(url);
-        urls.push(endereco);
-        if (endereco.includes("/metricas")) return resposta(METRICAS_VAZIAS);
-        const todos = endereco.includes("arquivados=todos");
-        return resposta({ protocolos: todos ? [vivo, arquivado] : [vivo] });
-      })
-    );
-  }
-
   it("pede a listagem com o recorte que inclui o arquivo", async () => {
-    servidorComUmArquivado();
-
     await abrirOPainel();
 
     expect(ultimaListagem()).toContain("arquivados=todos");
   });
 
-  it("o card Encerrada conta os dois, e não só o que está na lista de trabalho", async () => {
-    // O cenário do defeito: 2 casos encerrados, 1 deles arquivado pelo ouvidor.
-    // O card tem de dizer 2, porque as métricas do bloco ao lado contam 2.
-    servidorComUmArquivado();
+  it("o contador Encerrada, acumulado desde sempre, saiu do painel (issue #1628)", async () => {
+    roteiro.protocolos = resposta({
+      protocolos: [
+        casoVencido({ id: "id-1", protocolo: "OUV-2026-0001", status: "encerrado" }),
+        casoVencido({ id: "id-2", protocolo: "OUV-2026-0002", status: "encerrado" }),
+      ],
+    });
 
     await abrirOPainel();
 
-    expect(cardDoEstado("Encerrada")).toBe("2");
+    expect(screen.queryByText("Encerrada")).toBeNull();
+  });
+});
+
+/** Os títulos das faixas, na ordem em que a tela os desenha. */
+function titulosDasFaixas(): string[] {
+  return screen.getAllByRole("heading", { level: 2 }).map((titulo) => titulo.textContent ?? "");
+}
+
+/** A faixa pelo título dela. */
+function faixa(titulo: string): HTMLElement {
+  const cabecalho = screen.getByRole("heading", { level: 2, name: titulo });
+  const secao = cabecalho.closest("section");
+  if (!secao) throw new Error(`a faixa ${titulo} não é uma seção`);
+  return secao;
+}
+
+describe("as seis faixas, da mais urgente para a menos urgente (issue #1628, seção 4.11)", () => {
+  it("aparecem na ordem do anexo", async () => {
+    roteiro.protocolos = resposta({ protocolos: [casoVencido()] });
+
+    await abrirOPainel();
+    await screen.findByText("OUV-2026-0001");
+
+    expect(titulosDasFaixas()).toEqual([
+      "Críticos",
+      "Números do agora",
+      "Atrasos das áreas",
+      "Atrasos da Ouvidoria",
+      "Próximos vencimentos",
+      "Por área",
+    ]);
   });
 
-  it("o painel some da corrida do arquivamento: o número não muda quando o ouvidor arquiva", async () => {
-    // A contraprova em forma de simulação: o MESMO par de casos, agora com o
-    // servidor devolvendo os dois em qualquer recorte (nada arquivado ainda).
-    // O card diz 2 antes e depois, o que prova que o número do painel não é
-    // função do que a Ouvidoria escondeu.
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        const endereco = String(url);
-        urls.push(endereco);
-        if (endereco.includes("/metricas")) return resposta(METRICAS_VAZIAS);
-        return resposta({
-          protocolos: [
-            casoVencido({ id: "id-1", protocolo: "OUV-2026-0001", status: "encerrado" }),
-            casoVencido({ id: "id-2", protocolo: "OUV-2026-0002", status: "encerrado" }),
-          ],
-        });
-      })
-    );
+  it("sem crítico, a faixa de críticos é uma linha discreta, sem o vermelho", async () => {
+    roteiro.protocolos = resposta({ protocolos: [casoVencido({ gravidade: "medio" })] });
+
+    await abrirOPainel();
+    await screen.findByText("OUV-2026-0001");
+
+    const criticos = faixa("Críticos");
+    expect(within(criticos).getByText("Nenhum caso crítico aberto.")).toBeTruthy();
+    expect(within(criticos).queryByRole("list")).toBeNull();
+    expect(criticos.className).not.toMatch(/red|B3352B/);
+  });
+
+  it("com um crítico aberto, a faixa fica vermelha e mostra o caso", async () => {
+    roteiro.protocolos = resposta({
+      protocolos: [casoVencido({ id: "id-9", protocolo: "OUV-2026-0009", gravidade: "critico" })],
+    });
+
+    await abrirOPainel();
+    await screen.findAllByText("OUV-2026-0009");
+
+    const criticos = faixa("Críticos");
+    expect(within(criticos).getByText("OUV-2026-0009")).toBeTruthy();
+    expect(within(criticos).queryByText("Nenhum caso crítico aberto.")).toBeNull();
+    expect(criticos.className).toMatch(/B3352B/);
+  });
+
+  it("o atraso da área e o da Ouvidoria saem em faixas separadas", async () => {
+    roteiro.protocolos = resposta({
+      protocolos: [
+        casoVencido({ id: "id-1", protocolo: "OUV-2026-0001" }),
+        casoVencido({
+          id: "id-2",
+          protocolo: "OUV-2026-0002",
+          status: "em_classificacao",
+          gravidade: null,
+          prazo_area_em: null,
+          prazo_estourado: false,
+          prazo_resposta: "2026-01-05",
+        }),
+      ],
+    });
+
+    await abrirOPainel();
+    await screen.findByText("OUV-2026-0001");
+
+    expect(within(faixa("Atrasos das áreas")).getByText("OUV-2026-0001")).toBeTruthy();
+    expect(within(faixa("Atrasos das áreas")).queryByText("OUV-2026-0002")).toBeNull();
+    expect(within(faixa("Atrasos da Ouvidoria")).getByText("OUV-2026-0002")).toBeTruthy();
+    expect(within(faixa("Atrasos da Ouvidoria")).queryByText("OUV-2026-0001")).toBeNull();
+  });
+
+  it("o elogio com o prazo de referência passado não aparece em faixa de atraso nenhuma", async () => {
+    roteiro.protocolos = resposta({
+      protocolos: [
+        casoVencido({
+          tipo_manifestacao: "elogio",
+          prazo_area_em: null,
+          prazo_estourado: false,
+          prazo_resposta: "2026-01-05",
+        }),
+      ],
+    });
 
     await abrirOPainel();
 
-    expect(cardDoEstado("Encerrada")).toBe("2");
+    expect(within(faixa("Atrasos das áreas")).queryByText("OUV-2026-0001")).toBeNull();
+    expect(within(faixa("Atrasos da Ouvidoria")).queryByText("OUV-2026-0001")).toBeNull();
+  });
+
+  it("tocar em Atrasados mostra a lista daqueles casos logo abaixo dos números", async () => {
+    roteiro.protocolos = resposta({ protocolos: [casoVencido()] });
+
+    await abrirOPainel();
+    const numeros = faixa("Números do agora");
+    fireEvent.click(within(numeros).getByRole("button", { name: /Atrasados/ }));
+
+    expect(within(numeros).getByText("OUV-2026-0001")).toBeTruthy();
+  });
+
+  it("o contador Para revisar mostra o total e leva à aba Avaliações filtrada", async () => {
+    roteiro.revisar = resposta({ total: 3 });
+
+    await abrirOPainel();
+    const link = await within(faixa("Números do agora")).findByRole("link", { name: /Para revisar/ });
+
+    expect(link.getAttribute("href")).toBe("/ouvidoria/avaliacoes?revisar=1");
+    expect(link.textContent).toContain("3");
+  });
+
+  it("a tabela por área traz o % no prazo do mês", async () => {
+    roteiro.metricas = resposta({
+      ...METRICAS_VAZIAS,
+      pendencias_por_area: [
+        { setor: "enfermagem", responsavel: "Carlos Titular", pendentes: 2, vencidas: 1, dias_uteis_de_atraso: 2 },
+      ],
+      prazo_por_area: [
+        { setor: "enfermagem", responsavel: "Carlos Titular", medidos: 4, cumpridos: 3, percentual_cumprido: 75 },
+      ],
+    });
+
+    await abrirOPainel();
+
+    expect(within(faixa("Por área")).getAllByText("75%").length).toBeGreaterThan(0);
+  });
+});
+
+describe("o Cobrar no card do atraso da área (issue #1628)", () => {
+  it("reenvia a cobrança pela rota que grava no histórico e diz para quem foi", async () => {
+    roteiro.protocolos = resposta({ protocolos: [casoVencido()] });
+
+    await abrirOPainel();
+    const atrasos = faixa("Atrasos das áreas");
+    fireEvent.click(within(atrasos).getByRole("button", { name: /Cobrar/ }));
+
+    await within(atrasos).findByText("Acionamento reenviado a Carlos Titular");
+    expect(escritas).toEqual(["/api/ouvidoria/manifestacoes/id-1/cobrar-setor"]);
+  });
+
+  it("o card do atraso da Ouvidoria não tem Cobrar: a dívida é da própria triagem", async () => {
+    roteiro.protocolos = resposta({
+      protocolos: [
+        casoVencido({ status: "novo", gravidade: null, prazo_area_em: null, prazo_estourado: false }),
+      ],
+    });
+
+    await abrirOPainel();
+
+    expect(within(faixa("Atrasos da Ouvidoria")).getByText("OUV-2026-0001")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Cobrar/ })).toBeNull();
+  });
+});
+
+describe("nenhum nome de paciente no painel (issue #1628, regra T3)", () => {
+  it("o card mostra o assunto do agente, e nunca o começo do relato", async () => {
+    roteiro.protocolos = resposta({
+      protocolos: [
+        casoVencido({
+          gravidade: "critico",
+          resumo: "Maria Aparecida da Silva caiu da maca no quarto 12",
+          assunto: "Queda de paciente na internação",
+        }),
+      ],
+    });
+
+    await abrirOPainel();
+    await screen.findAllByText("Queda de paciente na internação");
+
+    expect(document.body.textContent).not.toContain("Maria Aparecida");
+  });
+
+  it("o caso sem assunto diz que ele não foi gerado, em vez de cair no relato", async () => {
+    roteiro.protocolos = resposta({
+      protocolos: [casoVencido({ resumo: "Joana Pereira reclama da espera", assunto: null })],
+    });
+
+    await abrirOPainel();
+
+    expect(within(faixa("Atrasos das áreas")).getByText("Assunto não gerado")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("Joana Pereira");
+  });
+});
+
+describe("o painel a 375 px (issue #1628, regra T4)", () => {
+  it("o Cobrar tem o alvo de toque de 44 px no celular", async () => {
+    roteiro.protocolos = resposta({ protocolos: [casoVencido()] });
+
+    await abrirOPainel();
+    const cobrar = within(faixa("Atrasos das áreas")).getByRole("button", { name: /Cobrar/ });
+
+    for (const classe of ALTURA_DE_TOQUE.split(" ")) {
+      expect(cobrar.className.split(/\s+/)).toContain(classe);
+    }
+  });
+
+  it("nada no painel rola para o lado: a tabela por área vira lista abaixo do md", async () => {
+    roteiro.metricas = resposta({
+      ...METRICAS_VAZIAS,
+      pendencias_por_area: [
+        { setor: "enfermagem", responsavel: "Carlos Titular", pendentes: 2, vencidas: 1, dias_uteis_de_atraso: 2 },
+      ],
+    });
+    roteiro.protocolos = resposta({ protocolos: [casoVencido()] });
+
+    await abrirOPainel();
+    await screen.findByText("OUV-2026-0001");
+
+    expect(document.querySelector("[class*='overflow-x']")).toBeNull();
+    const porArea = faixa("Por área");
+    const tabela = porArea.querySelector("table");
+    expect(tabela?.className.split(/\s+/)).toEqual(expect.arrayContaining(["hidden", "md:table"]));
+    const lista = within(porArea).getByRole("list");
+    expect(lista.className.split(/\s+/)).toContain("md:hidden");
+    expect(within(lista).getByText("enfermagem")).toBeTruthy();
+  });
+
+  it("os números do agora cabem em duas colunas no celular, e nada tem largura maior que a tela", async () => {
+    roteiro.protocolos = resposta({ protocolos: [casoVencido()] });
+
+    await abrirOPainel();
+    await screen.findByText("OUV-2026-0001");
+
+    const grade = within(faixa("Números do agora")).getByRole("button", { name: /Atrasados/ }).parentElement;
+    expect(grade?.className.split(/\s+/)).toContain("grid-cols-2");
+    // Largura fixa em pixels, sem prefixo de tela, acima do que sobra de 375 px
+    // depois do respiro da página. O piso de toque de 44 px não conta.
+    const largas = Array.from(document.querySelectorAll("[class]")).flatMap((no) =>
+      (no.getAttribute("class") ?? "")
+        .split(/\s+/)
+        .filter((classe) => /^(min-)?w-\[(\d+)px\]$/.test(classe))
+        .filter((classe) => Number(/\[(\d+)px\]/.exec(classe)?.[1]) > 343)
+    );
+    expect(largas).toEqual([]);
   });
 });
 
@@ -363,8 +571,9 @@ describe("a volta para a aba", () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
 
-    // As duas portas do painel, lidas de novo assim que a aba voltou.
-    expect(vi.mocked(fetch).mock.calls.length).toBe(leiturasIniciais + 2);
+    // As três portas do painel (métricas, listagem e o contador Para
+    // revisar), lidas de novo assim que a aba voltou.
+    expect(vi.mocked(fetch).mock.calls.length).toBe(leiturasIniciais + 3);
   });
 
   it("para de repuxar enquanto a aba está escondida", async () => {

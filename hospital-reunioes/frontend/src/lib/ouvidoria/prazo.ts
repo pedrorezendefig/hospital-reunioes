@@ -109,7 +109,7 @@ export function naoVence(m: { tipo_manifestacao?: string | null }): boolean {
 }
 
 /** Expediente de 08h às 17h: a mesma régua que o motor usa no servidor. */
-const MINUTOS_POR_DIA_UTIL = 9 * 60;
+export const MINUTOS_POR_DIA_UTIL = 9 * 60;
 /** Até 1 dia útil de folga a linha ganha o âmbar de "vence logo" (RN-58). */
 const FOLGA_DE_ALERTA = MINUTOS_POR_DIA_UTIL;
 

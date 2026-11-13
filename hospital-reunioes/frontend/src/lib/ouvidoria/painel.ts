@@ -5,26 +5,29 @@
  * misturam, porque respondem perguntas diferentes:
  *
  * * a listagem (`/api/ouvidoria/protocolos`) responde "quais casos", e é dela
- *   que saem a fila por status, o que já venceu, o que vence hoje e amanhã e os
- *   críticos abertos;
+ *   que saem os críticos, as duas faixas de atraso, os números do agora e os
+ *   próximos vencimentos (issue #1628);
  * * o módulo de métricas (`/api/ouvidoria/metricas`) responde "quanto cada área
  *   deve AGORA", pelo bloco `pendencias_por_area`, que tem universo próprio e
- *   nenhum recorte de data (contrato da issue #341).
+ *   nenhum recorte de data (contrato da issue #341), e quanto ela respondeu no
+ *   prazo no mês, pelo `prazo_por_area`.
  *
  * Somar os dois é somar universos diferentes: `pendencias_por_area[].pendentes`
- * conta só o que está com a área, e a fila por status conta todos os estados.
- * Por isso este módulo nunca cruza contagem de um lado com a do outro.
+ * conta só o que está com a área, e a listagem conta todos os estados. Por isso
+ * este módulo nunca cruza contagem de um lado com a do outro.
  *
- * Nenhuma conta de calendário útil acontece aqui. O vencimento chega calculado
- * pelo motor do servidor, e o veredito de estouro também: o que esta camada faz
- * é ler em que DIA o vencimento cai.
+ * Nenhuma conta de calendário útil acontece aqui, com uma exceção escrita: o
+ * prazo da triagem, que é data civil, conta dias de semana para o número
+ * "Vencem em até 2 dias úteis". O vencimento da área chega calculado pelo
+ * motor do servidor, e o veredito de estouro também.
  */
 
-import { agruparPorStatus, ORDEM_DA_FILA, rotuloDoStatus } from "./fila";
+import { ORDEM_DA_FILA } from "./fila";
 import {
   diaNoHospital,
   EM_ANDAMENTO,
   hojeNoHospital,
+  MINUTOS_POR_DIA_UTIL,
   naoVence,
   type StatusManifestacao,
 } from "./prazo";
@@ -59,6 +62,10 @@ export interface CasoDoPainel {
   sigilo_reforcado: boolean;
   /** O tipo do caso: o elogio não vence e fica fora dos vencidos (issue #1618). */
   tipo_manifestacao?: string | null;
+  /** A folga em minutos de expediente, medida pelo motor. Nula sem prazo da área. */
+  minutos_uteis_restantes?: number | null;
+  /** O dia em que o caso entrou. É dele que sai a idade da triagem mais antiga. */
+  data_abertura?: string | null;
 }
 
 /**
@@ -192,8 +199,60 @@ function porVencimento(a: CasoDoPainel, b: CasoDoPainel): number {
   );
 }
 
-/** As janelas que ainda não chegaram. Vencido e "vence hoje" têm bloco próprio. */
-const JANELAS_FUTURAS: JanelaDeVencimento[] = ["amanha", "depois"];
+/**
+ * O peso da gravidade na ordem das faixas de atraso (issue #1628, seção 4.11 do
+ * anexo): do crítico ao baixo. O caso sem gravidade, que é quase todo caso da
+ * triagem, e o valor que esta tela não conhece vão para o fim, sem sumir.
+ */
+const PESO_DA_GRAVIDADE: Record<string, number> = { critico: 0, alto: 1, medio: 2, baixo: 3 };
+
+function pesoDaGravidade(caso: CasoDoPainel): number {
+  return PESO_DA_GRAVIDADE[String(caso.gravidade)] ?? Object.keys(PESO_DA_GRAVIDADE).length;
+}
+
+/**
+ * Gravidade primeiro, e dentro dela o mais atrasado: o crítico vencido ontem
+ * passa na frente do médio vencido há uma semana. "Mais atrasado" é o
+ * vencimento mais antigo, a mesma régua do `porVencimento`.
+ */
+function porGravidadeEAtraso(a: CasoDoPainel, b: CasoDoPainel): number {
+  return pesoDaGravidade(a) - pesoDaGravidade(b) || porVencimento(a, b);
+}
+
+/**
+ * O estado em que a resposta é devida pela ÁREA. É o estado, e não a
+ * existência do prazo da área, que decide de quem é o atraso: quem cobra a
+ * área é o botão Cobrar, e ele só vale para o caso que está com ela.
+ */
+const COM_A_AREA: StatusManifestacao = "aguardando_area";
+
+/**
+ * Faixa 3 do Painel: o que a área deve e já venceu (issue #1628). Separada do
+ * atraso da Ouvidoria porque o dono é outro, e é aqui que mora o Cobrar.
+ */
+export function atrasosDasAreas<T extends CasoDoPainel>(casos: T[], hoje: string): T[] {
+  return vencendoEm(casos, "vencido", hoje)
+    .filter((caso) => caso.status === COM_A_AREA)
+    .sort(porGravidadeEAtraso);
+}
+
+/**
+ * Faixa 4 do Painel: o vencido que ainda está com a Ouvidoria, na triagem.
+ * Todo vencido que não está com a área cai aqui, inclusive o de estado que a
+ * tela não conhece: entre as duas faixas nenhum atraso some (issue #375).
+ */
+export function atrasosDaOuvidoria<T extends CasoDoPainel>(casos: T[], hoje: string): T[] {
+  return vencendoEm(casos, "vencido", hoje)
+    .filter((caso) => caso.status !== COM_A_AREA)
+    .sort(porGravidadeEAtraso);
+}
+
+/**
+ * As janelas que ainda não romperam. O vencido tem faixa própria; o "vence
+ * hoje" deixou de ter com o Painel de seis faixas (issue #1628), e entra aqui
+ * para não sumir da tela no dia em que mais precisa ser visto.
+ */
+const JANELAS_FUTURAS: JanelaDeVencimento[] = ["hoje", "amanha", "depois"];
 
 /** Quantos casos o bloco dos próximos vencimentos mostra. */
 export const LIMITE_DE_PROXIMOS_VENCIMENTOS = 5;
@@ -213,8 +272,8 @@ export interface ProximosVencimentos<T> {
  * é "que dia é amanhã", e sim "quais são os próximos", que é a mesma resposta
  * em qualquer dia da semana e não pede o calendário útil no navegador.
  *
- * Vencido e "vence hoje" ficam de fora porque já têm bloco próprio: repetir o
- * caso faria a mesma cobrança aparecer duas vezes na mesma tela.
+ * O vencido fica de fora porque já tem faixa própria: repetir o caso faria a
+ * mesma cobrança aparecer duas vezes na mesma tela.
  */
 export function proximosVencimentos<T extends CasoDoPainel>(
   casos: T[],
@@ -225,6 +284,139 @@ export function proximosVencimentos<T extends CasoDoPainel>(
     .filter((caso) => JANELAS_FUTURAS.includes(classificarJanela(caso, hoje)))
     .sort(porVencimento);
   return { casos: futuros.slice(0, limite), total: futuros.length };
+}
+
+/** Os três números do agora que viram lista quando o ouvidor toca neles. */
+export type NumeroDoAgora = "atrasados" | "vencem" | "triagem";
+
+/** Os estados em que o caso ainda espera a triagem da Ouvidoria. */
+const ESTADOS_DA_TRIAGEM: readonly StatusManifestacao[] = ["novo", "em_classificacao"];
+
+/** A folga do número "Vencem em até 2 dias úteis", em minutos de expediente. */
+const FOLGA_DE_DOIS_DIAS_UTEIS = 2 * MINUTOS_POR_DIA_UTIL;
+
+/**
+ * Quantos dias de semana (segunda a sexta) há depois de `hoje` até `dia`,
+ * inclusive. Só para o prazo da triagem, que é data civil e não tem folga
+ * medida pelo motor. Não conhece feriado: com um no meio, a conta sai um dia
+ * mais folgada do que a verdade, e o caso aparece no número um dia depois.
+ */
+function diasDeSemanaAte(hoje: string, dia: string): number {
+  let conta = 0;
+  for (let cursor = diaSeguinte(hoje); cursor <= dia; cursor = diaSeguinte(cursor)) {
+    const semana = new Date(`${cursor}T12:00:00Z`).getUTCDay();
+    if (semana !== 0 && semana !== 6) conta += 1;
+  }
+  return conta;
+}
+
+/**
+ * O caso ainda não rompeu e vence em até 2 dias úteis. Com prazo da área,
+ * quem diz a folga é o motor (`minutos_uteis_restantes`, com feriado); na
+ * triagem, que só tem a data, contam os dias de semana até ela.
+ */
+function venceEmAteDoisDiasUteis(caso: CasoDoPainel, hoje: string): boolean {
+  const janela = classificarJanela(caso, hoje);
+  if (!JANELAS_FUTURAS.includes(janela)) return false;
+  if (caso.prazo_area_em) {
+    if (typeof caso.minutos_uteis_restantes !== "number") return janela === "hoje";
+    return caso.minutos_uteis_restantes <= FOLGA_DE_DOIS_DIAS_UTEIS;
+  }
+  const dia = diaDaCobranca(caso);
+  return dia !== null && diasDeSemanaAte(hoje, dia) <= 2;
+}
+
+function naTriagem(caso: CasoDoPainel): boolean {
+  return ESTADOS_DA_TRIAGEM.includes(caso.status);
+}
+
+/**
+ * O dia de entrada de um caso da triagem, para a ordem e para a idade. Sem ele
+ * (backend uma versão atrás), o caso vai para o fim da lista e não dá idade.
+ */
+function entradaDoCaso(caso: CasoDoPainel): string {
+  return caso.data_abertura || "￿";
+}
+
+/**
+ * Os casos por trás de cada número da faixa 2 (issue #1628, seção 4.11: "cada
+ * número filtra a lista abaixo"). Atrasados é a soma das duas faixas de
+ * atraso, na mesma régua delas; o elogio não vence e fica fora dos dois
+ * primeiros, e entra na triagem como qualquer caso que a Ouvidoria não tratou.
+ */
+export function casosDoNumero<T extends CasoDoPainel>(numero: NumeroDoAgora, casos: T[], hoje: string): T[] {
+  switch (numero) {
+    case "atrasados":
+      return vencendoEm(casos, "vencido", hoje).sort(porGravidadeEAtraso);
+    case "vencem":
+      return casos.filter((caso) => venceEmAteDoisDiasUteis(caso, hoje)).sort(porVencimento);
+    case "triagem":
+      return casos.filter(naTriagem).sort((a, b) => entradaDoCaso(a).localeCompare(entradaDoCaso(b)));
+  }
+}
+
+/** Quantos dias corridos o caso mais antigo da triagem espera. Sem caso, nada. */
+export function idadeDoMaisAntigo(casos: CasoDoPainel[], hoje: string): number | null {
+  const entrada = casosDoNumero("triagem", casos, hoje)[0]?.data_abertura;
+  if (!entrada) return null;
+  return Math.max(Math.round((Date.parse(`${hoje}T12:00:00Z`) - Date.parse(`${entrada}T12:00:00Z`)) / 86_400_000), 0);
+}
+
+/** Um trecho do cumprimento de prazo das métricas (contrato da #341). */
+export interface TrechoDoPrazo {
+  trecho: string;
+  percentual_cumprido: number | null;
+}
+
+/**
+ * O "% respondido no prazo no mês" é o trecho da ÁREA (T1 a T2) das métricas,
+ * o mesmo número do relatório da Diretoria. Sem caso medido não há
+ * porcentagem, e o nulo não pode virar zero.
+ */
+export function percentualRespondidoNoPrazo(prazo: { trechos?: TrechoDoPrazo[] } | null | undefined): number | null {
+  const area = prazo?.trechos?.find((linha) => linha.trecho === "area");
+  return typeof area?.percentual_cumprido === "number" ? area.percentual_cumprido : null;
+}
+
+/** O cumprimento do prazo da área no mês, por setor (`prazo_por_area` das métricas). */
+export interface PrazoDaArea {
+  setor: string;
+  responsavel: string | null;
+  medidos: number;
+  cumpridos: number;
+  percentual_cumprido: number | null;
+}
+
+export interface LinhaPorArea extends PendenciaDeArea {
+  percentual_no_prazo: number | null;
+}
+
+/**
+ * A faixa 6: a tabela de pendências de agora com o % no prazo do mês ao lado.
+ * São dois universos (o que está pendente AGORA e o que entrou no mês), e cada
+ * coluna fica com o seu: nada aqui soma um com o outro. A ordem das pendências
+ * é a do módulo (a mais atrasada primeiro); a área que não deve nada e teve
+ * caso medido no mês entra depois, com zero pendências, para o % dela não sumir.
+ */
+export function linhasPorArea(pendencias: PendenciaDeArea[], prazoPorArea: PrazoDaArea[]): LinhaPorArea[] {
+  const doMes = new Map(prazoPorArea.map((linha) => [linha.setor, linha]));
+  const comPendencia = new Set(pendencias.map((linha) => linha.setor));
+  return [
+    ...pendencias.map((linha) => ({
+      ...linha,
+      percentual_no_prazo: doMes.get(linha.setor)?.percentual_cumprido ?? null,
+    })),
+    ...prazoPorArea
+      .filter((linha) => !comPendencia.has(linha.setor))
+      .map((linha) => ({
+        setor: linha.setor,
+        responsavel: linha.responsavel,
+        pendentes: 0,
+        vencidas: 0,
+        dias_uteis_de_atraso: 0,
+        percentual_no_prazo: linha.percentual_cumprido,
+      })),
+  ];
 }
 
 /**
@@ -259,35 +451,6 @@ export function precisaDaMarcaDeSigilo(caso: CasoDoPainel): boolean {
   return caso.sigilo_reforcado === true;
 }
 
-export interface ContagemDeStatus {
-  status: StatusManifestacao;
-  label: string;
-  total: number;
-}
-
-/**
- * A fila por status, na ordem do trabalho do ouvidor. Estado sem caso vira zero
- * explícito, e não sumiço: coluna que desaparece esconde que a fila esvaziou.
- *
- * Estado que esta tela ainda não conhece entra no fim, com o próprio código de
- * rótulo (issue #375, item 15). Sem isso, o caso sumia da contagem e os totais
- * deixavam de fechar com o total de casos: o painel fica aberto e projetado
- * numa sala de reunião, e uma soma que não bate ali é pior que uma linha com
- * nome estranho.
- *
- * A régua é uma só: quem agrupa é o `agruparPorStatus` da fila, e aqui só se
- * conta o que ele agrupou (issue #437). A contagem própria que existia aqui era
- * uma segunda régua com as mesmas duas decisões (a ordem e o estado
- * desconhecido) para manter em dois lugares.
- */
-export function contarPorStatus(casos: CasoDoPainel[]): ContagemDeStatus[] {
-  return agruparPorStatus(casos).map((grupo) => ({
-    status: grupo.status,
-    label: rotuloDoStatus(grupo.status),
-    total: grupo.itens.length,
-  }));
-}
-
 /**
  * Uma linha de `pendencias_por_area` do módulo de métricas (contrato da #341).
  * Nenhum caso é identificado aqui: só contagem, o nome de quem responde pelo
@@ -299,15 +462,6 @@ export interface PendenciaDeArea {
   pendentes: number;
   vencidas: number;
   dias_uteis_de_atraso: number;
-}
-
-/**
- * As áreas com caso vencido (PRD #319, história 13). A ordem chega pronta do
- * módulo (da mais atrasada para a menos) e é preservada: reordenar aqui faria o
- * painel discordar do relatório sobre onde apertar.
- */
-export function areasComVencidas(pendencias: PendenciaDeArea[]): PendenciaDeArea[] {
-  return pendencias.filter((linha) => linha.vencidas > 0);
 }
 
 export interface AvisoDeDegradacao {

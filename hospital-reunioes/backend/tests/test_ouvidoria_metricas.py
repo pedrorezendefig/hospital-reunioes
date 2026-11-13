@@ -1917,3 +1917,52 @@ class TestRessalvasDoContrato:
 
         assert "data de entrada" in doc.lower()
         assert "não é bug" in doc.lower()
+
+
+class TestPrazoDaAreaPorSetor:
+    """Issue #1628, faixa 6 do Painel: a tabela por área ganha o % no prazo do
+    mês, que é o trecho da área (T1 a T2) contado setor a setor, na mesma régua
+    do `prazo.trechos`."""
+
+    def _por_setor(self, corpo: dict) -> dict:
+        return {linha["setor"]: linha for linha in corpo["prazo_por_area"]}
+
+    def test_cada_setor_tem_o_proprio_percentual_no_prazo(self, monkeypatch):
+        supabase = _SupabaseFake(
+            casos=[
+                _tramitado(1, triagem=TRIAGEM_NO_PRAZO, area=AREA_NO_PRAZO, conclusao=CONCLUSAO_NO_PRAZO),
+                _tramitado(2, triagem=TRIAGEM_NO_PRAZO, area=AREA_ATRASADA, conclusao=CONCLUSAO_NO_PRAZO),
+                _tramitado(3, triagem=TRIAGEM_NO_PRAZO, area=AREA_NO_PRAZO, conclusao=CONCLUSAO_NO_PRAZO),
+                _tramitado(
+                    4, triagem=TRIAGEM_NO_PRAZO, area=AREA_ATRASADA, conclusao=CONCLUSAO_NO_PRAZO, setor="Farmacia"
+                ),
+            ],
+            ouvidoria_setor_responsaveis=[_responsavel("Recepcao"), _responsavel("Farmacia", nome="Paula Gestora")],
+        )
+        por_setor = self._por_setor(_metricas(_client(monkeypatch, supabase)).json())
+
+        # Recepção: dois no prazo em três; Farmácia: nenhum em um.
+        assert por_setor["Recepcao"]["medidos"] == 3
+        assert por_setor["Recepcao"]["cumpridos"] == 2
+        assert por_setor["Recepcao"]["percentual_cumprido"] == 66.7
+        assert por_setor["Recepcao"]["responsavel"] == "Carlos Titular"
+        assert por_setor["Farmacia"]["percentual_cumprido"] == 0.0
+        assert por_setor["Farmacia"]["responsavel"] == "Paula Gestora"
+
+    def test_setor_sem_caso_medido_no_mes_nao_aparece_com_zero(self, monkeypatch):
+        # O caso baixo não passa pela área: sem nada medido, a área não tem
+        # porcentagem, e um 0% ali acusaria quem nunca foi acionado.
+        supabase = _SupabaseFake(
+            casos=[
+                _caso(
+                    1,
+                    data_abertura=T0,
+                    gravidade="baixo",
+                    setor="Nutricao",
+                    validada_em=TRIAGEM_NO_PRAZO,
+                    encerrada_em=CONCLUSAO_NO_PRAZO,
+                )
+            ]
+        )
+
+        assert self._por_setor(_metricas(_client(monkeypatch, supabase)).json()) == {}

@@ -23,6 +23,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AlertCircle, ArrowLeft, Flag, Loader2, MessageSquareText } from "lucide-react";
 
+import { CardPadrao } from "@/components/ouvidoria/CardDeCaso";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -460,102 +461,54 @@ function CartaoDaAvaliacao({
 
   const podeConverter = Boolean(item.comentario) && !item.caso;
 
+  // O card padrão da seção 4.12, o mesmo da fila e do Painel (issue #1628):
+  // nota, ponto e data em cima, o comentário no meio, motivos e a marca Para
+  // revisar embaixo, com as ações. O comentário não corta: a nota não tem
+  // Dossiê, e é aqui que o ouvidor o lê para decidir se converte.
   return (
-    <article
-      aria-label={`Avaliação nota ${item.nota}, ${item.ponto_nome}`}
-      className="rounded-xl border border-border bg-white p-4 space-y-3"
-    >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="text-lg font-bold text-slate-900">Nota {item.nota}</span>
-        <span className="text-sm text-slate-600">{item.ponto_nome}</span>
-        <span className="text-sm text-slate-400">{formatarDataHora(item.criada_em)}</span>
-        {item.para_revisar && (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
-            <Flag className="w-3 h-3" />
-            Para revisar
-          </span>
-        )}
-      </div>
-
-      {item.motivos.length > 0 && (
-        <ul aria-label="Motivos" className="flex flex-wrap gap-1.5">
-          {item.motivos.map((m) => (
-            <li key={m} className="px-2 py-0.5 rounded-full bg-slate-100 text-xs text-slate-600">
-              {rotuloDoMotivo(m)}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {item.comentario ? (
-        <p className="flex items-start gap-2 text-sm text-slate-700 break-words">
-          <MessageSquareText className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
-          <span className="min-w-0">{item.comentario}</span>
-        </p>
-      ) : (
-        <p className="text-sm text-slate-400">Sem comentário.</p>
-      )}
-
-      {item.revisar_motivo && (
-        <p className="text-xs text-slate-500">Apontada pelo agente: {item.revisar_motivo}</p>
-      )}
-      {item.revisao_desfecho === "arquivada" && (
-        <p className="text-xs text-slate-500">Revisão arquivada: {item.revisao_motivo}</p>
-      )}
-      {item.caso && (
-        <p className="text-sm text-slate-700">
-          Virou o caso{" "}
-          <Link href={`/ouvidoria/m/${item.caso.protocolo}`} className="font-semibold text-primary hover:underline">
-            {item.caso.protocolo}
-          </Link>
-        </p>
-      )}
-
-      {erro && <p className="text-sm text-red-700">{erro}</p>}
-
-      {confirmando ? (
-        <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 space-y-2">
-          <p className="text-sm text-slate-700">
-            Abre um caso com este comentário como relato, sem tipo e com a hora da avaliação. Quem avaliou não deixou
-            contato. Caso aberto não tem volta.
+    <CardPadrao
+      como="article"
+      rotulo={`Avaliação nota ${item.nota}, ${item.ponto_nome}`}
+      className="rounded-xl border border-border bg-white"
+      cabeca={
+        <>
+          <span className="text-lg font-bold text-slate-900 shrink-0">Nota {item.nota}</span>
+          <span className="text-sm text-slate-600 truncate min-w-0">{item.ponto_nome}</span>
+          <span className="text-sm text-slate-400 shrink-0">{formatarDataHora(item.criada_em)}</span>
+        </>
+      }
+      texto={
+        item.comentario ? (
+          <p className="mt-1 flex items-start gap-2 text-sm text-slate-700 break-words">
+            <MessageSquareText className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
+            <span className="min-w-0">{item.comentario}</span>
           </p>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <button type="button" className={BOTAO_PRINCIPAL} disabled={ocupado} onClick={converter}>
-              Abrir o caso
-            </button>
-            <button type="button" className={BOTAO_SECUNDARIO} disabled={ocupado} onClick={() => setConfirmando(false)}>
-              Cancelar
-            </button>
-          </div>
-        </div>
-      ) : arquivando ? (
-        <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 space-y-2">
-          <label className={ROTULO} htmlFor={`motivo-${item.id}`}>
-            Motivo do arquivo
-          </label>
-          <input
-            id={`motivo-${item.id}`}
-            className={CAMPO}
-            maxLength={TAMANHO_DO_MOTIVO}
-            placeholder="Ex.: já tratado por telefone"
-            value={motivo}
-            onChange={(e) => setMotivo(e.target.value)}
-          />
-          <div className="flex flex-col sm:flex-row gap-2">
-            <button
-              type="button"
-              className={BOTAO_PRINCIPAL}
-              disabled={ocupado || !motivoValido(motivo)}
-              onClick={arquivar}
-            >
-              Confirmar arquivo
-            </button>
-            <button type="button" className={BOTAO_SECUNDARIO} disabled={ocupado} onClick={() => setArquivando(false)}>
-              Cancelar
-            </button>
-          </div>
-        </div>
-      ) : (
+        ) : (
+          <p className="mt-1 text-sm text-slate-400">Sem comentário.</p>
+        )
+      }
+      rodape={
+        <>
+          {item.motivos.length > 0 && (
+            <ul aria-label="Motivos" className="flex flex-wrap gap-1.5">
+              {item.motivos.map((m) => (
+                <li key={m} className="px-2 py-0.5 rounded-full bg-slate-100 text-xs text-slate-600">
+                  {rotuloDoMotivo(m)}
+                </li>
+              ))}
+            </ul>
+          )}
+          {item.para_revisar && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
+              <Flag className="w-3 h-3" />
+              Para revisar
+            </span>
+          )}
+        </>
+      }
+      acao={
+        !confirmando &&
+        !arquivando &&
         (podeConverter || item.para_revisar) && (
           <div className="flex flex-col sm:flex-row gap-2">
             {podeConverter && (
@@ -570,7 +523,83 @@ function CartaoDaAvaliacao({
             )}
           </div>
         )
-      )}
-    </article>
+      }
+      aviso={
+        <div className="mt-2 space-y-2 empty:hidden">
+          {item.revisar_motivo && (
+            <p className="text-xs text-slate-500">Apontada pelo agente: {item.revisar_motivo}</p>
+          )}
+          {item.revisao_desfecho === "arquivada" && (
+            <p className="text-xs text-slate-500">Revisão arquivada: {item.revisao_motivo}</p>
+          )}
+          {item.caso && (
+            <p className="text-sm text-slate-700">
+              Virou o caso{" "}
+              <Link href={`/ouvidoria/m/${item.caso.protocolo}`} className="font-semibold text-primary hover:underline">
+                {item.caso.protocolo}
+              </Link>
+            </p>
+          )}
+
+          {erro && <p className="text-sm text-red-700">{erro}</p>}
+
+          {confirmando ? (
+            <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 space-y-2">
+              <p className="text-sm text-slate-700">
+                Abre um caso com este comentário como relato, sem tipo e com a hora da avaliação. Quem avaliou não
+                deixou contato. Caso aberto não tem volta.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button type="button" className={BOTAO_PRINCIPAL} disabled={ocupado} onClick={converter}>
+                  Abrir o caso
+                </button>
+                <button
+                  type="button"
+                  className={BOTAO_SECUNDARIO}
+                  disabled={ocupado}
+                  onClick={() => setConfirmando(false)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            arquivando && (
+              <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 space-y-2">
+                <label className={ROTULO} htmlFor={`motivo-${item.id}`}>
+                  Motivo do arquivo
+                </label>
+                <input
+                  id={`motivo-${item.id}`}
+                  className={CAMPO}
+                  maxLength={TAMANHO_DO_MOTIVO}
+                  placeholder="Ex.: já tratado por telefone"
+                  value={motivo}
+                  onChange={(e) => setMotivo(e.target.value)}
+                />
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    type="button"
+                    className={BOTAO_PRINCIPAL}
+                    disabled={ocupado || !motivoValido(motivo)}
+                    onClick={arquivar}
+                  >
+                    Confirmar arquivo
+                  </button>
+                  <button
+                    type="button"
+                    className={BOTAO_SECUNDARIO}
+                    disabled={ocupado}
+                    onClick={() => setArquivando(false)}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )
+          )}
+        </div>
+      }
+    />
   );
 }

@@ -3088,6 +3088,25 @@ async def numeros_das_avaliacoes(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_FALHA_NA_AVALIACAO) from exc
 
 
+@router.get("/avaliacoes/para-revisar")
+@limiter.limit("60/minute")
+async def contador_para_revisar(
+    request: Request,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """O contador Para revisar do Painel (issue #1628, seção 4.6 do anexo):
+    quantas avaliações esperam revisão, de qualquer data. Só o número: o
+    Painel recarrega a cada minuto e não mostra comentário nenhum, então ler a
+    página da lista só para o total traria comentário para uma tela que não o
+    exibe. A consulta é a mesma do filtro da aba, no índice da migration 144."""
+    try:
+        return {"total": ouvidoria_avaliacoes.contar_para_revisar(supabase)}
+    except APIError as exc:
+        logger.error("Falha ao contar as avaliações para revisar (código %s)", exc.code)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_FALHA_NA_AVALIACAO) from exc
+
+
 @router.get("/avaliacoes")
 @limiter.limit("60/minute")
 async def listar_avaliacoes(
