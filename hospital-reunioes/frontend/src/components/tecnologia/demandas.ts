@@ -112,6 +112,11 @@ export type Demanda = {
    */
   origem?: Origem | null;
   /**
+   * O Projeto da Demanda (issue #1715, ADR 0093, decisão 8): o Aplicativo do
+   * Hospital ou a Ana. O selo do card no Quadro e na lista. Sem o campo, sem selo.
+   */
+  projeto?: Projeto | null;
+  /**
    * A Revisão com o código de hoje (issue #1557, ADR 0084, decisão 3):
    * `pode_revisar` mostra o botão, pela regra do servidor; `em_revisao` abre a
    * conversa para responder, e não só para ler.
@@ -157,6 +162,19 @@ export const ORIGEM_ROTULO: Record<Origem, string> = {
 export const ORIGEM_CLASSE: Record<Origem, string> = {
   diretor: "bg-slate-100 text-slate-700",
   vitta: "bg-sky-50 text-sky-700",
+};
+
+export type Projeto = "hospital" | "ana";
+
+/** O selo do Projeto no card e o nome no filtro (issue #1715, ADR 0093, decisões 1 e 8). */
+export const PROJETO_ROTULO: Record<Projeto, string> = {
+  hospital: "Aplicativo do Hospital",
+  ana: "Ana",
+};
+
+export const PROJETO_CLASSE: Record<Projeto, string> = {
+  hospital: "bg-teal-50 text-teal-700",
+  ana: "bg-amber-50 text-amber-800",
 };
 
 export type Classificacao = "bug" | "melhoria";

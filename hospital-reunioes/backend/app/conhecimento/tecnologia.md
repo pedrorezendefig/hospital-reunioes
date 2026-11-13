@@ -8,6 +8,8 @@ Na tela do computador, o **Quadro** mostra os seus pedidos em colunas pela Etapa
 
 No celular, e em telas menores que a do computador, a aba se chama **Conversas** e mostra a lista dos seus pedidos, como antes, com o botão **Nova conversa** e o filtro de Etapa.
 
+A aba junta os pedidos de dois Projetos: o **Aplicativo do Hospital** e a **Ana**, a agente de atendimento do hospital. Os pedidos da Ana aparecem ali, no Quadro e na lista do celular, ao lado dos do aplicativo, e cada um traz um selo pequeno com o nome do Projeto. Para ver só um dos dois, escolha no campo **Projeto**, na barra de filtros: Todos, que é como a aba abre, Aplicativo do Hospital ou Ana. O Projeto combina com os outros filtros, e o **Limpar filtros** volta o campo para Todos.
+
 ## A conversa com o Assistente
 
 A conversa com a IA começa pelo botão **Novo pedido**, no alto do Quadro, ou pelo **Nova conversa**, no alto da lista do celular. Ela pergunta se é um bug ou uma melhoria: bug é algo que não funciona como deveria, e melhoria é algo novo ou uma mudança no que já existe. Dá para clicar num dos dois botões ou escrever do seu jeito. Se você só descrever, a IA diz o que entendeu e pergunta se é isso antes de seguir.

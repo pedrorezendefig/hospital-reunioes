@@ -898,11 +898,11 @@ describe("A barra de filtros por categoria (issue #1578, emenda da ADR 0084)", (
     await waitFor(() => expect(chamadas.at(-1)?.url).toBe(`${LISTA}?etapa=em_producao`));
   });
 
-  it("o diretor vê Tipo, Etapa e Origem, sem o recorte, o Responsável e o Envio falhou", async () => {
+  it("o diretor vê Tipo, Etapa, Origem e Projeto, sem o recorte, o Responsável e o Envio falhou", async () => {
     comoDiretor();
     await within(lista()).findByText("Botão de responder some na Ouvidoria");
 
-    expect(campos()).toEqual(["Tipo", "Etapa", "Origem"]);
+    expect(campos()).toEqual(["Tipo", "Etapa", "Origem", "Projeto"]);
     expect(within(filtros()).queryByRole("group", { name: "Recorte" })).toBeNull();
     expect(within(filtros()).queryByRole("switch")).toBeNull();
   });
@@ -926,7 +926,7 @@ describe("A barra de filtros por categoria (issue #1578, emenda da ADR 0084)", (
       return { status: 404, corpo: {} };
     });
     await within(lista()).findByText("Botão de responder some na Ouvidoria");
-    await waitFor(() => expect(campos()).toEqual(["Tipo", "Etapa", "Origem", "Responsável"]));
+    await waitFor(() => expect(campos()).toEqual(["Tipo", "Etapa", "Origem", "Projeto", "Responsável"]));
 
     const recorte = within(filtros()).getByRole("group", { name: "Recorte" });
     expect(within(recorte).getAllByRole("button").map((b) => b.textContent)).toEqual(["Para mim", "Minhas", "Todas"]);
@@ -2183,5 +2183,103 @@ describe("O Número e o Copiar link no chat (issue #1669)", () => {
     const aberta = screen.getByRole("region", { name: "Conversa aberta" });
     expect(await within(aberta).findByText(ABERTURA)).toBeTruthy();
     expect(within(aberta).queryByRole("button", { name: "Copiar link" })).toBeNull();
+  });
+});
+
+describe("O filtro Projeto e o selo (issue #1715, ADR 0093, decisão 8)", () => {
+  /** A tela a partir de 1280px: o `matchMedia` que o jsdom não tem, dublado. */
+  function telaLarga(larga = true) {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((consulta: string) => ({
+        matches: larga && consulta === "(min-width: 1280px)",
+        media: consulta,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+  }
+
+  const quadro = () => screen.getByRole("region", { name: "Quadro" });
+  const filtros = () => screen.getByRole("region", { name: "Filtros da lista" });
+
+  const DO_APP = demanda("p-1", "Aviso quando a ata sair", {
+    etapa: "em_analise",
+    tem_vinculo: true,
+    numero: 51,
+    projeto: "hospital",
+  });
+  const DA_ANA = demanda("p-2", "Ana responde o horário da visita", {
+    etapa: "em_analise",
+    tem_vinculo: true,
+    numero: 52,
+    projeto: "ana",
+  });
+
+  /** O servidor que filtra pelo `projeto` como a rota de verdade (teste de rota no backend). */
+  function servidor(url: string): Resposta {
+    if (url === LISTA) return { status: 200, corpo: [DO_APP, DA_ANA] };
+    if (url === `${LISTA}?projeto=ana`) return { status: 200, corpo: [DA_ANA] };
+    if (url === `${LISTA}?projeto=hospital`) return { status: 200, corpo: [DO_APP] };
+    return { status: 404, corpo: {} };
+  }
+
+  it("com Ana escolhido o Quadro mostra só as Demandas da Ana, e com Todos as duas", async () => {
+    telaLarga();
+    const chamadas = montar(servidor);
+    await within(await screen.findByRole("region", { name: "Quadro" })).findByText("Aviso quando a ata sair");
+    expect(within(filtros()).getByRole("combobox", { name: "Projeto" }).textContent).toBe("Todos");
+    expect(within(quadro()).getByText("Ana responde o horário da visita")).toBeTruthy();
+
+    escolher("Projeto", "Ana");
+
+    await waitFor(() => expect(within(quadro()).queryByText("Aviso quando a ata sair")).toBeNull());
+    expect(chamadas.at(-1)?.url).toBe(`${LISTA}?projeto=ana`);
+    expect(within(quadro()).getByText("Ana responde o horário da visita")).toBeTruthy();
+
+    escolher("Projeto", "Todos");
+
+    expect(await within(quadro()).findByText("Aviso quando a ata sair")).toBeTruthy();
+    expect(chamadas.at(-1)?.url).toBe(LISTA);
+    expect(within(quadro()).getByText("Ana responde o horário da visita")).toBeTruthy();
+  });
+
+  it("Limpar filtros volta o Projeto para Todos", async () => {
+    telaLarga();
+    const chamadas = montar(servidor);
+    await screen.findByRole("region", { name: "Quadro" });
+
+    escolher("Projeto", "Aplicativo do Hospital");
+    await waitFor(() => expect(chamadas.at(-1)?.url).toBe(`${LISTA}?projeto=hospital`));
+    fireEvent.click(within(filtros()).getByRole("button", { name: "Limpar filtros" }));
+
+    await waitFor(() => expect(chamadas.at(-1)?.url).toBe(LISTA));
+    expect(within(filtros()).getByRole("combobox", { name: "Projeto" }).textContent).toBe("Todos");
+  });
+
+  it("o card do Quadro leva o selo do projeto", async () => {
+    telaLarga();
+    montar(servidor);
+    await screen.findByRole("region", { name: "Quadro" });
+
+    const doApp = await within(quadro()).findByRole("button", { name: /Aviso quando a ata sair/ });
+    const daAna = within(quadro()).getByRole("button", { name: /Ana responde o horário da visita/ });
+    expect(within(doApp).getByText("Aplicativo do Hospital")).toBeTruthy();
+    expect(within(daAna).getByText("Ana")).toBeTruthy();
+    expect(within(daAna).queryByText("Aplicativo do Hospital")).toBeNull();
+  });
+
+  it("a linha da lista do celular leva o selo do projeto, e o filtro vale para ela", async () => {
+    telaLarga(false);
+    const chamadas = montar(servidor);
+    await within(lista()).findByText("Aviso quando a ata sair");
+
+    const itens = within(lista()).getAllByRole("listitem");
+    expect(within(itens[0]).getByText("Aplicativo do Hospital")).toBeTruthy();
+    expect(within(itens[1]).getByText("Ana")).toBeTruthy();
+
+    escolher("Projeto", "Ana");
+    await waitFor(() => expect(chamadas.at(-1)?.url).toBe(`${LISTA}?projeto=ana`));
+    await waitFor(() => expect(within(lista()).queryByText("Aviso quando a ata sair")).toBeNull());
   });
 });

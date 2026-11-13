@@ -201,7 +201,8 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
     tecnico da falha, so para o Desenvolvedor (issue #1535). A designacao
     falhada sai so para o Desenvolvedor (issue #1536). O `pode_apagar` diz a
     tela se mostra o "Apagar" (issue #1549), pela regra da rota. A `origem`
-    da o selo "Pedido do diretor" ou "Vitta" (issue #1554).
+    da o selo "Pedido do diretor" ou "Vitta" (issue #1554), e o `projeto`, o
+    selo do Aplicativo do Hospital ou da Ana (issue #1715).
     """
     desenvolvedor = e_desenvolvedor(ator)
     ids = {responsavel_da_demanda(d) for d in demandas}
@@ -228,6 +229,7 @@ def _para_a_lista(supabase: Client, demandas: list[dict], *, ator: dict) -> list
             "envio_motivo": d.get("envio_motivo") if desenvolvedor and _falha_pendente(d) else None,
             "pode_apagar": recusa_de_apagar(ator, d) is None,
             "origem": origem_da_demanda(d),
+            "projeto": projeto_da_demanda(d),
             **_revisao_na_lista(ator, d, conversas.get(str(d["id"]))),
         }
         for d in demandas
@@ -731,6 +733,7 @@ async def listar_as_conversas(
     responsavel: str | None = None,
     envio_falhou: bool = False,
     origem: Literal["diretor", "vitta"] | None = None,
+    projeto: Literal["hospital", "ana"] | None = None,
     ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
@@ -748,8 +751,8 @@ async def listar_as_conversas(
     Demandas cujo card nao chegou ao GitHub (issue #1535), de todos os autores
     mesmo partindo de `para_mim`, porque elas nao tem Responsavel. `para_mim`,
     `responsavel` e `envio_falhou` sao do Desenvolvedor, como os chips da
-    tela, e a rota os recusa a quem nao e. A `origem` (issue #1554) e para
-    todos.
+    tela, e a rota os recusa a quem nao e. A `origem` (issue #1554) e o
+    `projeto` (issue #1715, ADR 0093, decisao 8) sao para todos.
 
     O diretor ve, alem das dele, os cards de Origem Vitta, abertos pelo
     terminal (ADR 0084, decisao 4): o "Minhas" dele e o `pode_ver`, e o do
@@ -789,6 +792,8 @@ async def listar_as_conversas(
         visiveis = [d for d in visiveis if tecnologia_envio.envio_falhou(d)]
     if origem:
         visiveis = [d for d in visiveis if origem_da_demanda(d) == origem]
+    if projeto:
+        visiveis = [d for d in visiveis if projeto_da_demanda(d) == projeto]
     return _para_a_lista(supabase, visiveis, ator=ator)
 
 
