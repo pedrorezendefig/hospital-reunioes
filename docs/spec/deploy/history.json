@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T05:17:33-03:00",
+      "sha": "039eac625e70fc12a1ca062d91025900ec72616c",
+      "app_version": "0.280.0",
+      "subject": "Onda hsm-qr-onda5: Painel em seis faixas e card de caso padrão",
+      "raw_subject": "chore(deploy): registro da onda hsm-qr-onda5 (#1692)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1527
+      ],
+      "result": "healthy",
+      "duration_seconds": 265,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-qr-onda5: PR #1692 (issue #1628), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 17,
+          "frontend": 181
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T05:11:36-03:00",
       "sha": "094586ae97213825cd5ea0de0859b9e5dc94e50b",
       "app_version": "0.279.0",
