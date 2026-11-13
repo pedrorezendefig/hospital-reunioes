@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -171,7 +173,9 @@ class TestOIdentificadoEntraPeloContato:
 
     def test_o_caso_de_antes_com_o_telefone_no_contato_tambem_entra(self):
         client, banco = _make_app()
-        protocolo = _caso_identificado(client, banco, manifestante_contato="(21) 97777-1111", manifestante_telefone=None)
+        protocolo = _caso_identificado(
+            client, banco, manifestante_contato="(21) 97777-1111", manifestante_telefone=None
+        )
 
         r = client.post(ROTA_ACOMPANHAR, json={"protocolo": protocolo, "contato": "21977771111"})
 
@@ -225,7 +229,9 @@ class TestAPaginaMostraSoOEstadoAUltimaMovimentacaoEAResposta:
 
     def test_o_caso_encerrado_mostra_a_resposta_institucional(self):
         client, banco = _make_app()
-        protocolo = _caso_identificado(client, banco, status="encerrado", desfecho_descricao="Reforçamos o atendimento.")
+        protocolo = _caso_identificado(
+            client, banco, status="encerrado", desfecho_descricao="Reforçamos o atendimento."
+        )
 
         r = client.post(ROTA_ACOMPANHAR, json={"protocolo": protocolo, "contato": "maria@exemplo.com"})
 
@@ -287,3 +293,50 @@ class TestOLimiteDeTentativas:
 
         assert respostas[:5] == [404] * 5
         assert respostas[5] == 429
+
+
+MIGRATION = (
+    Path(__file__).parent.parent.parent / "supabase" / "migrations" / "141_ouvidoria_codigo_de_acompanhamento.sql"
+)
+
+
+class TestAMigration:
+    def _ddl(self) -> str:
+        return re.sub(r"--[^\n]*", "", MIGRATION.read_text(encoding="utf-8"))
+
+    def test_o_caso_ganha_a_coluna_do_hash_e_o_recibo_da_subida(self):
+        ddl = self._ddl()
+
+        assert "ADD COLUMN IF NOT EXISTS codigo_acompanhamento_hash TEXT" in ddl
+        assert "INSERT INTO migracoes_aplicadas (numero) VALUES (141)" in ddl
+
+    def test_o_banco_recusa_codigo_em_claro_na_coluna_do_hash(self):
+        """O CHECK aceita só o formato que `hash_do_codigo` grava."""
+        client, banco = _make_app()
+        _anonima(client)
+
+        assert "codigo_acompanhamento_hash LIKE 'pbkdf2_sha256$%'" in self._ddl()
+        assert banco.inserts[0]["codigo_acompanhamento_hash"].startswith("pbkdf2_sha256$")
+
+    def test_nenhuma_tabela_nova_nem_policy(self):
+        ddl = self._ddl().upper()
+
+        assert "CREATE TABLE" not in ddl
+        assert "CREATE POLICY" not in ddl
+
+
+class TestOKitDeConhecimento:
+    """O Assistente de Tecnologia responde sobre a Ouvidoria pelo kit."""
+
+    @pytest.fixture
+    def texto(self) -> str:
+        from app.services.conhecimento import CONHECIMENTO_DIR
+
+        return (CONHECIMENTO_DIR / "ouvidoria.md").read_text(encoding="utf-8")
+
+    def test_o_kit_conta_o_codigo_e_a_pagina_como_coisa_que_ja_existe(self, texto):
+        entrada = next(linha for linha in texto.splitlines() if linha.startswith("- **Acompanhamento pela internet.**"))
+        for trecho in ("código de acompanhamento", "uma vez só", "/acompanhar", "telefone ou o e-mail"):
+            assert trecho in entrada, trecho
+        # A decisão deixa de ser promessa ("vai receber").
+        assert "vai receber um código para acompanhar" not in texto

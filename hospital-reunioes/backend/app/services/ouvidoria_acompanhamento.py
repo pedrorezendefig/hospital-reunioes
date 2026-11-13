@@ -120,9 +120,7 @@ def contato_confere(informado: str, caso: dict) -> bool:
     if len(digitos) < _DIGITOS_DO_MENOR_TELEFONE:
         return False
     # O caso de antes da Manifestação guiada guardava o telefone no contato.
-    return any(
-        _digitos(caso.get(coluna)) == digitos for coluna in ("manifestante_telefone", "manifestante_contato")
-    )
+    return any(_digitos(caso.get(coluna)) == digitos for coluna in ("manifestante_telefone", "manifestante_contato"))
 
 
 def resposta_institucional(caso: dict) -> str | None:
