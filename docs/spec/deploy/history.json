@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T00:19:17-03:00",
+      "sha": "adc177fe40051eb45f5c612a2bb5d22c1e8deb46",
+      "app_version": "0.271.0",
+      "subject": "Onda hsm-quadro-onda2: Card do Quadro abre num painel à direita",
+      "raw_subject": "chore(deploy): registro da onda hsm-quadro-onda2 (#1672)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1641
+      ],
+      "result": "healthy",
+      "duration_seconds": 208,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-quadro-onda2: PR #1672 (issue #1643), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 169,
+          "frontend": 155
+        },
+        "health_s": 20
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T00:03:15-03:00",
       "sha": "688bb3beffb6c2d696ccd9e82170a822817e68f7",
       "app_version": "0.270.0",
