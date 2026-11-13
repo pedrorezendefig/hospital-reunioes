@@ -14,7 +14,9 @@ estoura.
 from __future__ import annotations
 
 import os
+import re
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -108,6 +110,28 @@ def _as_duas_demandas_50(*, ana_primeiro: bool) -> list[dict]:
     hospital = _demanda("DH", projeto=HOSPITAL, github_issue_numero=50, etapa=ETAPA_EM_ANALISE)
     ana = _demanda("DA", projeto=ANA, github_issue_numero=50, etapa=ETAPA_EM_ANALISE)
     return [ana, hospital] if ana_primeiro else [hospital, ana]
+
+
+class TestAsDuasDemandas50ExistemJuntas:
+    def test_o_espelho_cria_a_ana_50_com_a_hospital_50_ja_vinculada(self, monkeypatch):
+        """Criterio de aceite: `hospital #50` e `ana #50` existem juntas. A
+        issue-raiz #50 da Ana vira Demanda da Ana mesmo com a #50 do Hospital
+        ja tendo a dela: a do Hospital nao e "a mesma issue"."""
+        from app.services import tecnologia_espelho
+
+        gh = _GithubDosDoisProjetos(
+            {(ANA, 50): {**_issue(50, labels=("type:feature", "area:backend")), "user": {"login": "alguem"}}}
+        )
+        hospital = _demanda("DH", projeto=HOSPITAL, github_issue_numero=50)
+        _, sb = _montar_dois(monkeypatch, [hospital], gh)
+        sb.tabelas["tecnologia_produtos"] = [{"id": "prod-1", "ativo": True, "ordem": 1}]
+
+        criada = tecnologia_espelho.espelhar(sb, ANA, 50)
+
+        assert criada is not None
+        assert (criada["projeto"], criada["github_issue_numero"]) == (ANA, 50)
+        assert sorted((d["projeto"], d["github_issue_numero"]) for d in _demandas(sb)) == [(ANA, 50), (HOSPITAL, 50)]
+        assert gh.leituras == [(ANA, 50)]
 
 
 class TestOWebhookDoGithubPorProjeto:
@@ -230,3 +254,52 @@ class TestOCarimboDeEmProducaoSoNoHospital:
         assert (demandas["DH"]["etapa"], demandas["DH"]["versao_em_producao"]) == (ETAPA_EM_PRODUCAO, "v0.170.0")
         assert demandas["DA"]["etapa"] == ETAPA_ENTREGUE
         assert gh.leituras == [(HOSPITAL, 50)]
+
+
+# ─── A migration 145 ─────────────────────────────────────────────────────────
+
+MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "145_tecnologia_projeto_da_demanda.sql"
+
+
+@pytest.fixture
+def sql() -> str:
+    """O SQL que o Studio roda, sem os comentarios: o cabecalho cita as mesmas
+    palavras. A prova de que ele roda (as Demandas de hoje no Hospital, a #50
+    dos dois lados, a terceira recusada, rodar duas vezes) foi feita num
+    Postgres descartavel e esta no corpo do PR."""
+    return re.sub(r"--[^\n]*", "", MIGRATION.read_text(encoding="utf-8"))
+
+
+class TestAMigracao:
+    def test_as_demandas_de_hoje_ficam_no_hospital_e_o_projeto_e_obrigatorio(self, sql):
+        assert re.search(
+            r"ALTER TABLE tecnologia_demandas ADD COLUMN IF NOT EXISTS projeto TEXT NOT NULL DEFAULT 'hospital';", sql
+        )
+
+    def test_o_check_e_a_mesma_lista_de_projetos_do_cliente_do_github(self, sql):
+        achado = re.search(r"CHECK \(projeto IN \(([^)]*)\)\)", sql)
+        assert achado
+        assert tuple(re.findall(r"'([a-z]+)'", achado.group(1))) == github_client.PROJETOS
+
+    def test_o_indice_unico_do_vinculo_passa_a_ser_projeto_mais_numero(self, sql):
+        """Criterio de aceite: `hospital #50` e `ana #50` existem juntas. O
+        indice velho, so pelo numero, sai antes do novo entrar."""
+        velho = re.search(r"DROP INDEX IF EXISTS tecnologia_demandas_github_issue_numero_idx;", sql)
+        novo = re.search(
+            r"CREATE UNIQUE INDEX IF NOT EXISTS tecnologia_demandas_projeto_github_issue_numero_idx\s+"
+            r"ON tecnologia_demandas \(projeto, github_issue_numero\)\s+"
+            r"WHERE github_issue_numero IS NOT NULL;",
+            sql,
+        )
+        assert velho and novo
+        assert velho.start() < novo.start()
+
+    def test_a_sequencia_do_numero_da_demanda_nao_muda(self, sql):
+        """Uma sequencia so para o Numero da Demanda (ADR 0093, decisao 3)."""
+        antes_do_recibo = sql.split("INSERT INTO migracoes_aplicadas", 1)[0]
+        assert "tecnologia_demandas" in antes_do_recibo, "o caso perdeu o sentido: a migration nao mexe na Demanda"
+        assert not re.search(r"\bnumero\b|numero_seq", antes_do_recibo)
+
+    def test_a_migration_grava_o_recibo_145_por_ultimo(self, sql):
+        instrucoes = [i.strip() for i in sql.split(";") if i.strip()]
+        assert instrucoes[-1] == "INSERT INTO migracoes_aplicadas (numero) VALUES (145) ON CONFLICT (numero) DO NOTHING"
