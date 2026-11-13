@@ -51,7 +51,7 @@ sem -> pendencias
 2. Escreva o **Título** (1) e confira a **Data**. Escolha o **Tipo** da reunião.
 3. Clique no horário de início (2).
 4. Se quiser, escreva a **Pauta**, o que vai ser tratado.
-5. Em **Participantes**, digite parte do nome de cada pessoa e clique no nome dela na lista (3).
+5. Em **Participantes**, digite parte do nome de cada pessoa e clique no nome dela na lista (3). Quem você escolher recebe um e-mail assim que a reunião é salva.
 6. Clique em **Agendar reunião** (4). A reunião aparece no Calendário no dia marcado.
 
 ![A janela de agendar reunião preenchida](agendar-reuniao.png)
