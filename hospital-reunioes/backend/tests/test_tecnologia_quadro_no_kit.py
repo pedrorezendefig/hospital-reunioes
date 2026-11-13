@@ -42,3 +42,13 @@ def test_o_kit_diz_que_no_celular_a_lista_continua():
     abertura = _abertura_da_aba()
 
     assert "No celular" in abertura
+
+
+def test_o_kit_diz_que_o_pedido_abre_num_painel_ao_lado_do_quadro():
+    """Issue #1643: o clique no card abre o pedido num painel ao lado do Quadro,
+    que continua a vista, e o Ampliar leva a tela toda."""
+    abertura = _abertura_da_aba()
+
+    assert "abre o pedido num painel ao lado do Quadro" in abertura
+    assert "O clique num card abre o pedido na tela toda" not in abertura
+    assert "**Ampliar**" in abertura

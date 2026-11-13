@@ -75,6 +75,13 @@
  * pedido", no topo da aba, e o clique num card abrem na largura toda, como o
  * Ampliar, com o "Voltar ao quadro". O que fica embaixo de 1280px é a lista de
  * antes, com o card completo e o filtro de Etapa.
+ *
+ * O card do Quadro que não é a conversa Registrada do autor abre num painel à
+ * direita, por cima do Quadro e sem ser modal (issue #1643, ADR 0090, decisão
+ * 5): o Documento do card, a Conversa da Demanda e os mesmos botões da
+ * largura toda. O painel fecha pelo X ou pelo Esc e devolve o foco ao card; o
+ * Ampliar leva à largura toda; o "Conversar" põe a caixa da Conversa em foco.
+ * O endereço e o link do sino abrem o Quadro com o painel.
  */
 
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
