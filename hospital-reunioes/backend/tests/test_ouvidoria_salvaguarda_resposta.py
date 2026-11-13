@@ -133,3 +133,26 @@ class TestAFalhaDoAgenteNaoTravaOEnvio:
 
         assert r.status_code == 200, r.text
         assert supabase.tabelas["ouvidoria_protocolos"][0]["status"] == "encerrado"
+
+
+class TestOKitDeConhecimento:
+    """Critério 4: o texto do Produto Ouvidoria no kit de conhecimento diz o
+    comportamento novo."""
+
+    @pytest.fixture
+    def paragrafo(self) -> str:
+        from app.services.conhecimento import CONHECIMENTO_DIR
+
+        texto = (CONHECIMENTO_DIR / "ouvidoria.md").read_text(encoding="utf-8")
+        achados = [linha for linha in texto.splitlines() if "admitem ou negam falha" in linha]
+        assert len(achados) == 1
+        return achados[0]
+
+    def test_diz_quando_o_agente_le_a_resposta_e_quem_decide(self, paragrafo):
+        assert "Em análise pelo NSP" in paragrafo
+        assert "antes de a resposta sair" in paragrafo
+        assert "o ouvidor decide se edita o texto ou envia assim mesmo" in paragrafo
+
+    def test_diz_que_sem_selo_nao_le_e_que_a_falha_nao_trava(self, paragrafo):
+        assert "Caso sem o selo não passa pelo agente" in paragrafo
+        assert "a resposta sai normalmente" in paragrafo
