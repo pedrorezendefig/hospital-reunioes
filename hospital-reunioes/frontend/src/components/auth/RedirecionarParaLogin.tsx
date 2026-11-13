@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-import { urlDeLoginCom } from "@/lib/login/destino";
+import { urlDeLoginPara } from "@/lib/login/destino";
 
 /**
  * A ida ao login carregando o destino original (issue #477, RN-54, PRD #468).
@@ -22,12 +22,16 @@ import { urlDeLoginCom } from "@/lib/login/destino";
  *
  * Então quem lê o endereço é o único que o tem inteiro: o navegador. A decisão
  * segue no servidor, a leitura do destino é do cliente.
+ *
+ * Desde a issue #1587 o layout do `/admin` usa o mesmo encaminhador, e quem
+ * decide se o endereço volta depois do login é `urlDeLoginPara`: o caso da
+ * Ouvidoria e o pedido da aba Tecnologia voltam, o resto do admin não.
  */
 export function RedirecionarParaLogin() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace(urlDeLoginCom(window.location.pathname + window.location.search));
+    router.replace(urlDeLoginPara(window.location.pathname + window.location.search));
   }, [router]);
 
   return (
