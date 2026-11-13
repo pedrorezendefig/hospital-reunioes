@@ -26,7 +26,13 @@ import Link from "next/link";
 import { AlertTriangle, ArrowLeft, Loader2, PlugZap } from "lucide-react";
 
 import { getAuthToken } from "@/hooks/useAuth";
-import { BASE_CENTRAL, FALHA_DE_CONEXAO, lerRecusa, SEM_SESSAO } from "@/lib/central-de-comando/api";
+import {
+  BASE_CENTRAL,
+  FALHA_DE_CONEXAO,
+  lerRecusa,
+  OBJETIVO_NOTA_NO_GOOGLE,
+  SEM_SESSAO,
+} from "@/lib/central-de-comando/api";
 import { formatarInteiro } from "@/lib/central-de-comando/formato";
 import { PERIODO_PADRAO, type Periodo } from "@/lib/central-de-comando/periodo";
 import { formatarNota } from "@/lib/ouvidoria/nota-externa";
@@ -34,8 +40,6 @@ import { formatarNota } from "@/lib/ouvidoria/nota-externa";
 import { GraficoDoMesDaNota, type LeituraDaNota } from "./GraficoDoMesDaNota";
 import { CAMINHO_OBJETIVOS } from "./Objetivos";
 import { SeletorDePeriodo } from "./SeletorDePeriodo";
-
-export const OBJETIVO_NOTA_NO_GOOGLE = "google-reputacao";
 
 /** O que `GET /api/admin/central-de-comando/objetivos/google-reputacao` devolve. */
 export type NotaNoGooglePayload = {

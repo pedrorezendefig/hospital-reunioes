@@ -28,7 +28,27 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import LenteDoObjetivoPage from "./page";
+
+const SRC = join(process.cwd(), "src");
+
+/** Os nomes que não são componente importados de um módulo `@/` que começa com "use client". */
+function valoresDeModuloDoNavegador(fonte: string): string[] {
+  const achados: string[] = [];
+  for (const [, nomes, modulo] of fonte.matchAll(/import\s*\{([^}]*)\}\s*from\s*"@\/([^"]+)"/g)) {
+    const arquivo = [".tsx", ".ts"].map((ext) => join(SRC, modulo + ext)).find(existsSync);
+    if (!arquivo || !/^\s*["']use client["']/.test(readFileSync(arquivo, "utf8"))) continue;
+    for (const cru of nomes.split(",")) {
+      const nome = cru.trim().split(/\s+as\s+/)[0];
+      if (!nome || nome.startsWith("type ")) continue;
+      if (!/^[A-Z][A-Za-z0-9]*[a-z][A-Za-z0-9]*$/.test(nome)) achados.push(nome);
+    }
+  }
+  return achados;
+}
 
 const pedidos: string[] = [];
 
@@ -80,6 +100,21 @@ describe("a página da lente de um Objetivo", () => {
     await waitFor(() =>
       expect(pedidos).toEqual(["/api/admin/central-de-comando/objetivos/google-reputacao?periodo=90d"]),
     );
+  });
+
+  it("só importa componente dos módulos do navegador, porque constante de lá chega ao servidor como referência e não como valor", () => {
+    // A página roda no servidor. Um valor exportado por um módulo "use client"
+    // chega aqui como referência de cliente, não como o texto: a comparação
+    // com o identificador da nota no Google dava falso, e a lente da nota
+    // quebrava na tela (achado na página do manual, issue #1725). O teste
+    // acima não pega, porque no vitest o import é o valor de verdade.
+    const fonte = readFileSync(join(__dirname, "page.tsx"), "utf8");
+    expect(valoresDeModuloDoNavegador(fonte)).toEqual([]);
+  });
+
+  it("o detector pega a constante importada de um módulo do navegador", () => {
+    const fonte = 'import { NotaNoGoogle, OBJETIVO_NOTA_NO_GOOGLE } from "@/components/central-de-comando/NotaNoGoogle";';
+    expect(valoresDeModuloDoNavegador(fonte)).toEqual(["OBJETIVO_NOTA_NO_GOOGLE"]);
   });
 
   it("período que não existe no endereço vira o padrão de 28", async () => {
