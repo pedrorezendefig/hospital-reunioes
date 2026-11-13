@@ -62,14 +62,7 @@ ANTES_DO_BLOCO = (
     "- O paciente sai com a data.\n"
 )
 DEPOIS_DO_BLOCO = (
-    "---\n"
-    "\n"
-    "## Decisões de negócio\n"
-    "\n"
-    "1. **Quem marca?**\n"
-    "   Escolha: Só a recepção.\n"
-    "\n"
-    '<!-- demanda-vitta id="d-1" -->'
+    '---\n\n## Decisões de negócio\n\n1. **Quem marca?**\n   Escolha: Só a recepção.\n\n<!-- demanda-vitta id="d-1" -->'
 )
 CORPO = ANTES_DO_BLOCO + "\n" + DEPOIS_DO_BLOCO
 
@@ -113,7 +106,9 @@ class _ModeloDeMentira:
         conteudo = kwargs["messages"][0]["content"]
         self.pedidos.append(conteudo)
         texto = "não sei" if self.quebra and self.quebra in conteudo else json.dumps(PARTES, ensure_ascii=False)
-        uso = SimpleNamespace(input_tokens=100, output_tokens=10, cache_read_input_tokens=0, cache_creation_input_tokens=0)
+        uso = SimpleNamespace(
+            input_tokens=100, output_tokens=10, cache_read_input_tokens=0, cache_creation_input_tokens=0
+        )
         return SimpleNamespace(content=[SimpleNamespace(type="text", text=texto)], stop_reason="end_turn", usage=uso)
 
 
@@ -145,7 +140,7 @@ def _banco(*demandas: dict) -> _SupabaseMock:
 
 
 def _do_diretor(did: str, numero: int | None, **campos) -> dict:
-    return _demanda(did, origem="diretor", apagada_em=None, github_issue_numero=numero, **campos)
+    return _demanda(did, **{"origem": "diretor", "apagada_em": None, "github_issue_numero": numero, **campos})
 
 
 class TestAPassadaInsereUmaVez:
@@ -159,3 +154,85 @@ class TestAPassadaInsereUmaVez:
         assert len(gh.gravacoes) == 1
         assert gh.issues[42]["body"].count("Para o desenvolvedor") == 1
         assert len(modelo.pedidos) == 1
+
+    def test_o_corpo_gravado_e_o_de_antes_com_o_bloco_logo_depois_do_diretor(self, monkeypatch, modelo, emails):
+        gh = _github(monkeypatch, {42: _issue(42)})
+
+        passada_unica.passada(_banco(_do_diretor("d-1", 42)), aplicar=True, kit="")
+
+        assert gh.gravacoes == [(42, ANTES_DO_BLOCO + "\n" + BLOCO_ESPERADO + "\n\n" + DEPOIS_DO_BLOCO)]
+
+
+class TestQuemFicaDeFora:
+    def test_vitta_apagada_sem_issue_e_issue_fechada_nao_sao_tocadas(self, monkeypatch, modelo, emails):
+        gh = _github(monkeypatch, {42: _issue(42), 43: _issue(43), 44: _issue(44, estado="closed"), 45: _issue(45)})
+        sb = _banco(
+            _demanda("d-vitta", origem="vitta", apagada_em=None, github_issue_numero=42),
+            _do_diretor("d-apagada", 43, apagada_em="2026-11-01T10:00:00Z"),
+            _do_diretor("d-fechada", 44),
+            _do_diretor("d-sem-issue", None),
+            _do_diretor("d-aberta", 45),
+        )
+
+        relatorio = passada_unica.passada(sb, aplicar=True, kit="")
+
+        assert [n for n, _ in gh.gravacoes] == [45]
+        assert [item["numero"] for item in relatorio] == [45]
+        assert len(modelo.pedidos) == 1
+
+
+class TestAPrevia:
+    def test_sem_aplicar_nada_e_gravado_e_a_previa_lista_cada_issue_com_o_bloco(self, monkeypatch, modelo, emails):
+        gh = _github(monkeypatch, {42: _issue(42), 43: _issue(43)})
+        sb = _banco(_do_diretor("d-1", 42), _do_diretor("d-2", 43))
+
+        relatorio = passada_unica.passada(sb, aplicar=False, kit="")
+        texto = passada_unica.texto_do_relatorio(relatorio, aplicar=False)
+
+        assert gh.gravacoes == []
+        assert gh.issues[42]["body"] == CORPO
+        assert "Issue 42" in texto and "Issue 43" in texto
+        assert texto.count(BLOCO_ESPERADO) == 2
+        assert "Nada foi gravado no GitHub" in texto
+
+
+class TestNenhumEmail:
+    def test_a_passada_nao_manda_email(self, monkeypatch, modelo, emails):
+        _github(monkeypatch, {42: _issue(42)})
+
+        passada_unica.passada(_banco(_do_diretor("d-1", 42)), aplicar=True, kit="")
+
+        assert emails == []
+
+
+class TestFalhaNumaDemandaNaoDerrubaAsOutras:
+    def test_falha_do_modelo_vai_para_o_relatorio_e_as_outras_seguem(self, monkeypatch, modelo, emails):
+        modelo.quebra = "Pedido que quebra o modelo"
+        gh = _github(monkeypatch, {42: _issue(42), 43: _issue(43)})
+        sb = _banco(_do_diretor("d-1", 42, titulo="Pedido que quebra o modelo"), _do_diretor("d-2", 43))
+
+        relatorio = passada_unica.passada(sb, aplicar=True, kit="")
+
+        assert [n for n, _ in gh.gravacoes] == [43]
+        assert {item["numero"]: item["situacao"] for item in relatorio} == {42: "falhou", 43: "gravado"}
+        assert "o modelo não devolveu" in passada_unica.texto_do_relatorio(relatorio, aplicar=True)
+
+    def test_falha_do_github_vai_para_o_relatorio_e_as_outras_seguem(self, monkeypatch, modelo, emails):
+        erro = github_client.GithubIndisponivelError("GitHub respondeu 502")
+        gh = _github(monkeypatch, {42: _issue(42), 43: _issue(43)}, erro_ao_gravar={42: erro})
+        sb = _banco(_do_diretor("d-1", 42), _do_diretor("d-2", 43))
+
+        relatorio = passada_unica.passada(sb, aplicar=True, kit="")
+
+        assert [n for n, _ in gh.gravacoes] == [43]
+        assert {item["numero"]: item["situacao"] for item in relatorio} == {42: "falhou", 43: "gravado"}
+        assert "GitHub respondeu 502" in passada_unica.texto_do_relatorio(relatorio, aplicar=True)
+
+
+class TestODocstring:
+    def test_o_docstring_diz_como_rodar_a_previa_e_como_aplicar(self):
+        doc = passada_unica.__doc__
+        comando = "uv run python -m scripts.oneshot.bloco_do_desenvolvedor_nas_demandas"
+
+        assert f"{comando}\n" in doc
+        assert f"{comando} --aplicar" in doc
