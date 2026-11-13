@@ -167,9 +167,18 @@ Para cada item de Já existe a IA pergunta "isso atende?". Ele só sai do pedido
 
 No fim, o resumo traz o botão **Atualizar o card** no lugar do Criar o card. Ele troca o pedido que está no desenvolvimento pelo revisado, no mesmo card, e deixa nele uma nota com o que entrou e o que saiu. As partes que ainda não tinham começado são fechadas, e o pedido volta para Em análise, para a Vitta planejar de novo a partir do pedido revisado. Se alguma parte já começou a ser feita, o card não é atualizado. Se o desenvolvimento não responder, nada muda no aplicativo e o botão continua lá para tentar de novo.
 
+## O manual
+
+O aplicativo tem um manual, e ele fica dentro do próprio aplicativo. Para abrir, clique em **Manual**, com o ícone de livro, no canto inferior esquerdo da tela, logo acima do Recolher menu. O item está no menu do aplicativo e também no da Administração. No celular, ele fica no fim do menu que abre pelo botão do alto.
+
+O manual tem duas abas. A aba **Aplicativo do Hospital** tem uma página para cada parte do aplicativo (Reuniões e Pendências, POPs, Ouvidoria, Contas médicas, Central de Comando, Dados do Atendimento e Tecnologia), com as tarefas em passo a passo, prints de tela e fluxogramas. Cada pessoa vê só as páginas das partes do aplicativo que ela já usa. As páginas vão chegando aos poucos, uma parte de cada vez. A aba **Ana** mostra como a Ana funciona por dentro e só aparece para quem é Super admin; por enquanto ela diz "Em preparação".
+
+Os prints do manual usam pessoas e dados inventados, nunca de paciente ou de funcionário.
+
 ## O que já foi decidido
 
 - A aba mora dentro do aplicativo e só quem é Super admin a vê.
+- O manual mora dentro do aplicativo, no item Manual do canto inferior esquerdo, com a aba Aplicativo do Hospital para todos e a aba Ana só para Super admin.
 - A aba tem Conversas, a conversa com o Assistente, que pergunta se é bug ou melhoria e confirma antes de seguir, e Entregas, que mostra o ritmo da semana, os pedidos que chegam e as entregas que saem, e não move nada.
 - O Tamanho da entrega sai do número de partes do pedido (P até 1 parte, M de 2 a 5, G de 6 em diante), calculado pelo aplicativo e nunca estimado.
 - O pedido nasce da conversa do diretor ou de um card do aplicativo que a Vitta abre pelo desenvolvimento, que aparece na lista com o selo Vitta, sem conversa com a IA; os ajustes internos da Vitta não aparecem, e os pedidos da Vitta ao hospital continuam no WhatsApp.
