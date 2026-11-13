@@ -96,7 +96,7 @@ Quando o pedido vira trabalho de desenvolvimento, ele ganha uma **Etapa**, que c
 - **Em produção**: já está no ar, e dá para usar. A lista diz desde qual versão do aplicativo.
 - **Não será feita**: decidiu-se não fazer.
 
-A Etapa nunca é digitada à mão: ela é lida do planejamento da Vitta e aparece sozinha na lista. Quando a entrega tem partes, a lista mostra quantas já foram entregues. Assim que a Vitta começa a construir, a Etapa passa sozinha para Em desenvolvimento, e quando a versão nova do aplicativo sobe, passa para Em produção.
+A Etapa nunca é digitada à mão: ela é lida do planejamento da Vitta e aparece sozinha na lista. Quando a entrega tem partes, a lista mostra quantas já foram entregues. Assim que a Vitta começa a construir, a Etapa passa sozinha para Em desenvolvimento, e quando a versão nova do aplicativo sobe, passa para Em produção. Quando a entrega é dividida em partes, o pedido fica Em desenvolvimento desde o começo da primeira parte até a entrega da última, mesmo nos dias em que nenhuma parte está sendo feita, e não volta para Planejada no meio do caminho. O pedido que ainda não começou continua Planejada.
 
 Ao abrir um pedido que já foi para a Vitta, ele aparece como um documento curto, em quatro partes:
 

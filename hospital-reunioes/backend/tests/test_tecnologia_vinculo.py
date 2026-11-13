@@ -44,6 +44,7 @@ from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
 from app.services import email_service, github_client  # noqa: E402
+from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_ANALISE,
     ETAPA_EM_DESENVOLVIMENTO,
@@ -493,6 +494,17 @@ class TestPrecedenciaEntreAsRegras:
 
     def test_a_label_e_lida_sem_distinguir_maiusculas(self):
         assert etapa_da_foto(_foto(labels=("In-Progress",))) == ETAPA_EM_DESENVOLVIMENTO
+
+
+class TestOKitDizQueOPrdNaoVoltaParaPlanejada:
+    def test_o_kit_da_tecnologia_diz_que_o_pedido_em_partes_fica_em_desenvolvimento(self):
+        """Issue #1700: o kit e a lingua em que o Assistente fala com o diretor.
+        Sem a regra escrita, ele explicaria a volta para Planejada que nao
+        acontece mais."""
+        texto = (CONHECIMENTO_DIR / "tecnologia.md").read_text(encoding="utf-8")
+        secao = texto.split("## A Etapa", 1)[1].split("\n## ", 1)[0]
+
+        assert "o pedido fica Em desenvolvimento desde o começo da primeira parte até a entrega da última" in secao
 
 
 class TestResumoDasPartes:
