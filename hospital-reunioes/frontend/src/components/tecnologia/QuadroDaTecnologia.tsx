@@ -36,6 +36,8 @@ import {
 } from "./demandas";
 
 const COLUNA_VAZIA = "Nenhum pedido.";
+/** O pé da coluna Entregue: as Entregas guardam também o que passou dos 30 dias (issue #1644). */
+export const VER_TODOS_NAS_ENTREGAS = "Ver todos nas Entregas";
 
 /** O nome que o leitor de tela diz do card: o Número e o título. */
 function nomeDoCard(demanda: Demanda): string {
@@ -126,8 +128,19 @@ function CardDoQuadro({ demanda, onAbrir }: { demanda: Demanda; onAbrir: () => v
   );
 }
 
-/** Uma coluna: o cabeçalho fixo no topo da página e os cards, sem rolagem própria. */
-function ColunaDoQuadroNaTela({ coluna, onAbrir }: { coluna: ColunaDoQuadro; onAbrir: (demanda: Demanda) => void }) {
+/**
+ * Uma coluna: o cabeçalho fixo no topo da página e os cards, sem rolagem
+ * própria. A Entregue tem no pé o "Ver todos nas Entregas", sempre à vista.
+ */
+function ColunaDoQuadroNaTela({
+  coluna,
+  onAbrir,
+  onVerEntregas,
+}: {
+  coluna: ColunaDoQuadro;
+  onAbrir: (demanda: Demanda) => void;
+  onVerEntregas?: () => void;
+}) {
   return (
     <section aria-label={coluna.rotulo} className="min-w-0 flex flex-col gap-2">
       <h3 className="sticky top-0 z-10 flex items-center justify-between gap-2 py-2 bg-bg text-xs font-semibold text-text-secondary">
@@ -147,19 +160,33 @@ function ColunaDoQuadroNaTela({ coluna, onAbrir }: { coluna: ColunaDoQuadro; onA
           ))}
         </ul>
       )}
+      {coluna.etapa === "entregue" && onVerEntregas && (
+        <button
+          type="button"
+          onClick={onVerEntregas}
+          className="self-start px-1 text-xs font-semibold text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+        >
+          {VER_TODOS_NAS_ENTREGAS}
+        </button>
+      )}
     </section>
   );
 }
 
 export function QuadroDaTecnologia({
   demandas,
+  comNaoSeraFeita,
   onAbrir,
+  onVerEntregas,
 }: {
   demandas: Demanda[];
+  /** O interruptor "Mostrar as que não serão feitas" da barra: a sexta coluna, no fim. */
+  comNaoSeraFeita: boolean;
   onAbrir: (demanda: Demanda) => void;
+  /** Troca para a aba Entregas; quem passa é o módulo da aba. */
+  onVerEntregas?: () => void;
 }) {
-  // O interruptor de Não será feita vem com a barra do Quadro (issue #1644): aqui, desligado.
-  const colunas = colunasDoQuadro(demandas, false, new Date());
+  const colunas = colunasDoQuadro(demandas, comNaoSeraFeita, new Date());
   return (
     <section
       aria-label="Quadro"
@@ -167,7 +194,7 @@ export function QuadroDaTecnologia({
       className={`grid gap-4 ${colunas.length > 5 ? "grid-cols-6" : "grid-cols-5"}`}
     >
       {colunas.map((coluna) => (
-        <ColunaDoQuadroNaTela key={coluna.etapa} coluna={coluna} onAbrir={onAbrir} />
+        <ColunaDoQuadroNaTela key={coluna.etapa} coluna={coluna} onAbrir={onAbrir} onVerEntregas={onVerEntregas} />
       ))}
     </section>
   );

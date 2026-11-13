@@ -12,7 +12,8 @@
  *
  * Na tela larga, a partir de 1280px, a aba Conversas se chama Quadro e mostra
  * as Demandas em colunas pela Etapa (issue #1642, ADR 0090, decisão 1). No
- * celular ela continua a lista de antes, com o nome de antes.
+ * celular ela continua a lista de antes, com o nome de antes. O "Ver todos nas
+ * Entregas", no pé da coluna Entregue, troca para a aba Entregas (issue #1644).
  */
 
 import { useState } from "react";
@@ -76,7 +77,11 @@ export function TecnologiaModulo({ demandaInicial = null }: { demandaInicial?: s
 
       {/* A conversa fica montada atrás da aba: trocar de aba não perde o que foi escrito. */}
       <div role="tabpanel" aria-label={rotuloDasConversas} hidden={aba !== "conversas"}>
-        <ConversasDaTecnologia token={token} demandaInicial={demandaInicial} />
+        <ConversasDaTecnologia
+          token={token}
+          demandaInicial={demandaInicial}
+          onVerEntregas={() => escolher("entregas")}
+        />
       </div>
       {entregasAbertas && (
         <div role="tabpanel" aria-label="Entregas" hidden={aba !== "entregas"}>

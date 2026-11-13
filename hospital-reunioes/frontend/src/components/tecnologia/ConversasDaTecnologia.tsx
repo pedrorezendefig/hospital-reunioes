@@ -192,6 +192,8 @@ const OPCOES_DE_ORIGEM = [
 ];
 const LIMPAR_FILTROS = "Limpar filtros";
 const SO_ENVIO_FALHOU = "Só envio falhou";
+/** O interruptor do Quadro que mostra a coluna Não será feita, no fim (ADR 0090, decisões 2 e 8). */
+export const MOSTRAR_AS_QUE_NAO_SERAO_FEITAS = "Mostrar as que não serão feitas";
 const CONVERSAR = "Conversar";
 /** A espera depois da última tecla, para a busca não pedir a lista a cada letra. */
 const ESPERA_DA_BUSCA_MS = 300;
@@ -466,8 +468,19 @@ function RecorteDaLista({ valor, onMudar }: { valor: Filtro | null; onMudar: (fi
   );
 }
 
-/** O "Só envio falhou" do Desenvolvedor, um interruptor: não é Etapa (issue #1578). */
-function InterruptorDoEnvioFalhou({ ligado, onMudar }: { ligado: boolean; onMudar: (ligado: boolean) => void }) {
+/**
+ * Um interruptor da barra: o "Só envio falhou" do Desenvolvedor, que não é
+ * Etapa (issue #1578), e o "Mostrar as que não serão feitas" do Quadro (issue #1644).
+ */
+function InterruptorDaBarra({
+  rotulo,
+  ligado,
+  onMudar,
+}: {
+  rotulo: string;
+  ligado: boolean;
+  onMudar: (ligado: boolean) => void;
+}) {
   return (
     <button
       type="button"
@@ -488,7 +501,7 @@ function InterruptorDoEnvioFalhou({ ligado, onMudar }: { ligado: boolean; onMuda
           }`}
         />
       </span>
-      {SO_ENVIO_FALHOU}
+      {rotulo}
     </button>
   );
 }
@@ -851,10 +864,13 @@ function Acompanhamento({ demanda, token }: { demanda: Demanda; token: string | 
 export function ConversasDaTecnologia({
   token,
   demandaInicial = null,
+  onVerEntregas,
 }: {
   token: string | null;
   /** A Demanda que o aviso do sino pediu para abrir. */
   demandaInicial?: string | null;
+  /** O "Ver todos nas Entregas" da coluna Entregue troca para a aba Entregas (issue #1644). */
+  onVerEntregas?: () => void;
 }) {
   /** A partir de 1280px a aba é o Quadro, e a Demanda abre na largura toda (issue #1642, ADR 0090). */
   const largo = useTelaLarga();
@@ -887,6 +903,8 @@ export function ConversasDaTecnologia({
   const [origem, setOrigem] = useState<Origem | null>(null);
   const [responsavel, setResponsavel] = useState<string | null>(null);
   const [envioFalhou, setEnvioFalhou] = useState(false);
+  /** A coluna Não será feita no Quadro: só a tela decide, o servidor já manda todas. */
+  const [naoSeraFeita, setNaoSeraFeita] = useState(false);
   const [desenvolvedores, setDesenvolvedores] = useState<Desenvolvedor[]>([]);
   /** O último pedido da lista: a resposta de um pedido mais velho não sobrescreve a do novo. */
   const ultimoPedido = useRef(0);
@@ -947,7 +965,8 @@ export function ConversasDaTecnologia({
   /** Relê a lista e devolve o que veio; nulo quando não deu. */
   const carregar = useCallback(async (): Promise<Demanda[] | null> => {
     if (!token || filtro === null) return null;
-    const url = urlDaLista({ recorte: filtro, busca, tipo, etapa, origem, responsavel, envioFalhou });
+    // Na tela larga a Etapa é a coluna, e a barra não tem o campo (ADR 0090, decisão 8).
+    const url = urlDaLista({ recorte: filtro, busca, tipo, etapa: largo ? null : etapa, origem, responsavel, envioFalhou });
     const pedido = ++ultimoPedido.current;
     try {
       const resposta = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -971,7 +990,7 @@ export function ConversasDaTecnologia({
       setErroDaLista(FALHA_DE_CONEXAO);
       return null;
     }
-  }, [token, filtro, busca, tipo, etapa, origem, responsavel, envioFalhou]);
+  }, [token, filtro, busca, tipo, etapa, largo, origem, responsavel, envioFalhou]);
 
   useEffect(() => {
     carregar();
@@ -1037,7 +1056,15 @@ export function ConversasDaTecnologia({
     return () => document.removeEventListener("keydown", aoTeclar);
   }, [painelAberto, fecharPainel]);
 
-  const filtroAtivo = Boolean(textoDaBusca.trim() || tipo || etapa || origem || responsavel || envioFalhou);
+  const filtroAtivo = Boolean(
+    textoDaBusca.trim() ||
+      tipo ||
+      (!largo && etapa) ||
+      origem ||
+      responsavel ||
+      envioFalhou ||
+      (largo && naoSeraFeita),
+  );
 
   /** Volta a barra ao padrão. O recorte fica: ele é a vista do Desenvolvedor, não um filtro. */
   function limparFiltros() {
@@ -1048,6 +1075,7 @@ export function ConversasDaTecnologia({
     setOrigem(null);
     setResponsavel(null);
     setEnvioFalhou(false);
+    setNaoSeraFeita(false);
   }
 
   /** O card nasceu pelo Reenviar: a lista relê e a Demanda abre como está agora. */
@@ -1101,6 +1129,7 @@ export function ConversasDaTecnologia({
       setOrigem(null);
       setResponsavel(null);
       setEnvioFalhou(false);
+      setNaoSeraFeita(false);
       setFiltro(maisLargo);
       setDemandas(null);
       return;
@@ -1208,12 +1237,14 @@ export function ConversasDaTecnologia({
             options={OPCOES_DE_TIPO}
             onChange={(valor) => setTipo((valor || null) as Classificacao | null)}
           />
-          <Select
-            label="Etapa"
-            value={etapa ?? ""}
-            options={OPCOES_DE_ETAPA}
-            onChange={(valor) => setEtapa((valor || null) as EtapaDemanda | null)}
-          />
+          {!largo && (
+            <Select
+              label="Etapa"
+              value={etapa ?? ""}
+              options={OPCOES_DE_ETAPA}
+              onChange={(valor) => setEtapa((valor || null) as EtapaDemanda | null)}
+            />
+          )}
           <Select
             label="Origem"
             value={origem ?? ""}
@@ -1229,9 +1260,16 @@ export function ConversasDaTecnologia({
             />
           )}
         </div>
-        {(desenvolvedor || filtroAtivo) && (
+        {(desenvolvedor || largo || filtroAtivo) && (
           <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3">
-            {desenvolvedor && <InterruptorDoEnvioFalhou ligado={envioFalhou} onMudar={setEnvioFalhou} />}
+            {desenvolvedor && <InterruptorDaBarra rotulo={SO_ENVIO_FALHOU} ligado={envioFalhou} onMudar={setEnvioFalhou} />}
+            {largo && (
+              <InterruptorDaBarra
+                rotulo={MOSTRAR_AS_QUE_NAO_SERAO_FEITAS}
+                ligado={naoSeraFeita}
+                onMudar={setNaoSeraFeita}
+              />
+            )}
             {filtroAtivo && (
               <button
                 type="button"
@@ -1254,7 +1292,14 @@ export function ConversasDaTecnologia({
             quadroAVista && (
               <div ref={quadroRef} className="space-y-3">
                 {estadoDaLista}
-                {demandas !== null && <QuadroDaTecnologia demandas={demandas} onAbrir={(demanda) => abrir(demanda)} />}
+                {demandas !== null && (
+                  <QuadroDaTecnologia
+                    demandas={demandas}
+                    comNaoSeraFeita={naoSeraFeita}
+                    onAbrir={(demanda) => abrir(demanda)}
+                    onVerEntregas={onVerEntregas}
+                  />
+                )}
               </div>
             )
           ) : (
