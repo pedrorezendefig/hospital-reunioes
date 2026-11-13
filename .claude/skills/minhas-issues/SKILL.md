@@ -82,7 +82,7 @@ Regras:
 - **Caminho das issues**, logo abaixo do total: um fluxograma com as caixas Triagem, Fila de agente, Humana, Em andamento, PR aberto e Entregue nos últimos 14 dias. Cada caixa traz a contagem e até 6 números.
 - **Árvore de cada PRD** que tem fatia sua aberta: o PRD, as fatias com a fase e uma seta pontilhada "trava" para cada bloqueio nativo do GitHub ("blocked by"). Uma fatia travada se liga à fatia que a trava, e não ao PRD.
 - **Selos** nos números: `[Humana]` para `ready-for-human` e `[Diretor]` para a issue que nasceu na aba Tecnologia.
-- **Chegou da Tecnologia**, antes do plano: as issues do diretor separadas em Bug (`type:fix` ou `type:bug`) e Melhoria. Entram as abertas e as fechadas nos últimos 14 dias, de qualquer responsável, com a fase e a pessoa responsável. A origem vem do marcador `<!-- demanda-vitta id="..." -->` que a aba grava no corpo da issue. A aba também aplica a label `origem:diretor` (ADR 0083), mas o script reconhece o card pelo marcador.
+- **Chegou da Tecnologia**, antes do plano: as issues do diretor separadas em Bug (`type:fix` ou `type:bug`) e Melhoria. Entram as abertas e as fechadas nos últimos 14 dias, de qualquer responsável, com a fase e a pessoa responsável. A origem vem do marcador `<!-- demanda-vitta id="..." -->` que a aba grava no corpo da issue. Não existe label para isso.
 
 ## Limites
 

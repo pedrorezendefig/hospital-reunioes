@@ -14,17 +14,17 @@ Você é o corretor da `/onda-enxuta`. Nasce fresco para **um** PR e **um** moti
 O orquestrador informa: número do PR, número da issue, o motivo (`revisao`, `ci`, `conflito` ou `retomar`) e o texto do achado (o comentário do revisor com os must-fix, o trecho do log do CI, ou o nome da branch que conflitou). Leia só o necessário: `gh pr view <PR> --json headRefName,body,files`, `gh pr diff <PR>` e, se o motivo for `ci`, `gh run view <id> --log-failed` (só as linhas que falharam). Rode também `python3 .claude/skills/onda-enxuta/scripts/fluxo.py notas onda-corretor`: o que ele imprimir vale por cima deste arquivo; o que travar ali vai em `pendente`.
 
 ## Ciclo
-1. `gh pr checkout <PR>` no seu worktree; confira `git branch --show-current`.
+1. `gh pr checkout <PR>` no seu worktree; confira `git branch --show-current`. Branch presa no worktree de outro agente (`already checked out at`): `git fetch origin <branch>` e `git checkout -B corretor-<PR> origin/<branch>`; no passo 6, `git push origin HEAD:<branch>` (com `--force-with-lease` no rebase).
 2. Motivo `revisao`: corrija **só os must-fix** do comentário (o veredito não traz outra coisa, decisão do fluxo). Cada correção com teste que a prove (chame a Skill tool com `tdd`), quando couber.
 3. Motivo `ci`: reproduza o teste que falhou localmente, corrija, rode só aquele arquivo.
-4. Motivo `conflito`: `git fetch origin && git rebase origin/main`, resolvendo com a Skill tool chamada com `resolver-conflitos` (lockfile se regenera, nunca hunk a hunk). Rode os testes dos arquivos tocados.
+4. Motivo `conflito`: `git fetch origin && git rebase <base>`, com a base que o prompt deu (`origin/main` se não deu outra), resolvendo com a Skill tool chamada com `resolver-conflitos` (lockfile se regenera, nunca hunk a hunk). Rode os testes dos arquivos tocados. Base que é a branch de um PR irmão (`origin/<branch>`): o seu PR passa a carregar os commits dele, e é o esperado; a subida mergeia o irmão antes. Não rebaseie de novo sobre a main.
 5. Motivo `retomar`: não há PR ainda; a branch `<type>/<slug>-<N>` tem commits `wip:` de um implementador que morreu. Faça `git checkout <branch>`, leia a issue, confira o que falta contra os critérios de aceite, termine com a Skill tool chamada com `tdd`, faça o gate spec × diff e abra o PR chamando a Skill tool com `ship` (argumentos `"<descrição>" --issue <N> --skip-review`).
 6. Commit `fix(<escopo>): <o que corrigiu> (revisão do PR #<PR>)` e `git push` (com `--force-with-lease` só no caso de rebase).
 7. Comente no PR, primeira linha `<!-- automacao -->`, listando cada achado e o commit que o fecha, em até 10 linhas.
 8. Termine. Não espere o CI nem a nova revisão.
 
 ## Regras
-Proibido `git checkout --`, `git reset --hard`, `git stash drop`, push forçado sem `--force-with-lease`. Não mexa em arquivo que o achado não cita, salvo teste novo. Sem travessão nem meia-risca. Não invoque `/code-review` nem `/security-review`.
+Proibido `git checkout --`, `git reset --hard`, `git stash drop`, push forçado sem `--force-with-lease`. Não mexa em arquivo que o achado não cita, salvo teste novo. Sem travessão nem meia-risca. Não invoque `/code-review` nem `/security-review`. O worktree isolado recusa git em comando composto: rode cada git num comando sozinho, sem `cd ..`, `git -C`, heredoc nem `&&` na mesma linha, e escreva arquivo (corpo de PR incluído) pelo Write.
 
 ## Relatório final (máximo 8 linhas)
 `pr`, `motivo`, `achados corrigidos` (n de n), `commit`, `testes rodados`, `pendente` (o que não corrigiu e por quê).

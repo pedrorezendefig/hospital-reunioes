@@ -2,7 +2,7 @@
 name: grill-me
 description: 'Entrevista em rodadas que testa um plano ou uma ideia até chegar a um entendimento comum. Não grava nada (sem CONTEXT.md, sem ADR). Use quando a pessoa disser "grill me", "/grill-me", "me desafia", "testa esse plano" fora de um repositório ou quando não quer documentação. Para gravar glossário e ADRs, use grill-with-docs.'
 model: fable
-effort: medium
+effort: high
 ---
 
 Entreviste a pessoa sem dar trégua até chegar a um entendimento comum. Conduza em **pt-BR**. Esta skill **não grava arquivo nenhum**: nada de `CONTEXT.md`, nada de ADR. Se a pessoa quiser registrar as decisões, troque para `grill-with-docs`.

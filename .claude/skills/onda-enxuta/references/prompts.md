@@ -29,7 +29,7 @@ PR #<PR>, issue #<N>. Ache problemas, não aprove, não edite. Revisão única: 
 PR #<PR>, issue #<N>. Motivo: <revisao|ci|conflito|retomar>.
 <revisao: cole o comentário do veredito inteiro.>
 <ci: cole as últimas 60 linhas de `gh run view <id> --log-failed`.>
-<conflito: "A main andou; rebase chamando a Skill tool com resolver-conflitos. Arquivos em conflito: <lista da linha da subida>. Tentativa <k> de 3.">
+<conflito: "Rebase sobre <base> chamando a Skill tool com resolver-conflitos. Arquivos em conflito: <lista>." A base e a lista vêm da linha `conflito:` da conferência do lote (a branch do PR irmão, `origin/<branch>`) ou, no conflito da subida, a base é `origin/main` e a lista é a da linha `de fora:`.>
 <retomar: "Branch <branch> tem commits wip. Termine a fatia e abra o PR.">
 ```
 

@@ -31,10 +31,9 @@ Issue tracker = **GitHub Issues** via `gh` (veja `docs/agents/issue-tracker.md`)
 
    **Todo PRD abre com o bloco "<bloco>"** (decisão do fluxo): um resumo em linguagem simples, no topo do corpo, antes da parte técnica. É a porta de entrada de quem lê as issues direto no GitHub sem abrir o código. Formato fixo, mínimo de palavras, zero jargão:
 
-   - **O que muda:** uma frase só, de valor e não-técnica: o que o sistema passa a fazer por <leitor>.
-   - **O que você precisa saber:** no máximo cinco tópicos curtos, um por linha, com as regras simples que deixem o leitor reconhecer a feature funcionando.
-
-   O limite é o do Documento do card, que lê esse bloco em "Em uma frase" e "O que muda" (ADR 0084, decisão 7), e o mesmo do PRD que o planejamento do app cria. Passou de cinco tópicos: junte ou corte, não some.
+   - **O que muda:** uma frase de valor, não-técnica: o que o sistema passa a fazer por <leitor>.
+   - **Por que vale:** uma frase só: para que a mudança serve para <leitor>. É a Descrição de valor do PRD.
+   - **O que você precisa saber:** de 2 a 3 regras simples que deixem o leitor reconhecer a feature funcionando.
 
    **Humanizer antes do `gh issue create`** (ADR 0071 da origem do fluxo): passe o corpo pela Skill tool com `humanizer` em modo embutido, com atenção ao bloco "<bloco>". A amostra de voz é o bloco "<bloco>" de um PRD já publicado: ela manda no tom, o humanizer só tira os cacoetes. O resto do corpo fica neutro e direto; termos do `CONTEXT.md`, títulos do template e histórias no formato "Como `<ator>`" não mudam.
 
@@ -44,10 +43,12 @@ Issue tracker = **GitHub Issues** via `gh` (veja `docs/agents/issue-tracker.md`)
 
 ## <bloco>
 
-**O que muda:** uma frase só, de valor, não-técnica.
+**O que muda:** uma frase de valor, não-técnica.
+
+**Por que vale:** uma frase: para que a mudança serve para o leitor do Projeto.
 
 **O que você precisa saber:**
-- No máximo cinco tópicos curtos, sem jargão, que deixem o leitor reconhecer a feature.
+- De 2 a 3 regras simples, sem jargão, que deixem o leitor reconhecer a feature.
 
 ---
 
