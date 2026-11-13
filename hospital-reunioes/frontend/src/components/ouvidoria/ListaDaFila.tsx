@@ -44,6 +44,7 @@ import {
   type ResultadoDaCobranca,
 } from "@/lib/ouvidoria/cobranca";
 import {
+  ASSUNTO_NAO_GERADO,
   MARCA_PRONTO_PARA_ENCERRAR,
   prontoParaEncerrar,
   type ManifestacaoIndice,
@@ -448,17 +449,23 @@ function LinhaDaFila({
               </span>
             )}
           </div>
-          {/* Uma linha só, com reticências (RN-72). Sem tooltip: o resumo é
-              recorte literal do relato (issue #753), e o texto inteiro mora no
-              Dossiê. Peso médio quando há novidade (issue #484, RN-68): é o
-              segundo sinal, para o ponto não ficar sozinho carregando a cor. */}
-          <span
-            className={`truncate text-sm ${
-              m.tem_novidade ? "font-medium text-slate-800" : "text-slate-600"
-            }`}
-          >
-            {m.resumo}
-          </span>
+          {/* Uma linha só, com reticências (RN-72). O assunto que o agente de
+              triagem escreveu, e não o começo do relato (issue #1624, ADR
+              0087): o resumo do canal aberto é recorte literal do que a pessoa
+              escreveu, nome de paciente incluído. Sem o assunto, a linha diz
+              que ele não foi gerado; quem está fora da Ouvidoria nem recebe a
+              chave, e a linha fica sem texto. Peso médio quando há novidade
+              (issue #484, RN-68): é o segundo sinal, para o ponto não ficar
+              sozinho carregando a cor. */}
+          {m.assunto !== undefined && (
+            <span
+              className={`truncate text-sm ${
+                m.assunto ? (m.tem_novidade ? "font-medium text-slate-800" : "text-slate-600") : "italic text-slate-400"
+              }`}
+            >
+              {m.assunto || ASSUNTO_NAO_GERADO}
+            </span>
+          )}
         </div>
         {/* `overflow-hidden` é a rede da RN-73 no nível 2: o prazo é a última
             coisa da linha e não encolhe, então numa janela estreita ele

@@ -35,6 +35,10 @@ export interface ManifestacaoIndice {
   // Só a Ouvidoria recebe (issue #753): o resumo é recorte literal do relato,
   // e o índice de quem está fora dela vem sem ele.
   resumo?: string;
+  // Só a Ouvidoria recebe (issue #1624, ADR 0087): o assunto de uma linha que
+  // o agente de triagem escreveu, sem nome de ninguém. É o que a linha da fila
+  // mostra; `null` quando o agente não o gerou.
+  assunto?: string | null;
   // Só a Ouvidoria recebe (issue #769): a tela de validação aberta pela fila
   // lê a marca para dizer, no texto de ajuda do extrato, o que vai à área.
   anonimo?: boolean;
@@ -156,6 +160,9 @@ export function classeDoStatus(status: StatusManifestacao): string {
 
 /** A marca do elogio que o setor confirmou (issue #1618, ADR 0088). */
 export const MARCA_PRONTO_PARA_ENCERRAR = "Pronto para encerrar";
+
+/** O caso que o agente de triagem não leu (issue #1624, ADR 0087, decisão 3). */
+export const ASSUNTO_NAO_GERADO = "Assunto não gerado";
 
 /**
  * O elogio que o setor confirmou pelo botão Elogio recebido: o caso volta ao
