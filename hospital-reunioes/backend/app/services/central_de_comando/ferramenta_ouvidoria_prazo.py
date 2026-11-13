@@ -20,7 +20,9 @@ para o Claude refinar o filtro.
 from __future__ import annotations
 
 import datetime as dt
-from zoneinfo import ZoneInfo
+
+# O fuso do motor de prazos da Ouvidoria, o mesmo que a fila usa.
+from app.services.ouvidoria_prazos import FUSO as _FUSO
 
 NOME = "get_ouvidoria_prazo_estourado"
 
@@ -40,8 +42,6 @@ SITUACOES = (
 # Os estados em que o relógio da área corre (`EM_ANDAMENTO` da tela). A pausa
 # aguardando o manifestante fica de fora (issue #335).
 _EM_ANDAMENTO = frozenset({"novo", "em_classificacao", "aguardando_area"})
-
-_FUSO = ZoneInfo("America/Sao_Paulo")
 
 
 class PedidoRecusadoError(Exception):
