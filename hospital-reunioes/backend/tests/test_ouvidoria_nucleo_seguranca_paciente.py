@@ -84,7 +84,7 @@ def _caso(**overrides) -> dict:
         "paciente_nome": "Ana Maria Souza",
         "paciente_nascimento": "1948-03-02",
         "profissionais": "Enfermeiro do plantao noturno",
-        "quarto": "412",
+        "quarto": "Leito Girassol",
         "nsp_sugerido": False,
         "nsp_justificativa_simples": None,
         "nsp_justificativa_tecnica": None,
@@ -247,3 +247,128 @@ class TestDecisaoSobreONucleoNaValidacao:
         r = _validar(client)
 
         assert r.status_code == 200, r.text
+
+
+# =====================================================================
+# 3. O email ao Núcleo só avisa e traz o link
+# =====================================================================
+
+
+def _email_do_nucleo(emails: list[dict]) -> dict:
+    do_nucleo = [e for e in emails if e["destinatario"] == "nsp@hsm.br"]
+    assert len(do_nucleo) == 1, "o Núcleo recebe um email"
+    return do_nucleo[0]
+
+
+def _token_do_nucleo(email: dict) -> str:
+    achado = re.search(r"/ouvidoria-setor/nsp/([A-Za-z0-9_-]{20,})", email["html"])
+    assert achado, "o email do Núcleo perdeu o link"
+    assert f"/ouvidoria-setor/nsp/{achado.group(1)}" in email["texto"]
+    return achado.group(1)
+
+
+class TestOEmailAoNucleo:
+    def test_o_email_ao_nucleo_nao_leva_relato_nem_justificativa(self, monkeypatch, emails):
+        caso = _caso(
+            nsp_sugerido=True,
+            nsp_justificativa_simples=JUSTIFICATIVA_SIMPLES,
+            nsp_justificativa_tecnica=JUSTIFICATIVA_TECNICA,
+        )
+        client, _supabase = _client(monkeypatch, _banco(caso))
+
+        assert _enviar_ao_nucleo(client).status_code == 200
+
+        email = _email_do_nucleo(emails)
+        _token_do_nucleo(email)
+        assert "2026-0007" in email["assunto"]
+        for corpo in (email["html"], email["texto"]):
+            assert "Protocolo 2026-0007" in corpo
+            assert RELATO not in corpo
+            assert JUSTIFICATIVA_TECNICA not in corpo
+            assert JUSTIFICATIVA_SIMPLES not in corpo
+            assert "Ana Maria Souza" not in corpo
+            assert "Leito Girassol" not in corpo
+
+
+# =====================================================================
+# 4. O link do Núcleo mostra o relato integral, mesmo no caso sigiloso
+# =====================================================================
+
+
+def _abrir_o_link_do_nucleo(client, token: str):
+    return client.get(f"/api/ouvidoria-setor/nsp/{token}")
+
+
+class TestOLinkDoNucleo:
+    def test_o_link_do_nucleo_de_um_caso_sigiloso_mostra_o_relato_e_nao_quem_manifestou(self, monkeypatch, emails):
+        caso = _caso(
+            tipo_manifestacao="denuncia",
+            sigilo_reforcado=True,
+            nsp_justificativa_tecnica=JUSTIFICATIVA_TECNICA,
+        )
+        client, _supabase = _client(monkeypatch, _banco(caso))
+        assert _enviar_ao_nucleo(client).status_code == 200
+        client.app.dependency_overrides.pop(get_current_user)
+
+        r = _abrir_o_link_do_nucleo(client, _token_do_nucleo(_email_do_nucleo(emails)))
+
+        assert r.status_code == 200, r.text
+        tela = r.json()
+        assert tela["protocolo"] == "2026-0007"
+        assert tela["relato_integral"] == RELATO
+        assert tela["justificativa_tecnica"] == JUSTIFICATIVA_TECNICA
+        assert tela["paciente"] == {"nome": "Ana Maria Souza", "nascimento": "1948-03-02"}
+        assert tela["profissionais"] == "Enfermeiro do plantao noturno"
+        assert tela["quarto"] == "Leito Girassol"
+        assert tela["quem_manifestou"] is None
+        assert "Joana da Silva" not in r.text
+
+    def test_o_link_de_outra_area_no_mesmo_caso_sigiloso_continua_so_com_a_nota(self, monkeypatch, emails):
+        caso = _caso_apontado(tipo_manifestacao="denuncia", sigilo_reforcado=True)
+        client, _supabase = _client(monkeypatch, _banco(caso))
+        r = _validar(client, tipo_manifestacao="denuncia", nsp_decisao="confirmado")
+        assert r.status_code == 200, r.text
+        client.app.dependency_overrides.pop(get_current_user)
+
+        email_da_area = next(e for e in emails if e["destinatario"] == "carlos@hsm.br")
+        token_da_area = re.search(r"/ouvidoria-setor/([A-Za-z0-9_-]{20,})", email_da_area["html"]).group(1)
+        da_area = client.get(f"/api/ouvidoria-setor/{token_da_area}")
+        do_nucleo = _abrir_o_link_do_nucleo(client, _token_do_nucleo(_email_do_nucleo(emails)))
+
+        assert da_area.status_code == 200, da_area.text
+        assert [b["chave"] for b in da_area.json()["blocos"]] == ["nota_da_ouvidoria"]
+        assert RELATO not in da_area.text
+        assert do_nucleo.json()["relato_integral"] == RELATO
+
+    def test_o_caso_comum_identificado_mostra_quem_manifestou(self, monkeypatch, emails):
+        client, _supabase = _client(monkeypatch)
+        assert _enviar_ao_nucleo(client).status_code == 200
+
+        r = _abrir_o_link_do_nucleo(client, _token_do_nucleo(_email_do_nucleo(emails)))
+
+        assert r.json()["quem_manifestou"] == "Joana da Silva"
+
+    def test_o_caso_anonimo_nao_mostra_quem_manifestou(self, monkeypatch, emails):
+        client, _supabase = _client(monkeypatch, _banco(_caso(anonimo=True)))
+        assert _enviar_ao_nucleo(client).status_code == 200
+
+        r = _abrir_o_link_do_nucleo(client, _token_do_nucleo(_email_do_nucleo(emails)))
+
+        assert r.json()["quem_manifestou"] is None
+        assert r.json()["relato_integral"] == RELATO
+
+    def test_o_link_de_um_elogio_nao_abre_a_tela_do_nucleo(self, monkeypatch, emails):
+        """O token de outra ciência do registro não pode abrir o relato
+        integral: a tela do Núcleo só aceita a ciência do Núcleo."""
+        caso = _caso(status="em_classificacao", setor="A definir", gravidade=None, tipo_manifestacao=None)
+        client, _supabase = _client(monkeypatch, _banco(caso))
+        r = _validar(client, tipo_manifestacao="elogio", gravidade="baixo")
+        assert r.status_code == 200, r.text
+        token_do_elogio = re.search(r"/ouvidoria-setor/elogio/([A-Za-z0-9_-]+)", emails[0]["html"]).group(1)
+
+        assert _abrir_o_link_do_nucleo(client, token_do_elogio).status_code == 404
+
+    def test_link_que_nao_existe_e_recusado(self, monkeypatch):
+        client, _supabase = _client(monkeypatch)
+
+        assert _abrir_o_link_do_nucleo(client, "x" * 43).status_code == 404

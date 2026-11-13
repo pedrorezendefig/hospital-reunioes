@@ -75,6 +75,11 @@ def _hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def hash_do_token(token: str) -> str:
+    """O hash que o registro guarda no lugar do token do link."""
+    return _hash(token)
+
+
 def criar_ciencia_do_elogio(
     supabase,
     *,
@@ -169,7 +174,10 @@ def carregar_pelo_token(supabase, token: str) -> dict:
     nenhum, `JaConfirmadoError` quando o setor já confirmou e `ForaDeUsoError`
     quando a ciência perdeu a vez para um envio mais novo."""
     result = supabase.table(TABELA).select(_CAMPOS).eq("token_hash", _hash(token)).limit(1).execute()
-    if not result.data:
+    # O link do Núcleo de Segurança do Paciente mora no mesmo registro (issue
+    # #1621), e não confirma elogio nenhum: confirmado aqui, ele devolveria o
+    # caso ao ouvidor como "Pronto para encerrar".
+    if not result.data or result.data[0].get("motivo_ciencia") != MOTIVO_ELOGIO:
         raise LinkInvalidoError()
     acionamento = result.data[0]
     if acionamento.get("status") == CIENTE:

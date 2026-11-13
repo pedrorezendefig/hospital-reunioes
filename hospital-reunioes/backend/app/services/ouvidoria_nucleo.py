@@ -76,6 +76,84 @@ def ciencia_do_caso(supabase, manifestacao_id: str) -> dict | None:
     return result.data[0] if result.data else None
 
 
+def carregar_pelo_token(supabase, token: str) -> dict:
+    """A ciência do Núcleo do link. Levanta `LinkInvalidoError` quando o token
+    não existe ou é de outra ciência (o link do elogio não abre o relato
+    integral), e `ForaDeUsoError` quando a ciência perdeu a vez."""
+    result = (
+        supabase.table(ouvidoria_acionamentos.TABELA)
+        .select(_CAMPOS)
+        .eq("token_hash", ouvidoria_acionamentos.hash_do_token(token))
+        .limit(1)
+        .execute()
+    )
+    if not result.data or result.data[0].get("motivo_ciencia") != MOTIVO_NSP:
+        raise ouvidoria_acionamentos.LinkInvalidoError()
+    ciencia = result.data[0]
+    if ciencia.get("status") not in (ouvidoria_acionamentos.PENDENTE, ouvidoria_acionamentos.CIENTE):
+        raise ouvidoria_acionamentos.ForaDeUsoError()
+    return ciencia
+
+
+# O que a tela do Núcleo lê do caso. Fechado campo a campo, como o portal do
+# setor: o relato integral e o paciente vão mesmo no sigilo reforçado (ADR
+# 0088, decisão 5), e quem manifestou só no caso que não é sigiloso nem anônimo.
+CAMPOS_DA_TELA = (
+    "id, protocolo, status, tipo_manifestacao, gravidade, sigilo_reforcado, anonimo, manifestante_nome, "
+    "relato_integral, nsp_justificativa_tecnica, paciente_nome, paciente_nascimento, profissionais, quarto, "
+    "data_ocorrencia, periodo, hora_aprox, local_informado, anonimizada_em, apagamento_pedido_em"
+)
+
+
+def tela_do_nucleo(caso: dict, ciencia: dict) -> dict:
+    """O que o link do Núcleo mostra (ADR 0088, decisão 5).
+
+    O relato integral, a justificativa técnica, o paciente com a data de
+    nascimento, os profissionais e o quarto saem em qualquer caso, inclusive no
+    sigilo reforçado: é a única exceção à decisão 8 da ADR 0034, e vale só
+    aqui. O nome de quem manifestou só sai quando o caso não é sigiloso nem
+    anônimo."""
+    from app.services.ouvidoria_prazos import formatar_vencimento
+
+    sigiloso = bool(caso.get("sigilo_reforcado"))
+    anonimo = bool(caso.get("anonimo"))
+    nome_do_paciente = (caso.get("paciente_nome") or "").strip() or None
+    nascimento = caso.get("paciente_nascimento") or None
+    recebido = ciencia.get("status") == ouvidoria_acionamentos.CIENTE
+    return {
+        "protocolo": caso.get("protocolo"),
+        "tipo_manifestacao": caso.get("tipo_manifestacao"),
+        "gravidade": caso.get("gravidade"),
+        "sigiloso": sigiloso,
+        "anonimo": anonimo,
+        "relato_integral": (caso.get("relato_integral") or "").strip() or None,
+        "justificativa_tecnica": (caso.get("nsp_justificativa_tecnica") or "").strip() or None,
+        "paciente": {"nome": nome_do_paciente, "nascimento": nascimento} if nome_do_paciente or nascimento else None,
+        "profissionais": caso.get("profissionais") or None,
+        "quarto": caso.get("quarto") or None,
+        "data_ocorrencia": caso.get("data_ocorrencia"),
+        "periodo": caso.get("periodo"),
+        "hora_aprox": caso.get("hora_aprox"),
+        "local_informado": caso.get("local_informado"),
+        "quem_manifestou": None if sigiloso or anonimo else (caso.get("manifestante_nome") or None),
+        "destinatario_nome": ciencia.get("responsavel_nome"),
+        "prazo": formatar_vencimento(ciencia.get("prazo")) if ciencia.get("prazo") else None,
+        "recebido": recebido,
+        "recebido_em": ciencia.get("respondido_em") if recebido else None,
+    }
+
+
+def registrar_o_recebido(supabase, caso: dict, ciencia: dict) -> None:
+    """O Recebido entra na trilha do caso, com o nome de quem recebeu o link."""
+    nome = ciencia.get("responsavel_nome") or "Núcleo de Segurança do Paciente"
+    _registrar_na_trilha(
+        supabase,
+        caso,
+        {"id": None, "nome_completo": nome},
+        f"Recebido pelo NSP: {nome}, do setor {ciencia.get('setor')}, confirmou o recebimento.",
+    )
+
+
 def prazo_do_recebido(agora: dt.datetime, gravidade: str | None, feriados: frozenset[dt.date]) -> dt.datetime:
     """Até quando o Núcleo tem para clicar em Recebido. Crítico é na hora."""
     if gravidade == "critico":
