@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { cardsDaOnda, cardsSemTitulo, noOs, precisaDeVoce } from '../hooks/register'
+import { cardsDaOnda, cardsSemTitulo, precisaDeVoce } from '../hooks/register'
 import type { Coleta } from '../types'
 
 // "Precisa de você": cada Onda que espera traz o motivo por extenso e os cards que ele cita.
@@ -41,7 +41,7 @@ test('a Onda cita os cards do motivo e as baixas, sem repetir o PRD', () => {
   expect(cardsSemTitulo(COLETA).sort()).toEqual([1632, 1673, 1700])
 })
 
-test('cada Onda traz o motivo inteiro e cada card com título e link no OS; a Fatia citada não se repete', () => {
+test('cada Onda traz o motivo inteiro e cada card com título; a Fatia citada não se repete', () => {
   const lista = precisaDeVoce(COLETA, CITADOS)
   expect(lista.map(x => `${x.rotulo} ${x.texto}`)).toEqual([
     'Onda hsm-x-onda1 quebrou',
@@ -51,8 +51,8 @@ test('cada Onda traz o motivo inteiro e cada card com título e link no OS; a Fa
   const o3 = lista[1]!
   expect(o3.detalhe).toBe(COLETA.ondasEstado![0]!.texto)
   expect(o3.cards).toEqual([
-    { n: 1632, texto: `PRD #1632 · ${CITADOS[1632].titulo}`, href: noOs(REPO, 1632), feito: true },
-    { n: 1673, texto: `#1673 · ${CITADOS[1673].titulo}`, href: noOs(REPO, 1673), feito: false },
+    { n: 1632, texto: `PRD #1632 · ${CITADOS[1632].titulo}`, feito: true },
+    { n: 1673, texto: `#1673 · ${CITADOS[1673].titulo}`, feito: false },
   ])
   expect(lista[2]!.cards!.map(k => k.texto)).toEqual([
     'PRD #1571 · Reuniões e Ouvidoria consultadas pelo Claude',
@@ -64,7 +64,7 @@ test('cada Onda traz o motivo inteiro e cada card com título e link no OS; a Fa
   expect(lista.some(x => x.rotulo === '#1614')).toBe(false)
 })
 
-test('painel: motivo inteiro, card com o link embaixo, fechado sem link, e a Ala Ondas uma vez', async ($, on) => {
+test('painel: motivo inteiro, cards sem link, fechado marcado, e o botão resolver em cada Onda', async ($, on) => {
   const gh: number[] = []
   mock.clock(on, { now: AGORA })
   on('process.run', (_$: any, e: any) => {
@@ -91,14 +91,13 @@ test('painel: motivo inteiro, card com o link embaixo, fechado sem link, e a Ala
   const pane = await $.ui.mount({ plugin: 'hr-ondas', surface: 'terminal', component: 'Pane', requestId: 'ondas', props: {} as any })
   expect(await pane.find({ text: /a passada nas Demandas antigas ficou com você na #1673$/ })).toBeTruthy()
   expect(await pane.find({ text: /→ #1673 · Tecnologia: rodar em produção/ })).toBeTruthy()
-  const hrefs = (await pane.findAll({ type: 'Link' })).map(l => (l.props as { href: string }).href)
-  expect(hrefs).toContain(noOs(REPO, 1673))
-  // PRD fechado: marcado, sem link
+  // nenhum link no painel
+  expect(await pane.findAll({ type: 'Link' })).toHaveLength(0)
+  // PRD fechado: marcado
   expect(await pane.find({ text: /→ ✓ fechado · PRD #1632/ })).toBeTruthy()
-  expect(hrefs).not.toContain(noOs(REPO, 1632))
-  // a Ala Ondas aparece uma vez, no fim, e não no meio de cada linha
-  expect(hrefs.filter(h => h.endsWith('#/ala/ondas'))).toHaveLength(1)
   expect(await pane.find({ text: /#1614 é sua · Aceite do diretor/ })).toBeTruthy()
-  expect(await pane.find({ text: /Feito o que a Onda pede, feche ela na/ })).toBeTruthy()
+  // um botão resolver por Onda
+  const botoes = (await pane.findAll({ type: 'Button' })).map(b => (b.props as { label?: string }).label)
+  expect(botoes).toEqual(['resolver', 'resolver', 'resolver'])
   await pane.unmount()
 })

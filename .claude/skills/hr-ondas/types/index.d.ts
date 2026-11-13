@@ -82,8 +82,16 @@ export type Coleta = {
   osEm?: number | null
   /** Hora da última busca no GitHub, OS e health (cache compartilhado entre as sessões). */
   remotoEm?: number | null
-  /** Ondas que quebraram ou esperam o humano, pelo Estado da Onda (~/.pedroos/ondas/hospital). */
+  /** Ondas que quebraram ou esperam o humano, pelo Estado da Onda (~/.pedroos/ondas/<slug>). */
   ondasEstado?: EstadoOnda[]
+  /** Sub-agentes de toda sessão recente do Projeto, viva ou encerrada (hooks/historico.py); `sessao` é o id. */
+  historico?: SubAgente[]
+  /** Segundos de cada subida pelo número do PR, do docs/spec/deploy/history.json da main. */
+  subidasFeitas?: Record<string, number>
+  /** As migrations do .claude/fluxo.json: null quando o Projeto não tem migration para o humano aplicar. */
+  migracoes?: { pasta?: string; aplicar?: string; editor?: string } | null
+  /** dono/nome do repositório, pelo remote origin */
+  repo?: string | null
 }
 
 /**
@@ -96,6 +104,9 @@ export type EstadoOnda = {
   prd: number | null
   texto: string | null
   baixas?: number[]
+  /** a linhagem da sessão ("hsm-conector") e o número da Onda, como o estado_onda.py gravou */
+  sessao?: string | null
+  onda?: number | null
 }
 
 /** Título e estado de um card que uma Onda cita e o OS não traz (PRD fechado, issue solta). */

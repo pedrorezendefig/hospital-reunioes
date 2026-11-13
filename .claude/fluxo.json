@@ -11,7 +11,8 @@
   "dado_sensivel": "dado de paciente ou de outro Facilitador",
   "migrations": {
     "pasta": "hospital-reunioes/supabase/migrations",
-    "aplicar": "cole no Studio"
+    "aplicar": "cole no Studio",
+    "editor": "https://studio.hospitalsaomatheus.cloud/project/default/sql/new"
   },
   "testes": "ferramenta: `uv run --no-project --python \">=3.12\" --with pytest --with pyyaml python -m pytest tools/ -q`; app: a suíte do backend ou do frontend que o diff toca",
   "varredura": {

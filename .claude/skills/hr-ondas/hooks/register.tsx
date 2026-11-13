@@ -3,30 +3,28 @@ import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
 import type { Agente, CardCitado, Ci, Coleta, Encerrar, EstadoOnda, Faixa, FatiaDaFaixa, Fase, Issue, Migration, Prd, SubAgente, Subida, Tarefa } from '../types'
 
-// Torre das ondas: só leitura. A coleta (hooks/coletar.sh) junta o Hospital OS,
+// Torre das ondas: só leitura. A coleta (hooks/coletar.sh) junta o coletor do PedroOS,
 // o `claude agents`, as migrations que a subida pediu e o /api/health.
 // O relógio só olha o que é local (sessões, agentes, subidas, migrations); o GitHub e o OS
 // são buscados quando um evento do workflow acontece: agente que começa ou termina, sessão
 // que nasce ou para, subida que fecha, migration nova, ou um gh/fechar_onda nesta sessão.
-// É um painel de monitoramento: nenhum link vai ao GitHub; PRD, Fatia e Onda abrem no PedroOS.
+// É um painel de monitoramento, sem link: cada Fatia mostra o tempo de cada etapa, e cada item do
+// "Precisa de você" tem o botão resolver, que abre no Claude Agents uma sessão só daquele item.
+// Vale para todo Projeto com o Pacote do fluxo (o coletar.sh lê o .claude/fluxo.json dele).
 
 const PANE = 'ondas'
 const COLUNAS = 100
-const STUDIO = 'https://studio.hospitalsaomatheus.cloud/project/default/sql/new'
-// localhost, não 127.0.0.1: o Claude Code só faz link de https: ou de http://localhost
-const PEDROOS = 'http://localhost:4400/'
-const REPO = 'pedrorezendefig/hospital-reunioes'
-
-/** O PRD ou a Fatia na aba Issues do Projeto, no PedroOS. */
-export const noOs = (repo: string, n: number) => `${PEDROOS}#/ala/projetos/${encodeURIComponent(repo)}/issues/${n}`
-/** A Trilha de Ondas: a aba Ondas da Página do Projeto, no PedroOS. */
-export const trilhaNoOs = (repo: string) => `${PEDROOS}#/ala/projetos/${encodeURIComponent(repo)}/ondas`
-/** A Ala "Ondas de todos", onde fica o botão Fechar a Onda. */
-export const ONDAS_DE_TODOS = `${PEDROOS}#/ala/ondas`
 const PERIODO_MS = 10_000
 /** Comando desta sessão que muda o GitHub ou a produção: ao terminar, recoleta. */
 const EVENTO_NO_SHELL = /fechar_onda\.py\s+--prs|gh\s+pr\s+(create|merge|ready|close)|gh\s+issue\s+(create|close|edit)|gh\s+run\s+watch|gh\s+pr\s+checks\b[^|;&]*--watch/
 const APLICADA_VISIVEL_MS = 60 * 60 * 1000
+
+/** dono/nome do repositório: o do OS, senão o do remote origin. */
+const repoDa = (c: Coleta | null) => c?.os?.repo ?? c?.repo ?? ''
+/** Como o humano aplica a migration e o editor SQL do Projeto (`migrations` do .claude/fluxo.json). */
+const aplicarDa = (c: Coleta | null) => c?.migracoes?.aplicar ?? 'aplique no banco'
+const editorDa = (c: Coleta | null) => c?.migracoes?.editor ?? null
+const rotuloDoEditor = (url: string) => (/studio/i.test(url) ? 'Studio' : 'editor SQL')
 
 const coleta = atom({ plugin: 'hr-ondas', key: 'coleta' } as const, null)
 const erro = atom({ plugin: 'hr-ondas', key: 'erro' } as const, null)
@@ -145,21 +143,69 @@ export const detalhe = (i: Issue, comEspera = true): string => {
   return partes.join(' · ')
 }
 
-/** Um card que a pendência manda olhar, com o link dele no PedroOS; `feito` quando já fechou. */
-export type CardPendente = { n: number; texto: string; href: string; feito: boolean }
+/** Um card que a pendência manda olhar; `feito` quando já fechou. */
+export type CardPendente = { n: number; texto: string; feito: boolean }
 
-/** Uma linha do bloco "Precisa de você": o link leva aonde você age. */
+/**
+ * A sessão que o botão resolver abre no Claude Agents: o nome e o pedido. Com `viva`, a sessão que já cuida do
+ * item (a da própria Onda) está rodando: o botão só traz o Claude Agents, sem lançar outra.
+ */
+export type PedidoDeSessao = { nome: string; prompt: string; viva: string | null }
+
+/** Uma linha do bloco "Precisa de você", com a sessão que o botão resolver abre. */
 export type Pendencia = {
   chave: string
   cor: 'error' | 'warning'
   marca: string
-  href: string
   rotulo: string
   texto: string
   /** o motivo por extenso, como a Onda gravou */
   detalhe?: string | null
   cards?: CardPendente[]
+  sessao: PedidoDeSessao | null
 }
+
+const NOME_DE_SESSAO = /^\w[\w.-]*$/
+const ESTADO_ONDA_PY = 'python3 .claude/skills/onda-enxuta/scripts/estado_onda.py'
+const ORIGEM = 'Esta sessão foi aberta pelo botão resolver do painel das Ondas (mod hr-ondas).'
+
+/**
+ * O pedido do Fechar a Onda do PedroOS (app/server/sessao-de-onda.js, promptDoFechamento): lê o Estado da Onda,
+ * faz a parte do agente, guia a do humano e grava o `resolvido`. Sem linhagem e número válidos, null.
+ */
+export const pedidoDaOnda = (o: EstadoOnda, vivas: string[]): PedidoDeSessao | null => {
+  const m = /^(.+)-onda(\d+)$/.exec(o.id)
+  const sessao = o.sessao ?? m?.[1] ?? ''
+  const numero = o.onda ?? Number(m?.[2])
+  if (![o.id, sessao].every(s => NOME_DE_SESSAO.test(s)) || !Number.isInteger(numero) || numero <= 0) return null
+  const alvo = `--sessao ${sessao} --onda ${numero}`
+  return {
+    nome: `fechar-${o.id}`,
+    viva: vivas.includes(o.id) ? o.id : null,
+    prompt: `Feche a Onda ${o.id}: ela ${o.estado === 'erro' ? 'quebrou' : 'está em "espera você"'}.
+1. Leia o Estado da Onda: ${ESTADO_ONDA_PY} ler ${alvo}. O que falta são os eventos pronto-para-voce e erro depois do último resolvido, e as issues em baixa.
+2. Mostre ao Pedro, uma linha por pendência, o que cada uma pede. Leia o que precisar no GitHub (gh issue view --comments, gh pr view) e confira se já foi feito antes de pedir alguma coisa.
+3. Faça a parte do agente. O que é só do Pedro (mandar uma mensagem, aplicar uma migration, decidir algo de produto) vira passo a passo, um passo por vez; mensagem para ele mandar vai pronta num bloco de código. Espere o "feito" e confira.
+4. Com tudo resolvido, rode: ${ESTADO_ONDA_PY} resolvido ${alvo} --texto "<o que foi feito, numa frase>". Issue em baixa só sai quando o PR dela entra pela subida (fechar_onda.py), que já marca a Onda.
+${ORIGEM} Merge, deploy ou migration só com o "pode" do Pedro aqui.`,
+  }
+}
+
+/** O pedido do "acompanhar" do PedroOS: a issue humana que o Pedro faz agora, um passo por vez, e fecha no fim. */
+export const pedidoDaHumana = (n: number): PedidoDeSessao => ({
+  nome: `acompanhar-${n}`,
+  viva: null,
+  prompt: `A issue #${n} é humana e o Pedro vai fazer agora. Leia o card com gh issue view ${n} --comments e acompanhe o Passo a passo dele, um passo por vez: mostre o passo e o link, ofereça fazer pelo playwright-cli ou pelo gh o que der, espere o "feito" e confira antes de passar ao próximo. Login, senha, pagamento e segredo ficam com o Pedro.
+${ORIGEM} No fim, comente na issue o que foi feito e feche.`,
+})
+
+/** O PR com CI vermelho: a sessão lê a falha, conserta na branch do PR e leva até o verde. */
+export const pedidoDoCi = (n: number, pr: number): PedidoDeSessao => ({
+  nome: `ci-pr-${pr}`,
+  viva: null,
+  prompt: `O PR #${pr} da issue #${n} está com o CI vermelho. Leia a falha (gh pr checks ${pr}, gh run view <id> --log-failed), conserte na branch do PR num worktree, rode as conferências locais e leve até o CI verde. Mostre ao Pedro a causa numa linha antes de mexer.
+${ORIGEM} Merge, deploy ou migration só com o "pode" do Pedro aqui.`,
+})
 
 /** Os cards que uma Onda cita no motivo (#N, fora o PRD dela) mais as issues dela em baixa. */
 export const cardsDaOnda = (o: EstadoOnda): number[] => {
@@ -176,18 +222,18 @@ export const cardsSemTitulo = (c: Coleta): number[] => {
 
 /**
  * O que espera você, fora as migrations (que têm botão próprio): Onda que quebrou ou espera você,
- * Fatia humana aberta e PR com CI vermelho. A Onda traz o motivo por extenso e os cards que ele
- * cita (o PRD e as issues), cada um com o link no PedroOS; a Fatia citada por uma Onda não se repete.
+ * Fatia humana aberta e PR com CI vermelho, cada um com a sessão do botão resolver. A Onda traz o motivo
+ * por extenso e os cards que ele cita (o PRD e as issues); a Fatia citada por uma Onda não se repete.
  */
 export const precisaDeVoce = (c: Coleta, citados: Record<string, CardCitado> = {}): Pendencia[] => {
-  const repo = c.os?.repo ?? REPO
   const issues = new Map([...(c.os?.prds ?? []).flatMap(p => p.issues), ...(c.os?.soltas ?? [])].map(i => [i.n, i]))
   const prds = new Map((c.os?.prds ?? []).map(p => [p.n, p]))
+  const vivas = c.agentes.map(a => a.nome)
   const card = (n: number): CardPendente => {
     const i = issues.get(n)
     const titulo = i?.titulo ?? prds.get(n)?.titulo ?? (citados[n]?.titulo || null)
     const aberto = i ? i.estado === 'OPEN' : (citados[n]?.aberto ?? true)
-    return { n, texto: `#${n}${i?.fase === 'humana' ? ' é sua' : ''}${titulo ? ` · ${titulo}` : ''}`, href: noOs(repo, n), feito: !aberto }
+    return { n, texto: `#${n}${i?.fase === 'humana' ? ' é sua' : ''}${titulo ? ` · ${titulo}` : ''}`, feito: !aberto }
   }
   const ondas = [...(c.ondasEstado ?? [])]
     .sort((a, b) => Number(b.estado === 'erro') - Number(a.estado === 'erro'))
@@ -195,11 +241,11 @@ export const precisaDeVoce = (c: Coleta, citados: Record<string, CardCitado> = {
       chave: `o${o.id}`,
       cor: o.estado === 'erro' ? ('error' as const) : ('warning' as const),
       marca: o.estado === 'erro' ? '✗' : '!',
-      href: ONDAS_DE_TODOS,
       rotulo: `Onda ${o.id}`,
       texto: o.estado === 'erro' ? 'quebrou' : 'espera você',
       detalhe: o.texto,
       cards: [...(o.prd ? [{ ...card(o.prd), texto: card(o.prd).texto.replace(/^#/, 'PRD #') }] : []), ...cardsDaOnda(o).map(card)],
+      sessao: pedidoDaOnda(o, vivas),
     }))
   const naOnda = new Set(ondas.flatMap(o => o.cards.map(k => k.n)))
   const fatias = new Map<number, Pendencia>()
@@ -211,9 +257,9 @@ export const precisaDeVoce = (c: Coleta, citados: Record<string, CardCitado> = {
       chave: `i${i.n}`,
       cor: humana ? 'warning' : 'error',
       marca: humana ? '!' : '✗',
-      href: noOs(repo, i.n),
       rotulo: `#${i.n}`,
       texto: `${humana ? 'é sua' : 'CI vermelho'} · ${i.titulo}`,
+      sessao: humana ? pedidoDaHumana(i.n) : i.pr ? pedidoDoCi(i.n, i.pr) : null,
     })
   }
   return [...ondas, ...fatias.values()]
@@ -332,11 +378,13 @@ export const etapas = (
   i: Issue,
   ags: SubAgente[],
   agora: number,
-  extra: { ci?: Ci; subida?: Subida; migrationPendente?: boolean } = {},
+  /** `subidaS`: os segundos da subida no registro da main, quando a sessão que subiu já acabou */
+  extra: { ci?: Ci; subida?: Subida; subidaS?: number; migrationPendente?: boolean } = {},
 ) => {
   // passo humano fechado (ou issue encerrada sem código): não houve esteira para mostrar
   if (i.fase === 'encerrada_sem_pr') return [{ nome: 'fechada sem PR', estado: 'feita' as EstadoEtapa }]
-  const de = (tipo: string) => ags.filter(a => a.tipo === tipo)
+  // o papel conta, não o prefixo: hr-revisor e onda-revisor são a mesma etapa
+  const de = (tipo: string) => ags.filter(a => papelDoAgente(a.tipo) === papelDoAgente(tipo))
   const estado = (tipo: string, feita: boolean): EstadoEtapa => {
     const lista = de(tipo)
     if (lista.some(a => estadoDoAgente(a, agora) === 'trabalhando')) return 'agora'
@@ -360,7 +408,7 @@ export const etapas = (
   ]
   if (de('hr-corretor').length) lista.push(com('corrigir', estado('hr-corretor', subiu), gasto('hr-corretor'), 'hr-corretor'))
   const s = extra.subida
-  const subidaMs = s ? (s.fim ?? agora) - s.inicio : undefined
+  const subidaMs = s ? (s.fim ?? agora) - s.inicio : extra.subidaS !== undefined ? extra.subidaS * 1000 : undefined
   lista.push(
     com(
       'subida',
@@ -372,6 +420,18 @@ export const etapas = (
   )
   lista.push({ nome: 'no ar', estado: i.fase === 'em_producao' ? 'feita' : 'falta' })
   return lista
+}
+
+/** As etapas que já têm tempo, na ordem da esteira: o que vai na linha da Fatia. */
+export const temposDaFatia = (lista: Etapa[]) => lista.filter((s): s is Etapa & { ms: number } => s.ms !== undefined)
+
+/** Menos de um minuto em segundos; o resto como `minutos`. */
+export const tempoCurto = (ms: number) => (ms < 60_000 ? `${Math.max(0, Math.round(ms / 1000))} s` : minutos(ms))
+
+/** Os sub-agentes que trabalharam na Fatia: os das sessões vivas e os do histórico (sessão já encerrada), sem repetir. */
+export const agentesDaFatia = (c: Coleta, prd: Prd, vivos: SubAgente[], n: number): SubAgente[] => {
+  const ids = new Set(vivos.map(a => a.id))
+  return [...vivos, ...(c.historico ?? []).filter(a => !ids.has(a.id))].filter(a => alvo(a, prd) === n)
 }
 
 /** O que a sessão está fazendo agora: a subida em curso, senão o Bash em primeiro plano. */
@@ -821,9 +881,34 @@ async function copiarSql($: EngineInterface, m: Migration, surface: RenderSurfac
         return
       }
     }
-    $.ui.toast(`Migration ${m.numero} copiada inteira (${m.linhas} linhas): cole no Studio`)
+    $.ui.toast(`Migration ${m.numero} copiada inteira (${m.linhas} linhas): ${aplicarDa(await read($, coleta))}`)
   } catch (falha) {
     $.ui.toast(`Não copiei a migration ${m.numero}: ${String(falha).slice(0, 120)}; ${reserva}`)
+  }
+}
+
+const abrindo = new Set<string>()
+
+/**
+ * O botão resolver: lança a sessão daquele item em segundo plano (hooks/resolver.sh, pelo lancar_sessao.sh da
+ * onda) e traz para a frente o Claude Agents da pasta do Projeto, onde ela aparece. Sessão com o nome já viva
+ * (ou a `viva` do pedido): não lança outra.
+ */
+async function resolver($: EngineInterface, p: PedidoDeSessao) {
+  if (abrindo.has(p.nome)) return
+  abrindo.add(p.nome)
+  $.ui.toast(`Abrindo ${p.viva ?? p.nome} no Claude Agents…`)
+  try {
+    const r = await $.process.run(
+      ['/bin/bash', `${$.plugin.root}/hooks/resolver.sh`, p.nome, ...(p.viva ? ['--viva', p.viva] : [])],
+      { stdin: p.prompt, timeoutMs: 120_000 },
+    )
+    if (r.exitCode !== 0) throw new Error(r.stderr.trim().slice(0, 200) || `saída ${r.exitCode}`)
+    $.ui.toast(r.stdout.trim().split('\n').pop() || `Sessão ${p.nome} no Claude Agents`)
+  } catch (falha) {
+    $.ui.toast(`Não abri a sessão ${p.nome}: ${String(falha).slice(0, 160)}`)
+  } finally {
+    abrindo.delete(p.nome)
   }
 }
 
@@ -834,10 +919,10 @@ async function buscarCards($: EngineInterface, c: Coleta) {
   const agora = await $.clock.now()
   const ja = await read($, cards)
   const faltam = cardsSemTitulo(c).filter(n => !ja[n] || agora - ja[n]!.em > CARD_VALE_MS).slice(0, 10)
-  if (!faltam.length) return
+  if (!faltam.length || !repoDa(c)) return
   const novos: Record<string, CardCitado> = {}
   for (const n of faltam) {
-    const r = await $.process.run(['gh', 'api', `repos/${REPO}/issues/${n}`, '--jq', '[.state, .title] | @tsv'], { timeoutMs: 15_000 })
+    const r = await $.process.run(['gh', 'api', `repos/${repoDa(c)}/issues/${n}`, '--jq', '[.state, .title] | @tsv'], { timeoutMs: 15_000 })
     const [estado, ...titulo] = r.exitCode === 0 ? r.stdout.trim().split('\t') : []
     // falhou: guarda o que tinha, para não bater no GitHub a cada 10 s
     novos[n] = estado ? { titulo: titulo.join(' '), aberto: estado === 'open', em: agora } : { ...(ja[n] ?? { titulo: '', aberto: true }), em: agora }
@@ -880,7 +965,7 @@ async function coletar($: EngineInterface, fresco = false) {
     novasMigrations.forEach(m => migrationsAvisadas.add(m.numero))
 
     for (const m of novasMigrations) {
-      $.ui.toast(`Migration ${m.numero} esperando o Studio (${m.sessao})`)
+      $.ui.toast(`Migration ${m.numero} esperando você: ${aplicarDa(c)} (${m.sessao})`)
     }
     // a primeira coleta só abre se já houver onda rodando; depois, a cada novidade
     if (novasSessoes.length > 0 || novasMigrations.length > 0) {
@@ -891,7 +976,7 @@ async function coletar($: EngineInterface, fresco = false) {
     const vivas = c.agentes.filter(a => a.status === 'busy').length
     $.ui.status(
       p.length
-        ? `ondas: migration ${p.map(m => m.numero).join(', ')} esperando o Studio`
+        ? `ondas: migration ${p.map(m => m.numero).join(', ')} esperando você: ${aplicarDa(c)}`
         : vivas
           ? `ondas: ${vivas} sessão(ões) rodando`
           : undefined,
@@ -926,8 +1011,9 @@ async function checarEncerrar($: EngineInterface, f: Faixa) {
     const abertos: number[] = []
     const mergeados: number[] = []
     // REST, não GraphQL: as ondas em paralelo zeram a cota do GraphQL
-    for (const n of f.prs) {
-      const r = await $.process.run(['gh', 'api', `repos/${REPO}/pulls/${n}`, '--jq', '"\\(.state) \\(.merged)"'], { timeoutMs: 15_000 })
+    const repo = repoDa(await read($, coleta))
+    for (const n of repo ? f.prs : []) {
+      const r = await $.process.run(['gh', 'api', `repos/${repo}/pulls/${n}`, '--jq', '"\\(.state) \\(.merged)"'], { timeoutMs: 15_000 })
       if (r.exitCode !== 0) continue
       const [estado, merged] = r.stdout.trim().split(' ')
       if (merged === 'true') mergeados.push(n)
@@ -1034,6 +1120,7 @@ export const register: Register = on => {
     const linhas = linhasDaFaixa(await read($, faixa), (await read($, relogio)) || (await $.clock.now()))
     if (!p.length && !linhas.length) return rest
     const { Box, Text, Link, Button } = $.ui.resolve(e)
+    const editor = editorDa(c)
 
     return (
       <Box flexDirection="column">
@@ -1041,12 +1128,12 @@ export const register: Register = on => {
         {p.map(m => (
           <Box key={`m${m.numero}`} flexDirection="row">
             <Text color="warning">
-              ⏳ migration {m.numero} esperando o Studio ({m.linhas} linhas, {m.sessao}, há{' '}
+              ⏳ migration {m.numero} esperando você: {aplicarDa(c)} ({m.linhas} linhas, {m.sessao}, há{' '}
               {minutos(c!.em - m.mtime)}){' '}
             </Text>
             <Button key={`copiar-faixa-${m.numero}`} label="copiar SQL" onPress={press => void copiarSql($, m, press.surface)} />
-            <Text color="warning"> · </Text>
-            <Link href={STUDIO} label="Studio SQL" />
+            {editor ? <Text color="warning"> · </Text> : null}
+            {editor ? <Link href={editor} label={rotuloDoEditor(editor)} /> : null}
           </Box>
         ))}
         {linhas.map(l => (
@@ -1073,7 +1160,7 @@ export const register: Register = on => {
     if (!c) {
       return (
         <Box flexDirection="column">
-          <Text dimColor>{falha ?? 'Coletando (o Hospital OS pode levar uns 20 s)…'}</Text>
+          <Text dimColor>{falha ?? 'Coletando (o coletor do PedroOS pode levar uns 20 s)…'}</Text>
         </Box>
       )
     }
@@ -1082,8 +1169,7 @@ export const register: Register = on => {
     const recentes = aplicadasRecentes(c)
     const pendencias = precisaDeVoce(c, await read($, cards))
     const prds = prdsVisiveis(c, mostrarTodos)
-    const repo = c.os?.repo ?? REPO
-    const linkIssue = (n: number) => <Link href={noOs(repo, n)} label={`#${n}`} />
+    const editor = editorDa(c)
     const tituloDa = (i: Issue) => i.titulo.replace(/^Contas médicas: /, '')
 
     const linhaAgente = (a: SubAgente, alvoDele?: string) => {
@@ -1108,40 +1194,54 @@ export const register: Register = on => {
       )
     }
 
-    const passos = (i: Issue, ags: SubAgente[], sessao: string | undefined) => {
-      const extra = {
+    /** A esteira da Fatia com o tempo de cada etapa: sub-agentes vivos e do histórico, CI e subida. */
+    const etapasDa = (i: Issue, prd: Prd, vivos: SubAgente[], sessao?: string) =>
+      etapas(i, agentesDaFatia(c, prd, vivos, i.n), c.em, {
         ci: i.pr ? c.ci?.[String(i.pr)] : undefined,
         subida: subidaDoPr(c, i.pr),
+        subidaS: i.pr ? c.subidasFeitas?.[String(i.pr)] : undefined,
         migrationPendente: p.some(m => m.sessao === sessao),
-      }
-      return (
-        <Text key={`s${i.n}`} wrap="truncate-end">
-          {'    '}
-          {etapas(i, ags, c.em, extra).map((s, k) => (
-            <Text key={`e${k}`}>
-              {k > 0 ? <Text dimColor> → </Text> : null}
-              <Text color={COR_ETAPA[s.estado]}>
-                {s.nome}
-                {MARCA_ETAPA[s.estado]}
-              </Text>
-              {s.ms !== undefined ? (
-                <Text color={s.cor} dimColor={!s.cor}>
-                  {' '}
-                  {minutos(s.ms)}
-                </Text>
-              ) : null}
-            </Text>
-          ))}
-        </Text>
-      )
-    }
+      })
 
-    /** Uma linha por Fatia: a Etapa, o número com link para o PedroOS e o título. */
+    /** A esteira em uma linha, só as marcas: o tempo de cada etapa vai na linha da Fatia. */
+    const passos = (i: Issue, lista: Etapa[]) => (
+      <Text key={`s${i.n}`} wrap="truncate-end">
+        {'    '}
+        {lista.map((s, k) => (
+          <Text key={`e${k}`}>
+            {k > 0 ? <Text dimColor> → </Text> : null}
+            <Text color={COR_ETAPA[s.estado]}>
+              {s.nome}
+              {MARCA_ETAPA[s.estado]}
+            </Text>
+          </Text>
+        ))}
+      </Text>
+    )
+
+    /** A linha da Fatia: o número, o tempo de cada etapa que já tem tempo e o título. */
+    const linhaComTempos = (i: Issue, lista: Etapa[], recuo: string) => (
+      <Text key={`t${i.n}`} wrap="truncate-end">
+        {recuo}
+        <Text color={corDaIssue(i)}>{MARCA[i.fase]} </Text>
+        <Text bold>#{i.n}</Text>
+        {temposDaFatia(lista).map(s => (
+          <Text key={`${i.n}-${s.nome}`}>
+            <Text dimColor> · </Text>
+            {s.nome}{' '}
+            <Text color={s.cor ?? 'suggestion'}>{tempoCurto(s.ms)}</Text>
+          </Text>
+        ))}
+        <Text dimColor> · {curto(tituloDa(i), largura)}</Text>
+      </Text>
+    )
+
+    /** Uma linha por Fatia fora da Onda que roda: a Etapa, o número e o título. */
     const linhaFatia = (i: Issue, comEspera: boolean, recuo: string) => (
       <Text key={`f${i.n}`} wrap="truncate-end">
         {recuo}
         <Text color={corDaIssue(i)}>{MARCA[i.fase]} </Text>
-        {linkIssue(i.n)}
+        <Text bold>#{i.n}</Text>
         <Text color={corDaIssue(i)}> {detalhe(i, comEspera)}</Text>
         <Text dimColor> · {tituloDa(i)}</Text>
       </Text>
@@ -1151,10 +1251,9 @@ export const register: Register = on => {
       <Box flexDirection="column">
         <Text dimColor wrap="truncate-end">
           atualizado há {minutos((await $.clock.now()) - (c.remotoEm ?? c.em))} ·{' '}
-          {mostrarTodos ? 'todos os PRDs (/ondas ativos)' : 'PRDs ativos (/ondas todos)'} ·{' '}
-          <Link href={trilhaNoOs(repo)} label="Trilha de Ondas" />
+          {mostrarTodos ? 'todos os PRDs (/ondas ativos)' : 'PRDs ativos (/ondas todos)'}
           {c.osEm != null && c.osEm < (c.remotoEm ?? c.em) ? (
-            <Text color="warning"> · Hospital OS sem resposta, PRDs de há {minutos(c.em - c.osEm)}</Text>
+            <Text color="warning"> · PedroOS sem resposta, PRDs de há {minutos(c.em - c.osEm)}</Text>
           ) : null}
         </Text>
         {falha && <Text color="error">{falha}</Text>}
@@ -1167,51 +1266,55 @@ export const register: Register = on => {
           {p.map((m, k) => (
             <Box key={`p${m.numero}`} flexDirection="row">
               <Text color="warning">
-                {'  '}⏳ migration {m.numero} {k === 0 ? 'cole no Studio' : `depois da ${p[k - 1]?.numero}`}{' '}
+                {'  '}⏳ migration {m.numero} {k === 0 ? aplicarDa(c) : `depois da ${p[k - 1]?.numero}`}{' '}
               </Text>
               <Button key={`copiar-${m.numero}`} label="copiar SQL" onPress={press => void copiarSql($, m, press.surface)} />
               <Text color="warning" wrap="truncate-end">
                 {' '}
-                · <Link href={STUDIO} label="Studio" /> · {m.linhas} linhas · {m.sessao} · há {minutos(c.em - m.mtime)}
+                {editor ? (
+                  <Text>
+                    · <Link href={editor} label={rotuloDoEditor(editor)} />{' '}
+                  </Text>
+                ) : null}
+                · {m.linhas} linhas · {m.sessao} · há {minutos(c.em - m.mtime)}
               </Text>
             </Box>
           ))}
-          {/* O link vai sozinho na linha de baixo: o terminal sem link clicável escreve a URL
-              inteira, e no meio da linha ela cortava o motivo. */}
+          {/* O botão vem antes do texto: a linha longa corta o fim, nunca o botão. */}
           {pendencias.map(x => (
             <Box key={x.chave} flexDirection="column">
-              <Text wrap="truncate-end">
-                {'  '}
-                <Text color={x.cor}>{x.marca} </Text>
-                <Text bold>{x.rotulo}</Text>
-                <Text color={x.cor}> {x.texto}</Text>
-              </Text>
+              <Box flexDirection="row">
+                <Text color={x.cor}>
+                  {'  '}
+                  {x.marca}{' '}
+                </Text>
+                {x.sessao ? (
+                  <Button key={`resolver-${x.chave}`} label="resolver" onPress={() => void resolver($, x.sessao!)} />
+                ) : null}
+                <Text wrap="truncate-end">
+                  {' '}
+                  <Text bold>{x.rotulo}</Text>
+                  <Text color={x.cor}> {x.texto}</Text>
+                </Text>
+              </Box>
               {x.detalhe ? (
                 <Box paddingLeft={4}>
                   <Text wrap="wrap">{x.detalhe}</Text>
                 </Box>
               ) : null}
-              {(x.cards ?? [{ n: 0, texto: '', href: x.href, feito: false }]).map(k => (
-                <Box key={`${x.chave}-${k.n}`} flexDirection="column" paddingLeft={4}>
-                  {k.texto ? (
-                    <Text wrap="truncate-end" dimColor={k.feito}>
-                      → {k.feito ? '✓ fechado · ' : ''}
-                      {k.texto}
-                    </Text>
-                  ) : null}
-                  {!k.feito && (
-                    <Text wrap="truncate-end" dimColor>
-                      {k.texto ? '  ' : ''}
-                      <Link href={k.href} />
-                    </Text>
-                  )}
+              {(x.cards ?? []).map(k => (
+                <Box key={`${x.chave}-${k.n}`} paddingLeft={4}>
+                  <Text wrap="truncate-end" dimColor={k.feito}>
+                    → {k.feito ? '✓ fechado · ' : ''}
+                    {k.texto}
+                  </Text>
                 </Box>
               ))}
             </Box>
           ))}
-          {pendencias.some(x => x.cards) && (
-            <Text key="fechar" dimColor wrap="truncate-end">
-              {'  '}Feito o que a Onda pede, feche ela na <Link href={ONDAS_DE_TODOS} label="Ala Ondas" />
+          {pendencias.some(x => x.sessao) && (
+            <Text key="resolver" dimColor wrap="truncate-end">
+              {'  '}resolver abre no Claude Agents uma sessão só daquele item: ela faz a parte do agente, guia a sua e fecha no fim
             </Text>
           )}
           {p.length === 0 && pendencias.length === 0 && <Text color="success">{'  '}✓ Nada espera você</Text>}
@@ -1233,9 +1336,12 @@ export const register: Register = on => {
           const ags = agentesDoPrd(c, prd)
           const ondas = ondasDoPrd(c, prd)
           const porN = new Map(prd.issues.map(i => [i.n, i]))
+          // o tempo da Onda conta também os sub-agentes de sessão que já acabou
+          const vivosIds = new Set(ags.map(a => a.id))
+          const comHistorico = [...ags, ...(c.historico ?? []).filter(a => !vivosIds.has(a.id))]
           const desenhadas = ondas.map(o => {
             const issues = o.issues.map(n => porN.get(n)).filter((i): i is Issue => !!i)
-            return { o, issues, situacao: situacaoDaOnda(issues, ags, prd, c.em), tempo: duracaoDaOnda(issues, ags, prd, c.em) }
+            return { o, issues, situacao: situacaoDaOnda(issues, ags, prd, c.em), tempo: duracaoDaOnda(issues, comHistorico, prd, c.em) }
           })
           // a Onda que roda mostra todas as Fatias dela; fora dela, a Fatia no ar vai para a linha "no ar"
           const naCaixa = new Set(desenhadas.filter(d => d.situacao === 'andando').flatMap(d => d.o.issues))
@@ -1247,7 +1353,7 @@ export const register: Register = on => {
           return (
             <Box key={`prd${prd.n}`} flexDirection="column" marginTop={1}>
               <Text wrap="truncate-end">
-                <Text bold>{prd.n === SEM_PRD ? 'Sem PRD' : <Link href={noOs(repo, prd.n)} label={`PRD #${prd.n}`} />}</Text>{' '}
+                <Text bold>{prd.n === SEM_PRD ? 'Sem PRD' : `PRD #${prd.n}`}</Text>{' '}
                 <Text dimColor>
                   {prontasDoPrd(prd)}/{prd.issues.length} prontas
                 </Text>
@@ -1337,20 +1443,17 @@ export const register: Register = on => {
                     {cabecalho}
                     {issues.map(i => {
                       const dela = ags.filter(a => alvo(a, prd) === i.n)
+                      const lista = etapasDa(i, prd, ags, sessoes.find(s => dela.some(a => a.sessao === s.nome))?.nome)
                       return (
                         <Box key={`i${i.n}`} flexDirection="column">
-                          <Text wrap="truncate-end">
-                            <Text color={corDaIssue(i)}>{MARCA[i.fase]} </Text>
-                            {linkIssue(i.n)}
-                            <Text dimColor> {curto(tituloDa(i), largura)}</Text>
-                          </Text>
+                          {linhaComTempos(i, lista, '')}
                           {i.fase === 'bloqueada' || i.fase === 'fila' || i.fase === 'humana' ? (
                             <Text dimColor wrap="truncate-end">
                               {'    '}
                               {detalhe(i)}
                             </Text>
                           ) : (
-                            passos(i, dela, sessoes.find(s => dela.some(a => a.sessao === s.nome))?.nome)
+                            passos(i, lista)
                           )}
                           {comDetalhe && dela.map(a => linhaAgente(a))}
                         </Box>
@@ -1362,12 +1465,10 @@ export const register: Register = on => {
 
               {soltas.map(i => linhaFatia(i, true, ''))}
               {entregues.length > 0 && (
-                <Text color="success" wrap="truncate-end">
-                  ✓ {entregues.length} no ar:
-                  {entregues.map(i => (
-                    <Text key={`n${i.n}`}> {linkIssue(i.n)}</Text>
-                  ))}
-                </Text>
+                <Box flexDirection="column">
+                  <Text color="success">✓ {entregues.length} no ar</Text>
+                  {entregues.map(i => linhaComTempos(i, etapasDa(i, prd, ags), '  '))}
+                </Box>
               )}
               {comDetalhe && semAlvo.length > 0 && (
                 <Box flexDirection="column" marginTop={1}>
