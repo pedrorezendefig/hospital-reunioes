@@ -1905,6 +1905,34 @@ describe("O card do Quadro abre num painel à direita (issue #1643, ADR 0090, de
     expect(quadroNaTela.contains(painel)).toBe(false);
   });
 
+  it("o painel começa logo abaixo da barra do topo e fica sob ela, para Ampliar e Fechar não sumirem atrás da barra (issue #1686)", async () => {
+    // A altura e a camada da barra saem do próprio Header: se ela mudar, o teste cobra o painel.
+    const header = readFileSync(resolve(process.cwd(), "src/components/layout/Header.tsx"), "utf8");
+    const classesDaBarra = (header.match(/<header className="([^"]+)"/)?.[1] ?? "").split(/\s+/);
+    const altura = classesDaBarra.find((c) => /^h-\d+$/.test(c))?.slice(2);
+    const camadaDaBarra = Number(classesDaBarra.find((c) => /^z-\[\d+\]$/.test(c))?.slice(3, -1));
+    expect(altura).toBeTruthy();
+    expect(camadaDaBarra).toBeGreaterThan(0);
+
+    comOQuadro();
+    await screen.findByRole("region", { name: "Quadro" });
+    fireEvent.click(cardDe(/Aviso da ata por e-mail/));
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    const classes = painel.className.split(/\s+/);
+
+    expect(classes).toContain("fixed");
+    expect(classes).toContain(`top-${altura}`);
+    expect(classes).toContain("bottom-0");
+    expect(classes.filter((c) => /^(inset-0|inset-y-\S+|top-\S+)$/.test(c))).toEqual([`top-${altura}`]);
+    // Abaixo da camada da barra: o sino e o menu do usuário abrem por cima do painel.
+    const camadaDoPainel = Number(classes.find((c) => /^z-(\d+|\[\d+\])$/.test(c))?.replace(/^z-\[?|\]$/g, ""));
+    expect(camadaDoPainel).toBeLessThan(camadaDaBarra);
+    // Os dois botões da linha do topo seguem no painel e funcionam pelo clique.
+    expect(within(painel).getByRole("button", { name: AMPLIAR })).toBeTruthy();
+    fireEvent.click(within(painel).getByRole("button", { name: FECHAR_O_PAINEL }));
+    expect(screen.queryByRole("complementary", { name: "Pedido aberto" })).toBeNull();
+  });
+
   it("o botão de fechar fecha o painel e devolve o foco ao card", async () => {
     comOQuadro();
     await screen.findByRole("region", { name: "Quadro" });
