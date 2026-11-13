@@ -54,6 +54,15 @@ A `/onda-enxuta` roda juntas todas as fatias desbloqueadas. O único separador d
 - **G sem bloqueio:** fatia G que não bloqueia ninguém vira duas M.
 - **Ondas previstas:** agrupe as fatias pelo grafo de dependência (onda 1 é toda fatia sem bloqueio; a seguinte, as que dependem só das anteriores) e leve o agrupamento à lista do passo 4 e ao corpo do PRD (passo 5).
 
+#### A fatia de manual (todo PRD com tela)
+
+Quando a seção "Manual: páginas que mudam" do PRD lista alguma página, o PRD ganha uma fatia de manual por módulo listado, e ela não é opcional (ADR 0094, decisão 6). A fatia atualiza o Markdown da página do módulo (no Hospital, `hospital-reunioes/frontend/public/manual/<módulo>/pagina.md`): o texto das tarefas em passo a passo, os prints refeitos pelo roteiro do `playwright-cli` contra o seed (`hospital-reunioes/frontend/scripts/manual/<módulo>/roteiro.sh`, só dado fictício) e o bloco `fluxograma` quando o processo muda. A fatia é sem vídeo.
+
+- **Bloqueada por:** as fatias de código que mudam a tela do módulo, com o `blocked_by` nativo (passo 5): o print precisa da tela pronta.
+- **Critérios de aceite:** cada tarefa que nasce ou muda tem passos numerados e pelo menos um print; o roteiro refaz os prints contra o seed; o `fluxograma` mostra o processo novo quando ele muda; nenhum print tem dado real.
+
+PRD com "Nenhuma: este PRD não muda tela", ou sem a seção, não ganha a fatia.
+
 ### 4. Quiz the user
 
 Apresente a divisão como uma **lista numerada em pt-BR**. Para cada fatia, mostre:
