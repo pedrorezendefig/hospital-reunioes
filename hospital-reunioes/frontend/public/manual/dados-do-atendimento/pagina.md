@@ -5,13 +5,13 @@ titulo: Dados do Atendimento
 
 Aqui ficam as tabelas que a Ana consulta para responder os pacientes: o preço das consultas particulares, os exames com o preparo de cada um e a estimativa das cirurgias. A secretária e o Super admin editam. O facilitador só consulta, e para ele os botões de editar não aparecem.
 
-O que muda numa tabela vale na hora. Não há botão de publicar nem espera: a próxima resposta da Ana já sai com o dado novo.
+O que muda numa tabela vale na hora: a próxima resposta da Ana já sai com o dado novo.
 
 ```fluxograma
 inicio editar 1,1: Editar na tabela | Quem edita abre a linha pelo lápis, muda o valor e clica em Salvar.
 passo salvo 2,1: Salvo na hora | A tabela guarda a mudança e a coluna Atualizado passa a mostrar a data de hoje.
 passo pergunta 3,1: Paciente pergunta à Ana | Por exemplo, quanto custa uma consulta ou qual é o preparo de um exame.
-passo consulta 4,1: Ana lê a tabela | A cada pergunta ela busca o dado direto daqui, sem cópia guardada.
+passo consulta 4,1: Ana lê a tabela | A cada pergunta ela busca o dado direto nesta tabela.
 decisao ativo 5,1: Registro ativo?
 fim resposta 6,1: Ana responde com o dado novo | O preço, o preparo ou a estimativa que acabou de ser salvo.
 passo fora 5,2: Fica fora da resposta | Registro desativado não chega à Ana. Para ele voltar, clique em Reativar na linha.
@@ -45,7 +45,7 @@ Para tirar uma especialidade da resposta da Ana sem apagar nada, clique na caixa
 
 ![A aba Exames com o lápis da linha marcado](exames.png)
 
-3. Deixe marcado **Preparo necessário** e escreva em **Instruções de preparo** o que o paciente faz antes do exame, como o tempo de jejum.
+3. Confira se **Preparo necessário** está marcado e escreva em **Instruções de preparo** o que o paciente faz antes do exame, como o tempo de jejum.
 4. Se precisar, ajuste também o **Tempo de resultado** e o **Local de realização**.
 5. Clique em **Salvar**.
 
