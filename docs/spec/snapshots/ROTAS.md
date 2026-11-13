@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T08:14+0000 -->
+<!-- last_update: 2026-11-13T17:06+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -508,7 +508,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/admin/tecnologia/chat/{demanda_id}/revisao` | A estimativa do diálogo de confirmação (ADR 0082): a faixa em dólar do | ✅ |
 | POST | `/admin/tecnologia/chat/{demanda_id}/revisao` | O "Revisar com o código de hoje" confirmado (ADR 0084, decisão 3). | ✅ |
 | GET | `/admin/tecnologia/desenvolvedores` | O "Quem cuida disto?" do resumo (ADR 0083, decisao 5). `padrao` marca | ✅ |
-| GET | `/admin/tecnologia/entregas` | A aba Entregas (issue #1556, ADR 0084, decisao 8): os cards entregues, | ✅ |
+| GET | `/admin/tecnologia/entregas` | A aba Entregas como ritmo semanal (issue #1701, ADR 0092, decisoes 1 e 7). | ✅ |
 | GET | `/admin/tecnologia/eu` | Se quem esta logado e Desenvolvedor (ADR 0083, decisao 2). | ✅ |
 
 ## automacao (`app/routers/tecnologia_automacao.py`)
