@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T15:30:27-03:00",
+      "sha": "ac8d4db7b2f5a7dcc82aab7074cfe0824eabe5ef",
+      "app_version": "0.291.0",
+      "subject": "Onda entregas-onda4: Filtro Projeto e selo nas Entregas",
+      "raw_subject": "chore(deploy): registro da onda entregas-onda4 (#1753)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1710
+      ],
+      "result": "healthy",
+      "duration_seconds": 303,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta entregas-onda4: PR #1753 (issue #1716), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 248,
+          "frontend": 223
+        },
+        "health_s": 30
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T15:08:59-03:00",
       "sha": "071ad2e3ce8b118f4862132154d334ef9e04584d",
       "app_version": "0.290.0",
