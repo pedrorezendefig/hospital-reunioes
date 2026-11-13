@@ -22,6 +22,8 @@ import { useContagem } from "@/hooks/useContagem";
 import { useIntencaoDeHover } from "@/hooks/useIntencaoDeHover";
 import { useMovimentoReduzido } from "@/hooks/useMovimentoReduzido";
 
+import { type Projeto, PROJETO_CLASSE, PROJETO_ROTULO } from "./demandas";
+
 export type Tamanho = "P" | "M" | "G";
 
 export type TopoDasEntregas = {
@@ -35,7 +37,8 @@ export type SemanaDasEntregas = {
   g: number;
   m: number;
   p: number;
-  entregas: { titulo: string; tamanho: Tamanho }[];
+  /** O `projeto` dá o selo na prévia (issue #1716); sem o campo, sem selo. */
+  entregas: { titulo: string; tamanho: Tamanho; projeto?: Projeto | null }[];
 };
 
 type Serie = "pedidos" | "g" | "m" | "p";
@@ -141,6 +144,16 @@ type PropsDaBarra = {
   payload?: { inicio?: string };
 };
 
+/** O selo pequeno do Projeto, na prévia e na linha da entrega (issue #1716). Sem o campo, sem selo. */
+export function SeloDoProjeto({ projeto }: { projeto?: Projeto | null }) {
+  if (!projeto) return null;
+  return (
+    <span className={`shrink-0 px-1.5 py-0.5 rounded text-[11px] font-medium ${PROJETO_CLASSE[projeto]}`}>
+      {PROJETO_ROTULO[projeto]}
+    </span>
+  );
+}
+
 /** A barra das outras semanas quando uma está marcada. */
 const OPACIDADE_DESMARCADA = 0.35;
 
@@ -171,7 +184,7 @@ function barra(serie: Serie, crescer: boolean, marcada: string | null) {
   return Barra;
 }
 
-/** A prévia da semana sob o mouse: os números e o que saiu, com o tamanho de cada entrega. */
+/** A prévia da semana sob o mouse: os números e o que saiu, com o tamanho e o Projeto de cada entrega. */
 export function PreviaDaSemana({ active, payload }: TooltipProps<number, string>) {
   const semana = payload?.[0]?.payload as SemanaDasEntregas | undefined;
   if (!active || !semana) return null;
@@ -187,6 +200,7 @@ export function PreviaDaSemana({ active, payload }: TooltipProps<number, string>
             <li key={`${i}-${entrega.titulo}`} className="flex gap-2">
               <span className="font-semibold text-primary">{entrega.tamanho}</span>{" "}
               <span className="normal-case">{entrega.titulo}</span>
+              <SeloDoProjeto projeto={entrega.projeto} />
             </li>
           ))}
         </ul>

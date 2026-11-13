@@ -227,7 +227,9 @@ class TestRitmo:
         em UTC: conta na semana que termina naquele domingo, a de 02/11."""
         resultado = ritmo([_fechado("domingo", "2026-11-09T01:00:00Z", titulo="Fechado no domingo")], agora=AGORA)
 
-        assert _semana(resultado, "2026-11-02")["entregas"] == [{"titulo": "Fechado no domingo", "tamanho": "P"}]
+        assert _semana(resultado, "2026-11-02")["entregas"] == [
+            {"titulo": "Fechado no domingo", "tamanho": "P", "projeto": "hospital"}
+        ]
         assert _semana(resultado, "2026-11-09")["entregas"] == []
 
     def test_o_topo_conta_as_4_semanas_com_a_corrente_e_as_4_anteriores(self):
@@ -294,8 +296,8 @@ class TestRitmo:
         corrente = _semana(resultado, "2026-11-09")
         assert (corrente["g"], corrente["m"], corrente["p"]) == (1, 1, 0)
         assert corrente["entregas"] == [
-            {"titulo": "Aviso da ata", "tamanho": "M"},
-            {"titulo": "Painel novo", "tamanho": "G"},
+            {"titulo": "Aviso da ata", "tamanho": "M", "projeto": "hospital"},
+            {"titulo": "Painel novo", "tamanho": "G", "projeto": "hospital"},
         ]
         assert (_semana(resultado, "2026-11-02")["p"], _semana(resultado, "2026-11-02")["pedidos"]) == (1, 0)
 

@@ -23,6 +23,7 @@ from app.services.tecnologia import (
     instante_do_banco,
     login_do_responsavel,
     origem_da_demanda,
+    projeto_da_demanda,
     responsavel_da_demanda,
 )
 
@@ -92,19 +93,22 @@ def _instante(par: tuple[datetime, dict[str, str]]) -> datetime:
 
 @dataclass(frozen=True)
 class Filtros:
-    """Tipo, Origem e Responsavel da aba (ADR 0092, decisao 7). Combinam entre
-    si e valem para o topo, as semanas e a lista. O Responsavel e a
+    """Tipo, Origem, Responsavel e Projeto da aba (ADR 0092, decisao 7; o
+    Projeto na issue #1716, ADR 0093, decisao 8). Combinam entre si e valem
+    para o topo, as semanas e a lista. O Responsavel e a
     `chave_do_responsavel`."""
 
     tipo: Literal["bug", "melhoria"] | None = None
     origem: Literal["diretor", "vitta"] | None = None
     responsavel: str | None = None
+    projeto: Literal["hospital", "ana"] | None = None
 
     def deixa(self, demanda: dict[str, Any]) -> bool:
         return (
             (self.tipo is None or CLASSIFICACAO_DO_TIPO.get(str(demanda.get("tipo") or "")) == self.tipo)
             and (self.origem is None or origem_da_demanda(demanda) == self.origem)
             and (self.responsavel is None or chave_do_responsavel(demanda) == self.responsavel)
+            and (self.projeto is None or projeto_da_demanda(demanda) == self.projeto)
         )
 
 
@@ -116,8 +120,9 @@ def ritmo(demandas: list[dict[str, Any]], *, agora: datetime, filtros: Filtros |
     4 anteriores, com a composicao so das 4 do topo: bugs e melhorias nos
     pedidos, G, M e P nas entregas. As semanas vem da mais antiga para a
     corrente, comecando na segunda pelo fuso do hospital, cada uma com os
-    pedidos, as entregas por tamanho e o que saiu nela (titulo e tamanho, o
-    mais novo primeiro). Nada aqui leva numero de issue.
+    pedidos, as entregas por tamanho e o que saiu nela (titulo, tamanho e
+    Projeto, o selo da previa, issue #1716; o mais novo primeiro). Nada aqui
+    leva numero de issue.
     """
     filtros = filtros or Filtros()
     corrente = inicio_da_semana(agora.astimezone(FUSO_DO_HOSPITAL).date())
@@ -158,7 +163,16 @@ def ritmo(demandas: list[dict[str, Any]], *, agora: datetime, filtros: Filtros |
                     entregas[tamanho.lower()] += 1
             if inicio in semanas:
                 semanas[inicio][tamanho.lower()] += 1
-                saidas[inicio].append((entregue, {"titulo": str(demanda.get("titulo") or ""), "tamanho": tamanho}))
+                saidas[inicio].append(
+                    (
+                        entregue,
+                        {
+                            "titulo": str(demanda.get("titulo") or ""),
+                            "tamanho": tamanho,
+                            "projeto": projeto_da_demanda(demanda),
+                        },
+                    )
+                )
     return {
         "topo": {"pedidos": pedidos, "entregas": entregas},
         "semanas": [

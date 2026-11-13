@@ -8,10 +8,13 @@
  * últimas 12 (`RitmoDasEntregas`). Embaixo, "O que foi entregue", agrupado por
  * semana, a mais nova em cima. A linha recolhida diz o Tamanho da entrega, o
  * título, o tipo, a versão e a data, com o ícone do vídeo quando há
- * Demonstração. Pela intenção de hover (150 ms para abrir, 180 ms para fechar,
+ * Demonstração, e o selo do Projeto (a entrega da Ana sai sem versão, porque
+ * a Ana ainda não tem Em produção; issue #1716, ADR 0093, decisões 6 e 8).
+ * Pela intenção de hover (150 ms para abrir, 180 ms para fechar,
  * o clique fixa, o toque alterna), uma linha por vez abre com o O que muda e
  * os botões Demonstração, Abrir o card e Copiar link. Os filtros de Tipo,
- * Origem e Responsável valem para tudo. Quem conta, filtra e agrupa é o
+ * Origem, Responsável e Projeto (Todos, Aplicativo do Hospital ou Ana, issue
+ * #1716) valem para tudo. Quem conta, filtra e agrupa é o
  * servidor; a tela só desenha e monta a consulta. Nada se move por aqui.
  *
  * O clique numa semana do gráfico mostra na lista só aquela semana e rola até
@@ -44,6 +47,7 @@ import {
 import {
   diaEMes,
   RitmoDasEntregas,
+  SeloDoProjeto,
   type SemanaDasEntregas,
   type Tamanho,
   type TopoDasEntregas,
@@ -59,6 +63,8 @@ import {
   linkDaDemonstracao,
   Origem,
   ORIGEM_ROTULO,
+  Projeto,
+  PROJETO_ROTULO,
 } from "./demandas";
 
 const URL_DAS_ENTREGAS = `${BASE_TECNOLOGIA}/entregas`;
@@ -92,11 +98,13 @@ const PARTES_DO_TAMANHO: Record<Tamanho, string> = {
 
 const CLASSIFICACOES = Object.keys(CLASSIFICACAO_ROTULO) as Classificacao[];
 const ORIGENS = Object.keys(ORIGEM_ROTULO) as Origem[];
+const PROJETOS = Object.keys(PROJETO_ROTULO) as Projeto[];
 
 type Filtros = {
   tipo: Classificacao | null;
   origem: Origem | null;
   responsavel: string | null;
+  projeto: Projeto | null;
 };
 
 function urlDasEntregas(filtros: Filtros, corte: string | null = null): string {
@@ -104,6 +112,7 @@ function urlDasEntregas(filtros: Filtros, corte: string | null = null): string {
   if (filtros.tipo) consulta.set("tipo", filtros.tipo);
   if (filtros.origem) consulta.set("origem", filtros.origem);
   if (filtros.responsavel) consulta.set("responsavel", filtros.responsavel);
+  if (filtros.projeto) consulta.set("projeto", filtros.projeto);
   if (corte) consulta.set("corte", corte);
   const texto = consulta.toString();
   return texto ? `${URL_DAS_ENTREGAS}?${texto}` : URL_DAS_ENTREGAS;
@@ -191,7 +200,8 @@ function LinhaDaEntrega({
               {CLASSIFICACAO_ROTULO[classificacao]}
             </span>
           )}
-          {entrega.versao && (
+          <SeloDoProjeto projeto={entrega.projeto} />
+          {entrega.versao && entrega.projeto !== "ana" && (
             <span className="normal-case px-1.5 py-0.5 rounded text-[11px] font-medium bg-emerald-100 text-emerald-800">
               {entrega.versao}
             </span>
@@ -279,6 +289,7 @@ export function EntregasDaTecnologia({ token }: { token: string | null }) {
   const [tipo, setTipo] = useState<Classificacao | null>(null);
   const [origem, setOrigem] = useState<Origem | null>(null);
   const [responsavel, setResponsavel] = useState<string | null>(null);
+  const [projeto, setProjeto] = useState<Projeto | null>(null);
   const [dados, setDados] = useState<Entregas | null>(null);
   /** Os blocos de "Ver semanas anteriores", embaixo das 12 semanas, e o corte do próximo. */
   const [anteriores, setAnteriores] = useState<GrupoDasEntregas[]>([]);
@@ -299,7 +310,7 @@ export function EntregasDaTecnologia({ token }: { token: string | null }) {
     if (!token) return;
     const pedido = ++ultimoPedido.current;
     try {
-      const resposta = await fetch(urlDasEntregas({ tipo, origem, responsavel }), {
+      const resposta = await fetch(urlDasEntregas({ tipo, origem, responsavel, projeto }), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (pedido !== ultimoPedido.current) return;
@@ -313,7 +324,7 @@ export function EntregasDaTecnologia({ token }: { token: string | null }) {
       console.error("[admin/tecnologia] falha ao carregar as entregas", e);
       setErro(FALHA_DE_CONEXAO);
     }
-  }, [token, tipo, origem, responsavel]);
+  }, [token, tipo, origem, responsavel, projeto]);
 
   useEffect(() => {
     carregar();
@@ -325,7 +336,7 @@ export function EntregasDaTecnologia({ token }: { token: string | null }) {
     const pedido = ultimoPedido.current;
     setCarregandoAnteriores(true);
     try {
-      const resposta = await fetch(urlDasEntregas({ tipo, origem, responsavel }, corte), {
+      const resposta = await fetch(urlDasEntregas({ tipo, origem, responsavel, projeto }, corte), {
         headers: { Authorization: `Bearer ${token}` },
       });
       const lidas = resposta.ok ? entregasValidas(await resposta.json()) : null;
@@ -369,6 +380,16 @@ export function EntregasDaTecnologia({ token }: { token: string | null }) {
           {ORIGENS.map((valor) => (
             <Chip key={valor} ativo={origem === valor} onClick={() => setOrigem(origem === valor ? null : valor)}>
               {ORIGEM_ROTULO[valor]}
+            </Chip>
+          ))}
+        </GrupoDeChips>
+        <GrupoDeChips rotulo="Projeto">
+          <Chip ativo={projeto === null} onClick={() => setProjeto(null)}>
+            Todos
+          </Chip>
+          {PROJETOS.map((valor) => (
+            <Chip key={valor} ativo={projeto === valor} onClick={() => setProjeto(projeto === valor ? null : valor)}>
+              {PROJETO_ROTULO[valor]}
             </Chip>
           ))}
         </GrupoDeChips>

@@ -670,3 +670,165 @@ describe("Ver semanas anteriores", () => {
     await waitFor(async () => expect(await cabecalhos()).toHaveLength(2));
   });
 });
+
+/**
+ * O filtro Projeto e o selo nas Entregas (issue #1716, ADR 0093, decisão 8). O
+ * servidor conta e corta (os testes dele estão em
+ * `test_tecnologia_entregas_projeto.py`); aqui, o campo vira a consulta, a tela
+ * desenha o que volta, e o selo aparece na linha e na prévia da semana.
+ */
+function respostaDaAna() {
+  const base = resposta();
+  return {
+    ...base,
+    topo: {
+      pedidos: { total: 2, anteriores: 1, bugs: 1, melhorias: 1 },
+      entregas: { total: 1, anteriores: 0, g: 0, m: 1, p: 0 },
+    },
+    semanas: INICIOS.map((inicio) =>
+      inicio === "2026-11-09"
+        ? {
+            inicio,
+            pedidos: 2,
+            g: 0,
+            m: 1,
+            p: 0,
+            entregas: [{ titulo: "Ana entende áudio", tamanho: "M", projeto: "ana" }],
+          }
+        : { inicio, pedidos: 0, g: 0, m: 0, p: 0, entregas: [] },
+    ),
+    grupos: [
+      {
+        inicio: "2026-11-09",
+        entregas: [
+          {
+            ...entrega("a-1", "Ana entende áudio"),
+            projeto: "ana",
+            etapa: "entregue",
+            tamanho: "M",
+            classificacao: "bug",
+            fechada_em: "2026-11-11T12:00:00Z",
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function comProjetos() {
+  const base = resposta();
+  return {
+    ...base,
+    semanas: base.semanas.map((s) =>
+      s.inicio === "2026-11-09"
+        ? {
+            ...s,
+            entregas: [
+              { titulo: "Ana entende áudio", tamanho: "M", projeto: "ana" },
+              { titulo: "Painel da diretoria", tamanho: "G", projeto: "hospital" },
+            ],
+          }
+        : s,
+    ),
+    grupos: [
+      {
+        inicio: "2026-11-09",
+        entregas: [
+          {
+            ...entrega("a-1", "Ana entende áudio"),
+            projeto: "ana",
+            etapa: "entregue",
+            tamanho: "M",
+            // A Ana não tem Em produção: mesmo que o servidor mandasse uma versão, a linha não a mostra.
+            versao: "v0.999.0",
+            fechada_em: "2026-11-11T12:00:00Z",
+          },
+          {
+            ...entrega("h-1", "Painel da diretoria"),
+            projeto: "hospital",
+            tamanho: "G",
+            versao: "v0.285.0",
+            fechada_em: "2026-11-10T12:00:00Z",
+          },
+        ],
+      },
+    ],
+  };
+}
+
+describe("O filtro Projeto", () => {
+  it("abre em Todos e tem Aplicativo do Hospital e Ana", async () => {
+    montar();
+    await lista();
+
+    const projeto = screen.getByRole("group", { name: "Projeto" });
+    expect(within(projeto).getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "Todos",
+      "Aplicativo do Hospital",
+      "Ana",
+    ]);
+    expect(within(projeto).getByRole("button", { name: "Todos" }).getAttribute("aria-pressed")).toBe("true");
+    expect(ultimaConsulta()).toEqual({});
+  });
+
+  it("com Ana, os dois números, o gráfico e a lista mostram só a Ana", async () => {
+    comMovimentoReduzido();
+    const { container } = montar((url) => (url.includes("projeto=ana") ? respostaDaAna() : resposta()));
+    await lista();
+
+    fireEvent.click(within(screen.getByRole("group", { name: "Projeto" })).getByRole("button", { name: "Ana" }));
+
+    await waitFor(() => expect(ultimaConsulta()).toEqual({ projeto: "ana" }));
+    await waitFor(() => expect(within(screen.getByRole("button", { name: /^Entregas/ })).getByText("1")).toBeTruthy());
+    expect(within(screen.getByRole("button", { name: /^Pedidos/ })).getByText("2")).toBeTruthy();
+    expect(within(await lista()).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(await lista()).getByText("Ana entende áudio")).toBeTruthy();
+    fireEvent.mouseMove(container.querySelector(".recharts-wrapper")!, { clientX: 560, clientY: 100 });
+    expect(screen.getByText("2 pedidos, 1 entrega")).toBeTruthy();
+  });
+
+  it("combina com os outros filtros, e Todos volta aos dois projetos", async () => {
+    montar();
+    await lista();
+    const projeto = screen.getByRole("group", { name: "Projeto" });
+
+    fireEvent.click(within(projeto).getByRole("button", { name: "Aplicativo do Hospital" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Tipo" })).getByRole("button", { name: "Bug" }));
+    await waitFor(() => expect(ultimaConsulta()).toEqual({ projeto: "hospital", tipo: "bug" }));
+
+    fireEvent.click(within(projeto).getByRole("button", { name: "Todos" }));
+    await waitFor(() => expect(ultimaConsulta()).toEqual({ tipo: "bug" }));
+  });
+});
+
+describe("O selo do Projeto", () => {
+  it("aparece na linha da entrega", async () => {
+    montar(() => comProjetos());
+
+    expect(within(await linha("Ana entende áudio")).getByText("Ana")).toBeTruthy();
+    expect(within(await linha("Painel da diretoria")).getByText("Aplicativo do Hospital")).toBeTruthy();
+  });
+
+  it("aparece na prévia da semana", async () => {
+    comMovimentoReduzido();
+    const { container } = montar(() => comProjetos());
+    await screen.findByRole("figure", { name: "Pedidos e entregas das últimas 12 semanas" });
+
+    fireEvent.mouseMove(container.querySelector(".recharts-wrapper")!, { clientX: 560, clientY: 100 });
+
+    const saiu = screen.getByRole("list", { name: "O que saiu na semana" });
+    const [daAna, doHospital] = within(saiu).getAllByRole("listitem");
+    expect(within(daAna).getByText("Ana")).toBeTruthy();
+    expect(within(doHospital).getByText("Aplicativo do Hospital")).toBeTruthy();
+  });
+
+  it("a entrega da Ana mostra a data e o tamanho, sem selo de versão", async () => {
+    montar(() => comProjetos());
+
+    const daAna = await linha("Ana entende áudio");
+    expect(within(daAna).getByText("M")).toBeTruthy();
+    expect(within(daAna).getByText("11/11/2026")).toBeTruthy();
+    expect(within(daAna).queryByText(/^v\d/)).toBeNull();
+    expect(within(await linha("Painel da diretoria")).getByText("v0.285.0")).toBeTruthy();
+  });
+});
