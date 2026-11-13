@@ -1,12 +1,12 @@
 ---
 name: retro-onda
-description: Retrospectiva de uma onda da /onda-enxuta. Lê o que a onda deixou (medição, baixas, correções, subida, JSONL) e propõe mudanças no ambiente dos agentes, não no código. Só propõe. Sintaxe `/retro-onda [<nome>-onda<N> | <id de sessão>]`.
+description: Retrospectiva de uma onda da /onda-enxuta. Lê o que a onda deixou (medição, baixas, correções, subida, JSONL) e propõe mudanças no ambiente dos agentes, não no código. Grava a Retro com as Candidatas aceitas e imprime a linha `Candidata:` de cada uma. Sintaxe `/retro-onda [<nome>-onda<N> | <id de sessão>]`.
 disable-model-invocation: true
 ---
 
 # Retro da onda
 
-Olha para trás numa onda que já terminou e responde: **o que no ambiente deixou o atrito acontecer, e que mudança impede a repetição?** O produto é uma lista de candidatas, da mais grave para a menos, cada uma presa a um momento concreto da onda. Nada é editado aqui: a candidata aceita vira PR de ferramenta pelo `/ship`, com a decisão no corpo do PR (decisão do fluxo, regra 12).
+Olha para trás numa onda que já terminou e responde: **o que no ambiente deixou o atrito acontecer, e que mudança impede a repetição?** O produto é uma lista de candidatas, da mais grave para a menos, cada uma presa a um momento concreto da onda. Aqui só a Retro é gravada, no Estado da Onda: a candidata aceita vira PR de ferramenta pelo `/ship`, com a decisão e a linha `Candidata:` no corpo do PR (decisão do fluxo, regra 12).
 
 Fork do `/retro` do Matt Pocock (Skills v1.3), com as fontes e as casas do pacote do fluxo (a mesma em todo Projeto; as regras só de um Projeto estão em `fluxo.py notas retro-onda`). O princípio é o dele: **o padrão mora no revisor, não no implementador** (o implementador tem a pressão de contexto: explora, escreve, depura; o revisor recebe um diff). E **violação mecânica vira check determinístico**, nunca prosa: um check falha, uma frase em skill não.
 
@@ -41,11 +41,25 @@ Sem argumento: a medição mais recente em `~/.claude/onda-enxuta/medicoes/`.
 | Repo sem guarda-corpo para aquele erro (nenhum check, nenhuma lente) | Achado por si só, com o check mais barato na linguagem do repo |
 
 4. Antes de propor check novo, leia o que já existe (`.github/workflows/`, `tools/lint_skills.py`, o lint da pasta do app (`app` no `fluxo.py`) quando existir): check que existe e não está ligado é a candidata, não um check novo.
-5. Apresente até 7 candidatas, da mais grave para a menos: **atrito** (momento: PR/issue/trecho), **causa no ambiente**, **mudança** (arquivo e uma linha do que entra ou sai), **tipo** (check, lente, ponteiro, apagar, prompt, acesso). Termine com a linha "nenhuma mudança feita; cada candidata aceita vira `/ship` próprio".
+5. Apresente até 7 candidatas, numeradas de 1 em diante, da mais grave para a menos: **atrito** (momento: PR/issue/trecho), **causa no ambiente**, **mudança** (arquivo e uma linha do que entra ou sai), **tipo** (check, lente, ponteiro, apagar, prompt, acesso).
+6. Pergunte quais Candidatas o humano (o `humano` do `fluxo.py`) aceita, pelos números. Com a resposta, grave a Retro da raiz do Projeto da onda, com a `<sessao>` e o `<N>` da medição:
+
+   ```bash
+   python3 .claude/skills/onda-enxuta/scripts/estado_onda.py retro --sessao <sessao> --onda <N> --candidata <n> "<título>"
+   ```
+
+   Um `--candidata <n> "<título>"` por aceita: o número dela na lista e o título curto. Com nenhuma aceita a Retro também está feita: rode sem `--candidata`. Rodar de novo substitui o que estava gravado.
+7. Para cada aceita, imprima uma linha neste formato fixo:
+
+   ```
+   Candidata: <slug>/<sessao>-onda<N> #<n>
+   ```
+
+   `<slug>` é o `slug` do `fluxo.py`, `<sessao>-onda<N>` é a onda desta Retro e `<n>` é o número da Candidata. A linha vai como está no pedido do `/ship` da correção, e o PR que entra na main com ela dá a Candidata por corrigida. Termine com a linha "só a Retro foi gravada; cada Candidata aceita vira `/ship` próprio, com a linha `Candidata:` no pedido".
 
 ## O que esta skill não faz
 
-- Não edita arquivo, não abre PR, não instala hook. Só propõe; quem escolhe é o humano.
+- Grava só a Retro (`estado_onda.py retro`): não edita arquivo de código, não abre PR, não instala hook. Quem escolhe as Candidatas é o humano.
 - Não revisa o código da onda (isso é o `onda-revisor`) nem a arquitetura (isso é o `/improve-codebase-architecture`).
 - Não é memória: não guarda o que aconteceu, muda o ambiente para não acontecer de novo. Achado que é só "lembrar da próxima vez" não entra nesta lista.
 - Não audita checks antigos: vê uma onda só. Check que dispara em código bom é sinal para remover, mas isso quem vê é quem roda o CI todo dia.

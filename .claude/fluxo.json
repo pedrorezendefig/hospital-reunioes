@@ -25,5 +25,67 @@
   "prd_do_leitor": {
     "marcador": "<!--\\s*demanda-vitta id=\"[^\"]*\"\\s*-->"
   },
-  "aviso_celular": true
+  "aviso_celular": true,
+  "raias": [
+    {
+      "id": "diretor",
+      "titulo": "Demanda do diretor",
+      "altura": 1.4,
+      "nos": [
+        {
+          "id": "pedido-app",
+          "x": 1.8,
+          "y": 0.5,
+          "w": 220,
+          "classe": "humano",
+          "titulo": "Pedido no app",
+          "sub": "o diretor pede pelo app",
+          "detalhe": "O diretor pede um ajuste ou conta um problema pelo app do hospital, sem abrir o GitHub. O pedido já sai com o que ele planejou.",
+          "comando": "app do hospital"
+        },
+        {
+          "id": "demanda",
+          "x": 5.4,
+          "y": 0.5,
+          "w": 220,
+          "classe": "auto",
+          "titulo": "Demanda",
+          "sub": "vira issue com o Selo de Demanda",
+          "detalhe": "O pedido vira uma issue com o Selo de Demanda, que acompanha a tarefa até ela estar em produção.",
+          "comando": "a issue nasce sozinha"
+        },
+        {
+          "id": "refino",
+          "x": 9,
+          "y": 0.5,
+          "w": 220,
+          "classe": "auto",
+          "skill": "triage",
+          "titulo": "/triage com Refino",
+          "sub": "o Pedro vê se dá para fazer",
+          "detalhe": "O Pedro lê a Demanda, diz se ela é viável e decide só o que é dele. A Demanda refinada entra pela porta A, quando é grande, ou pela B, quando é uma tarefa só.",
+          "comando": "/triage"
+        }
+      ],
+      "arestas": [
+        {
+          "de": "pedido-app",
+          "para": "demanda"
+        },
+        {
+          "de": "demanda",
+          "para": "refino"
+        },
+        {
+          "de": "refino",
+          "para": "porta",
+          "modo": "direita",
+          "rotulo": [
+            "entra pela",
+            "porta A ou pela B"
+          ]
+        }
+      ]
+    }
+  ]
 }
