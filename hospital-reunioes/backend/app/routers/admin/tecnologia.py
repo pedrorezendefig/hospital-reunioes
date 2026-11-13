@@ -818,6 +818,7 @@ async def listar_as_entregas(
     tipo: Literal["bug", "melhoria"] | None = None,
     origem: Literal["diretor", "vitta"] | None = None,
     responsavel: str | None = None,
+    projeto: Literal["hospital", "ana"] | None = None,
     corte: date | None = None,
     ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
@@ -831,8 +832,9 @@ async def listar_as_entregas(
     "O que foi entregue" nas mesmas 12 semanas, so as que tem entrega, a mais
     nova em cima, cada entrega com o Tamanho da entrega (issue #1703; Nao sera
     feita fica de fora). Os filtros `tipo`,
-    `origem` e `responsavel` (o id do usuario, ou o login do dono no GitHub
-    quando ele nao e usuario do app) combinam e valem para os tres. As opcoes
+    `origem`, `responsavel` (o id do usuario, ou o login do dono no GitHub
+    quando ele nao e usuario do app) e `projeto` (issue #1716, ADR 0093,
+    decisao 8) combinam e valem para os tres. As opcoes
     do Responsavel nao seguem o filtro, para o filtro ligado poder trocar.
 
     Com a semana de `corte` (AAAA-MM-DD, Ver semanas anteriores, issue #1704),
@@ -849,7 +851,7 @@ async def listar_as_entregas(
     """
     result = supabase.table(TABELA_DEMANDAS).select("*").is_("apagada_em", "null").execute()
     visiveis = [d for d in (result.data or []) if pode_ver(ator, d)]
-    filtros = tecnologia_entregas.Filtros(tipo=tipo, origem=origem, responsavel=responsavel)
+    filtros = tecnologia_entregas.Filtros(tipo=tipo, origem=origem, responsavel=responsavel, projeto=projeto)
     entregues = [d for d in visiveis if tecnologia_entregas.dia_da_entrega(d) is not None]
     nomes = _nomes(supabase, {responsavel_da_demanda(d) for d in entregues})
     opcoes = {

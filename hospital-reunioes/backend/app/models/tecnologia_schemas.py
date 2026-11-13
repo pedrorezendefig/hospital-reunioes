@@ -145,11 +145,12 @@ class TopoDasEntregasResponse(BaseModel):
 
 
 class EntregaDaSemanaResponse(BaseModel):
-    """O que saiu numa semana, como a previa do grafico mostra: o titulo e o
-    Tamanho da entrega. Sem numero de issue."""
+    """O que saiu numa semana, como a previa do grafico mostra: o titulo, o
+    Tamanho da entrega e o Projeto, o selo (issue #1716). Sem numero de issue."""
 
     titulo: str
     tamanho: Literal["P", "M", "G"]
+    projeto: Literal["hospital", "ana"] = "hospital"
 
 
 class SemanaDasEntregasResponse(BaseModel):
