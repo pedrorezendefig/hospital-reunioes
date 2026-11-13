@@ -82,7 +82,7 @@ import json
 import logging
 import os
 import unicodedata
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Literal, NoReturn
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
@@ -818,6 +818,7 @@ async def listar_as_entregas(
     tipo: Literal["bug", "melhoria"] | None = None,
     origem: Literal["diretor", "vitta"] | None = None,
     responsavel: str | None = None,
+    corte: date | None = None,
     ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
@@ -833,6 +834,11 @@ async def listar_as_entregas(
     `origem` e `responsavel` (o id do usuario, ou o login do dono no GitHub
     quando ele nao e usuario do app) combinam e valem para os tres. As opcoes
     do Responsavel nao seguem o filtro, para o filtro ligado poder trocar.
+
+    Com a semana de `corte` (AAAA-MM-DD, Ver semanas anteriores, issue #1704),
+    os `grupos` sao as 12 semanas antes dela, com os mesmos filtros. O
+    `proximo_corte` e o corte do bloco seguinte, ou nulo quando nao ha entrega
+    mais antiga.
 
     Diretor e Desenvolvedor recebem a mesma coisa: o numero e o link da issue
     nao saem daqui para ninguem (PRD #1689). A lista sai pelo `_para_a_lista`,
@@ -852,7 +858,8 @@ async def listar_as_entregas(
         if (chave := tecnologia_entregas.chave_do_responsavel(d))
     }
     agora = agora_utc()
-    grupos = tecnologia_entregas.lista_por_semana(visiveis, agora=agora, filtros=filtros)
+    grupos = tecnologia_entregas.lista_por_semana(visiveis, agora=agora, filtros=filtros, corte=corte)
+    seguinte = tecnologia_entregas.proximo_corte(visiveis, agora=agora, filtros=filtros, corte=corte)
     na_lista = {
         entrega["id"]: {**entrega, **_SO_DO_DESENVOLVEDOR_NAS_ENTREGAS}
         for entrega in _para_a_lista(supabase, [d for _, demandas in grupos for d in demandas], ator=ator)
@@ -869,6 +876,7 @@ async def listar_as_entregas(
             }
             for inicio, demandas in grupos
         ],
+        "proximo_corte": seguinte.isoformat() if seguinte else None,
         "responsaveis": [
             {"valor": valor, "nome": nome} for valor, nome in sorted(opcoes.items(), key=lambda par: par[1].casefold())
         ],

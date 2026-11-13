@@ -191,11 +191,14 @@ class GrupoDasEntregasResponse(BaseModel):
 
 class EntregasResponse(BaseModel):
     """A aba Entregas: o ritmo (o topo e as 12 semanas, issue #1701) e a lista
-    "O que foi entregue" por semana, a mais nova em cima (issue #1703)."""
+    "O que foi entregue" por semana, a mais nova em cima (issue #1703). O
+    `proximo_corte` e a semana de corte do bloco seguinte da lista, nulo quando
+    nao ha entrega mais antiga (issue #1704)."""
 
     topo: TopoDasEntregasResponse
     semanas: list[SemanaDasEntregasResponse]
     grupos: list[GrupoDasEntregasResponse]
+    proximo_corte: str | None = None
     responsaveis: list[ResponsavelDasEntregasResponse]
 
 
