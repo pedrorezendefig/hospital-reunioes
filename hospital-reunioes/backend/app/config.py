@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     # pelo mesmo cliente e pela mesma chave: o grill de negócio com o diretor
     # pede mais julgamento que o resto da IA de texto.
     llm_model_planejamento: str = "claude-opus-5-5"
+    # O agente de triagem da Ouvidoria (ADR 0087): lê cada caso e cada
+    # avaliação com comentário na chegada. Variável própria para trocar o
+    # modelo sem mexer no resto da IA de texto.
+    ouvidoria_agente_modelo: str = "claude-sonnet-5-5"
     # Transcrição de voz (issue #35): endpoint /audio/transcriptions do
     # OpenRouter, que fica só com isso: a API da Anthropic não transcreve
     # áudio. Prefixo `openai/` é a convenção do OpenRouter para o provedor.

@@ -30,7 +30,7 @@ from slowapi.util import get_remote_address
 from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
-from app.services import ouvidoria_acuse, ouvidoria_avaliacoes, ouvidoria_pontos
+from app.services import ouvidoria_acuse, ouvidoria_agente_triagem, ouvidoria_avaliacoes, ouvidoria_pontos
 from app.services.ouvidoria_contato import email_utilizavel
 from app.services.ouvidoria_taxonomia import (
     CATEGORIA_PENDENTE,
@@ -667,6 +667,9 @@ async def registrar_manifestacao_publica(
     # `com_teto`: esta é a única porta sem login, e o endereço é o que quem
     # preenche digitar (issue #1286).
     ouvidoria_acuse.acusar_recebimento(supabase, row, dt.datetime.now(tz=dt.UTC), tarefas, com_teto=True)
+    # O agente de triagem (issue #1624, ADR 0087) também sai depois da
+    # resposta: o protocolo não espera o modelo, e a falha dele não chega aqui.
+    ouvidoria_agente_triagem.agendar_caso(tarefas, supabase, row)
     return {campo: row.get(campo) for campo in _CAMPOS_RECIBO}
 
 
