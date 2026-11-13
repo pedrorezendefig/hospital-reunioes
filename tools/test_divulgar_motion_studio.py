@@ -76,3 +76,28 @@ def _portao(tmp_path: Path, fps: str) -> str:
 def test_portao_aceita_o_render_final_do_estudio_a_60_fps(tmp_path, fps, aprovado):
     prova = _portao(tmp_path, fps)
     assert ("REPROVADO" not in prova) is aprovado
+
+
+# O modo rápido (grill de 13/11/2026): o modelo de Demonstração, sem parada do Pedro, várias sessões em paralelo.
+def _modo_rapido() -> str:
+    texto = _texto()
+    return texto[texto.index("## Modo rápido: o vídeo pelo modelo") : texto.index("## Passo 1: o vídeo")]
+
+
+def test_entrada_pergunta_o_modo_quando_nenhuma_flag_responde():
+    texto = _texto()
+    entrada = texto[texto.index("## Entrada") : texto.index("## Onde cada coisa mora")]
+    for flag in ("--rapido", "--voz", "--completo"):
+        assert flag in entrada
+    assert "AskUserQuestion" in entrada
+    assert "**Rápido (Recomendado):**" in entrada
+
+
+def test_modo_rapido_sai_do_modelo_sem_parada_e_sem_rebuild_da_stack():
+    modo = _modo_rapido()
+    assert "modelos/demonstracao/montar.mjs" in modo
+    assert "--final --sub 2 --jpeg" in modo
+    assert "escolher_trilha.py" in modo
+    assert "gate-video.sh" in modo
+    assert "PARADA" not in modo
+    assert "Não rode o `apply.sh`" in modo
