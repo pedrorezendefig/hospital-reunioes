@@ -76,10 +76,12 @@ import { ArrowLeft, Loader2, Maximize2, MessageSquare, Plus, RefreshCw, Search, 
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Select } from "@/components/ui/Select";
+import { useTelaLarga } from "@/hooks/useTelaLarga";
 
 import { ChatDaTecnologia, Fala } from "./ChatDaTecnologia";
 import { ConversaDaDemanda } from "./ConversaDaDemanda";
 import { DocumentoDoCard } from "./DocumentoDoCard";
+import { QuadroDaTecnologia } from "./QuadroDaTecnologia";
 import { SeloDeEtapa } from "./SeloDeEtapa";
 import {
   AnexoDaDemanda,
@@ -102,6 +104,7 @@ import {
   CLASSIFICACAO_ROTULO,
   Classificacao,
   Demanda,
+  ENVIO_FALHOU,
   ETAPA_CLASSE,
   EtapaDemanda,
   ETAPA_ROTULO,
@@ -122,11 +125,13 @@ import {
 
 export const NOVA_CONVERSA = "Nova conversa";
 export const VOLTAR_PARA_A_LISTA = "Voltar às conversas";
+/** Na tela larga (issue #1642, ADR 0090): o pedido novo, no topo da aba, e a volta da Demanda aberta. */
+export const NOVO_PEDIDO = "Novo pedido";
+export const VOLTAR_AO_QUADRO = "Voltar ao quadro";
 export const AMPLIAR = "Ampliar";
 /** O link de uma Demanda que quem abriu não pode ver (issue #1586): sem título nem número. */
 export const SEM_ACESSO = "Você não tem acesso a esta Demanda";
 const AMPLIAR_EXPLICADO = "Abrir este pedido em tela cheia";
-export const ENVIO_FALHOU = "Envio falhou";
 export const REENVIAR = "Reenviar";
 export const DESIGNACAO_FALHOU = "Designação falhou";
 export const DESIGNAR_DE_NOVO = "Designar de novo";
@@ -825,6 +830,8 @@ export function ConversasDaTecnologia({
   /** A Demanda que o aviso do sino pediu para abrir. */
   demandaInicial?: string | null;
 }) {
+  /** A partir de 1280px a aba é o Quadro, e a Demanda abre na largura toda (issue #1642, ADR 0090). */
+  const largo = useTelaLarga();
   const [demandas, setDemandas] = useState<Demanda[] | null>(null);
   const [erroDaLista, setErroDaLista] = useState<string | null>(null);
   /** A Demanda clicada; `null` é a conversa nova. */
@@ -1038,11 +1045,46 @@ export function ConversasDaTecnologia({
     setNaTela("conversa");
   }, [demandaInicial, demandas, filtro, desenvolvedor, filtroAtivo, abrir]);
 
-  /** A lista recolhe na tela larga só com o pedido ampliado (issue #1593, que reverteu a #1551). */
-  const recolhida = naTela === "conversa" && aberta !== null && ampliada;
+  /**
+   * A lista recolhe na tela média só com o pedido ampliado (issue #1593, que
+   * reverteu a #1551). Na tela larga, tudo o que se abre a partir do Quadro
+   * (a Demanda, o Novo pedido, o aviso de sem acesso) ocupa a largura toda.
+   */
+  const recolhida = naTela === "conversa" && (largo || (aberta !== null && ampliada));
+  /** Na tela larga o Quadro sai de cena quando algo abre, e o Assistente só monta quando aberto. */
+  const quadroAVista = largo && naTela === "lista";
+
+  /** A falha e o carregando, os mesmos na lista e no Quadro. */
+  const estadoDaLista = (
+    <>
+      {erroDaLista && (
+        <p role="alert" className="px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+          {erroDaLista}
+        </p>
+      )}
+      {demandas === null && !erroDaLista && (
+        <p role="status" className="flex items-center gap-2 px-1 text-xs text-text-secondary">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          Carregando as conversas...
+        </p>
+      )}
+    </>
+  );
 
   return (
     <div className="space-y-4">
+      {quadroAVista && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => abrir(null)}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[38px] rounded-xl bg-primary text-white text-sm font-semibold transition-opacity hover:opacity-90"
+          >
+            <Plus className="w-4 h-4" />
+            {NOVO_PEDIDO}
+          </button>
+        </div>
+      )}
       <section
         role="region"
         aria-label="Filtros da lista"
@@ -1061,14 +1103,16 @@ export function ConversasDaTecnologia({
             />
           </div>
           {desenvolvedor && <RecorteDaLista valor={filtro} onMudar={setFiltro} />}
-          <button
-            type="button"
-            onClick={() => abrir(null)}
-            className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[38px] rounded-xl bg-primary text-white text-sm font-semibold transition-opacity hover:opacity-90"
-          >
-            <Plus className="w-4 h-4" />
-            {NOVA_CONVERSA}
-          </button>
+          {!largo && (
+            <button
+              type="button"
+              onClick={() => abrir(null)}
+              className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[38px] rounded-xl bg-primary text-white text-sm font-semibold transition-opacity hover:opacity-90"
+            >
+              <Plus className="w-4 h-4" />
+              {NOVA_CONVERSA}
+            </button>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Select
@@ -1116,21 +1160,17 @@ export function ConversasDaTecnologia({
       </section>
 
       <div
-        className={`md:grid ${recolhida ? "md:grid-cols-1" : "md:grid-cols-[24rem_minmax(0,1fr)]"} md:gap-6 md:items-start`}
+        className={`md:grid ${recolhida || largo ? "md:grid-cols-1" : "md:grid-cols-[24rem_minmax(0,1fr)]"} md:gap-6 md:items-start`}
       >
         <div className={`${naTela === "lista" ? "" : "hidden"} ${recolhida ? "md:hidden" : "md:block"}`}>
+          {largo ? (
+            <div className="space-y-3">
+              {estadoDaLista}
+              {demandas !== null && <QuadroDaTecnologia demandas={demandas} onAbrir={(demanda) => abrir(demanda)} />}
+            </div>
+          ) : (
           <nav aria-label="Suas conversas" className="md:max-h-[calc(100vh-18rem)] md:overflow-y-auto p-1 -m-1">
-            {erroDaLista && (
-              <p role="alert" className="px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
-                {erroDaLista}
-              </p>
-            )}
-            {demandas === null && !erroDaLista && (
-              <p role="status" className="flex items-center gap-2 px-1 text-xs text-text-secondary">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Carregando as conversas...
-              </p>
-            )}
+            {estadoDaLista}
             {demandas !== null && demandas.length === 0 && (
               <p className="px-1 text-sm text-text-secondary">{LISTA_VAZIA}</p>
             )}
@@ -1150,8 +1190,10 @@ export function ConversasDaTecnologia({
               </ul>
             )}
           </nav>
+          )}
         </div>
 
+        {!quadroAVista && (
         <div
           role="region"
           aria-label="Conversa aberta"
@@ -1160,15 +1202,16 @@ export function ConversasDaTecnologia({
           <button
             type="button"
             onClick={() => {
-              // Ampliado (só na tela larga), o Voltar traz a lista e o pedido segue aberto ao lado.
-              if (!recolhida) escreverNoEndereco(null);
+              // Ampliado na tela média, o Voltar traz a lista e o pedido segue aberto
+              // ao lado. Na tela larga, o Quadro volta e a Demanda sai do endereço.
+              if (largo || !recolhida) escreverNoEndereco(null);
               setSemAcesso(false);
               setNaTela("lista");
             }}
             className={`${recolhida || semAcesso ? "" : "md:hidden"} inline-flex items-center gap-1.5 text-sm font-semibold text-primary`}
           >
             <ArrowLeft className="w-4 h-4" />
-            {VOLTAR_PARA_A_LISTA}
+            {largo ? VOLTAR_AO_QUADRO : VOLTAR_PARA_A_LISTA}
           </button>
           {aberta && !recolhida && (
             <button
@@ -1235,6 +1278,7 @@ export function ConversasDaTecnologia({
             )}
           </div>
         </div>
+        )}
       </div>
     </div>
   );

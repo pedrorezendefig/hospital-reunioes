@@ -1487,3 +1487,45 @@ describe("O endereço acompanha o card aberto (issue #1586)", () => {
     expect(screen.getByRole("region", { name: "Conversa aberta" }).className).not.toMatch(/(^|\s)hidden(\s|$)/);
   });
 });
+
+describe("O Quadro na tela larga (issue #1642, ADR 0090)", () => {
+  /** A tela a partir de 1280px: o `matchMedia` que o jsdom não tem, dublado. */
+  function telaLarga(larga = true) {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((consulta: string) => ({
+        matches: larga && consulta === "(min-width: 1280px)",
+        media: consulta,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+  }
+
+  const quadro = () => screen.getByRole("region", { name: "Quadro" });
+  const colunaDe = (etapa: string) => within(quadro()).getByRole("region", { name: etapa });
+
+  const NO_QUADRO = [
+    demanda("q-1", "Conversa que ficou no meio", { numero: 41 }),
+    demanda("q-2", "Escala some no domingo", { numero: 40 }),
+    demanda("q-3", "Aviso da ata por e-mail", { etapa: "em_analise", tem_vinculo: true, numero: 39 }),
+    demanda("q-4", "Relatório de leitos", { etapa: "em_desenvolvimento", tem_vinculo: true, numero: 38 }),
+    demanda("q-5", "Ouvidoria no celular", { etapa: "em_producao", versao: "v0.207.0", tem_vinculo: true, numero: 37 }),
+  ];
+
+  it("mostra as cinco colunas com o nome da Etapa e a contagem, no lugar da lista", async () => {
+    telaLarga();
+    montar((url) => (url === LISTA ? { status: 200, corpo: NO_QUADRO } : { status: 404, corpo: {} }));
+
+    await within(await screen.findByRole("region", { name: "Quadro" })).findByText("Conversa que ficou no meio");
+    const titulos = within(quadro())
+      .getAllByRole("heading", { level: 3 })
+      .map((h) => h.textContent);
+    expect(titulos).toEqual(["Registrada2", "Em análise1", "Planejada0", "Em desenvolvimento1", "Entregue1"]);
+    expect(within(colunaDe("Registrada")).getByText("Escala some no domingo")).toBeTruthy();
+    expect(within(colunaDe("Entregue")).getByText("Ouvidoria no celular")).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "Suas conversas" })).toBeNull();
+    // O Assistente saiu da tela inicial (ADR 0090, decisão 6).
+    expect(screen.queryByText(ABERTURA)).toBeNull();
+  });
+});

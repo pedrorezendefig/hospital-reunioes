@@ -9,24 +9,31 @@
  * (ADR 0084, decisão 8) há duas abas: Conversas, o chat, e Entregas, o retrato
  * do que foi entregue. O gate de verdade é o `require_super_admin` do backend;
  * a sidebar apenas esconde o item.
+ *
+ * Na tela larga, a partir de 1280px, a aba Conversas se chama Quadro e mostra
+ * as Demandas em colunas pela Etapa (issue #1642, ADR 0090, decisão 1). No
+ * celular ela continua a lista de antes, com o nome de antes.
  */
 
 import { useState } from "react";
 import { Cpu } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useTelaLarga } from "@/hooks/useTelaLarga";
 
 import { ConversasDaTecnologia } from "./ConversasDaTecnologia";
 import { EntregasDaTecnologia } from "./EntregasDaTecnologia";
 
 type Aba = "conversas" | "entregas";
-const ABAS: { id: Aba; rotulo: string }[] = [
-  { id: "conversas", rotulo: "Conversas" },
-  { id: "entregas", rotulo: "Entregas" },
-];
 
 export function TecnologiaModulo({ demandaInicial = null }: { demandaInicial?: string | null }) {
   const { token } = useAuth();
+  const largo = useTelaLarga();
+  const rotuloDasConversas = largo ? "Quadro" : "Conversas";
+  const abas: { id: Aba; rotulo: string }[] = [
+    { id: "conversas", rotulo: rotuloDasConversas },
+    { id: "entregas", rotulo: "Entregas" },
+  ];
   const [aba, setAba] = useState<Aba>("conversas");
   /** As Entregas só pedem ao servidor quando abertas pela primeira vez. */
   const [entregasAbertas, setEntregasAbertas] = useState(false);
@@ -51,7 +58,7 @@ export function TecnologiaModulo({ demandaInicial = null }: { demandaInicial?: s
       </div>
 
       <div className="flex flex-wrap gap-1 border-b border-border" role="tablist" aria-label="Tecnologia">
-        {ABAS.map((a) => (
+        {abas.map((a) => (
           <button
             key={a.id}
             type="button"
@@ -68,7 +75,7 @@ export function TecnologiaModulo({ demandaInicial = null }: { demandaInicial?: s
       </div>
 
       {/* A conversa fica montada atrás da aba: trocar de aba não perde o que foi escrito. */}
-      <div role="tabpanel" aria-label="Conversas" hidden={aba !== "conversas"}>
+      <div role="tabpanel" aria-label={rotuloDasConversas} hidden={aba !== "conversas"}>
         <ConversasDaTecnologia token={token} demandaInicial={demandaInicial} />
       </div>
       {entregasAbertas && (

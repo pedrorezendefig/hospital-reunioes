@@ -137,6 +137,9 @@ export function nomeDoNumero(demanda: Demanda): string | null {
 /** O selo da lista e a guarda da seção do Documento do card (issue #1559). */
 export const TEM_DEMONSTRACAO = "Tem demonstração";
 
+/** O selo do card que não chegou ao GitHub, na lista e no Quadro (issue #1535). */
+export const ENVIO_FALHOU = "Envio falhou";
+
 /** O link da Demonstração que a tela aceita desenhar: só `https`. */
 export function linkDaDemonstracao(demanda: Demanda): string | null {
   const url = demanda.demonstracao_url;
