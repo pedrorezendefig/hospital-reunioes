@@ -6,7 +6,7 @@
 -- convertendo a avaliacao em caso ou arquivando a revisao com um motivo
 -- curto (secao 4.5 da especificacao da Diretoria). As colunas do desfecho,
 -- de quem revisou e de quando ja existem desde a migration 140; falta onde
--- guardar o motivo do arquivo. Duas mudancas:
+-- guardar o motivo do arquivo. Tres mudancas:
 --
 --   1. `revisao_motivo`: o motivo curto de quem arquivou, ate 200
 --      caracteres. Obrigatorio quando o desfecho e `arquivada`, e so nele:
@@ -14,6 +14,11 @@
 --
 --   2. Um indice parcial para o que ainda espera revisao: a marca do agente
 --      sem desfecho. E o filtro Para revisar da aba e o contador do Painel.
+--
+--   3. Um indice por `criada_em, id`: a aba abre lendo a faixa do periodo
+--      (30 dias ou todo o historico) em todos os pontos, ordenada por
+--      `criada_em, id`. Os indices de antes comecam por `ponto_id` ou sao
+--      parciais, e a tabela cresce pelo canal publico sem teto.
 --
 -- A marca do agente (`revisar`, `revisar_motivo`) fica como esta depois do
 -- desfecho: e o historico do que o agente apontou. "Para revisar" e a marca
@@ -45,6 +50,8 @@ COMMENT ON COLUMN ouvidoria_avaliacoes.revisao_motivo IS
 CREATE INDEX IF NOT EXISTS idx_ouvidoria_avaliacoes_para_revisar
   ON ouvidoria_avaliacoes(criada_em)
   WHERE revisar AND revisao_desfecho IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_ouvidoria_avaliacoes_criada_em ON ouvidoria_avaliacoes(criada_em, id);
 
 
 -- recibo: a subida espera este número no /api/health (issue #969)

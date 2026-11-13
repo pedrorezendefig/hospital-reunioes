@@ -678,3 +678,28 @@ class TestOKitDeConhecimentoDizOComportamentoNovo:
         assert "não tem para quem responder" in secao
         assert "Arquivar revisão" in secao
         assert "motivo curto" in secao
+
+
+class TestAMigrationDaAba:
+    """A aba abre lendo as avaliações por faixa de `criada_em`, ordenadas por
+    `criada_em, id`, em todos os pontos (30 dias ou todo o histórico). A tabela
+    cresce pelo canal público sem teto, então a 144 dá a essa consulta um
+    índice próprio; os de antes começam por `ponto_id` ou são parciais."""
+
+    def _ddl(self) -> str:
+        caminho = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "supabase",
+            "migrations",
+            "144_ouvidoria_motivo_do_arquivo_da_revisao.sql",
+        )
+        with open(caminho, encoding="utf-8") as f:
+            return " ".join(f.read().lower().split())
+
+    def test_a_faixa_de_datas_em_todos_os_pontos_tem_indice(self):
+        assert (
+            "create index if not exists idx_ouvidoria_avaliacoes_criada_em on ouvidoria_avaliacoes(criada_em, id);"
+            in self._ddl()
+        )
