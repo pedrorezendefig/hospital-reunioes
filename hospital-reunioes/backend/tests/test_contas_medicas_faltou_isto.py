@@ -332,7 +332,9 @@ class _GithubFalso:
         self.issues: list[dict[str, Any]] = []
         self.falha: Exception | None = None
 
-    def __call__(self, *, titulo: str, corpo: str, labels: list[str], assignees=None) -> dict[str, Any]:
+    def __call__(self, *, projeto: str, titulo: str, corpo: str, labels: list[str], assignees=None) -> dict[str, Any]:
+        # O pedido de Contas medicas vai sempre ao Hospital (issue #1713).
+        assert projeto == "hospital", f"o Faltou isto abriu a issue no Projeto {projeto!r}"
         if self.falha is not None:
             raise self.falha
         self.issues.append({"titulo": titulo, "corpo": corpo, "labels": labels, "assignees": assignees})

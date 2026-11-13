@@ -42,11 +42,13 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.services import github_client, tecnologia_avisos
+from app.services.github_client import PROJETO_HOSPITAL
 from app.services.registro_do_deploy import subida_de_cada_issue
 from app.services.tecnologia import (
     ESTADOS_ABERTOS,
     ESTADOS_FECHADOS,
     TABELA_DEMANDAS,
+    projeto_da_demanda,
 )
 from app.services.tecnologia_vinculo import (
     ETAPA_EM_PRODUCAO,
@@ -188,14 +190,20 @@ def responsavel_da_foto(supabase, foto: dict[str, Any]) -> str | None:
     return str(linhas[0]["id"]) if linhas else None
 
 
-def demanda_vinculada(supabase, numero: int) -> dict[str, Any] | None:
-    """A Demanda que carrega este numero de issue, ou `None`.
+def demanda_vinculada(supabase, projeto: str, numero: int) -> dict[str, Any] | None:
+    """A Demanda deste Projeto que carrega este numero de issue, ou `None`.
+
+    A chave e projeto mais numero (issue #1713, ADR 0093, decisao 2): a issue
+    #50 da Ana e a #50 do Hospital sao Demandas diferentes, e achar so pelo
+    numero poria o evento de um repositorio na Demanda do outro.
 
     `None` e resposta, e nao erro: o repositorio tem centenas de issues e um
     punhado de Demandas vinculadas, entao a esmagadora maioria das entregas do
     webhook cai aqui e termina em 2xx sem escrever nada.
     """
-    result = supabase.table(TABELA_DEMANDAS).select("*").eq("github_issue_numero", numero).execute()
+    result = (
+        supabase.table(TABELA_DEMANDAS).select("*").eq("projeto", projeto).eq("github_issue_numero", numero).execute()
+    )
     linhas = result.data or []
     return linhas[0] if linhas else None
 
@@ -216,10 +224,10 @@ def _fatos_anteriores(demanda: dict[str, Any]) -> tuple[list[int], int | None]:
     return abertos, fechada if isinstance(fechada, int) else None
 
 
-def _pr_leva_subida(pr: int) -> bool:
+def _pr_leva_subida(pr: int, projeto: str) -> bool:
     """Se o PR mergeado toca no app; "nao sei" vale "nao" (`sincronizar_pelo_pr`)."""
     try:
-        return github_client.pr_toca_o_app(pr)
+        return github_client.pr_toca_o_app(pr, projeto=projeto)
     except Exception:
         logger.warning(
             "[tecnologia] Falha ao ler os arquivos do PR #%s; o fechamento conta como sem subida.",
@@ -246,7 +254,7 @@ def sincronizar_pelo_pr(supabase, demanda: dict[str, Any], *, pr: int, acao: str
     chegaria. Se a leitura dos arquivos falhar, vale o mesmo: a issue conta
     como fechada sem PR (ADR 0069, decisao 5).
     """
-    leva_subida = mergeado and _pr_leva_subida(pr)
+    leva_subida = mergeado and _pr_leva_subida(pr, projeto_da_demanda(demanda))
 
     def _ajustar(abertos: list[int], fechada: int | None) -> tuple[list[int], int | None]:
         abertos = [n for n in abertos if n != pr]
@@ -348,9 +356,12 @@ def sincronizar_demanda(
     if str(demanda.get("estado") or "") in ESTADOS_FECHADOS or demanda.get("apagada_em"):
         return False
     numero = int(numero)
+    # O repositorio de onde a issue e lida e o do Projeto da Demanda (issue
+    # #1713): o mesmo numero no outro repositorio e outra issue.
+    projeto = projeto_da_demanda(demanda)
 
-    dados = github_client.ler_issue(numero)
-    foto_do_github = github_client.montar_foto(dados, github_client.ler_sub_issues(numero))
+    dados = github_client.ler_issue(numero, projeto=projeto)
+    foto_do_github = github_client.montar_foto(dados, github_client.ler_sub_issues(numero, projeto=projeto))
     # O Responsavel e derivado do dono da issue, como a Etapa das labels
     # (issue #1534): entra no cache e na comparacao do cache igual.
     responsavel_id = responsavel_da_foto(supabase, foto_do_github)
@@ -427,8 +438,9 @@ def _escrever(
     return bool(consulta.execute().data)
 
 
-def _prs_abertos_do_lote() -> list[dict[str, Any]] | None:
-    """Os PRs abertos do repositorio, lidos uma vez para o lote inteiro.
+def _prs_abertos_do_lote(projeto: str) -> list[dict[str, Any]] | None:
+    """Os PRs abertos do repositorio do Projeto, lidos uma vez para o lote
+    inteiro.
 
     `None` quando a leitura falha, e nao lista vazia: "nao consegui ler" virando
     "nao ha PR aberto" tiraria o fato de toda Demanda numa queda do GitHub, e o
@@ -436,10 +448,12 @@ def _prs_abertos_do_lote() -> list[dict[str, Any]] | None:
     Demanda fica com o fato que a foto ja tinha, e o lote segue.
     """
     try:
-        return github_client.ler_prs_abertos()
+        return github_client.ler_prs_abertos(projeto=projeto)
     except Exception:
         logger.warning(
-            "[tecnologia] Falha ao ler os PRs abertos; a reconciliação segue com o fato de PR que cada foto já tinha.",
+            "[tecnologia] Falha ao ler os PRs abertos do Projeto %s; a reconciliação segue com o fato de PR que "
+            "cada foto já tinha.",
+            projeto,
             exc_info=True,
         )
         return None
@@ -452,6 +466,10 @@ def marcar_em_producao(supabase, *, versao: str, data: str, issues: list[int]) -
     fecham. Cada Demanda vinculada a uma delas passa por `_carimbar_em_producao`;
     as outras issues (a esmagadora maioria) nao tem Demanda nenhuma atras.
 
+    A subida e do Hospital, e os numeros sao issues do repositorio dele: so a
+    Demanda do Hospital e achada (issue #1713). A Ana nao tem subida, e na Ana a
+    ultima Etapa e Entregue (ADR 0093, decisao 6).
+
     Falha e de UMA Demanda, como no lote de hora em hora: a seguinte ainda e
     marcada, e a contagem diz quantas ficaram para tras.
     """
@@ -460,7 +478,7 @@ def marcar_em_producao(supabase, *, versao: str, data: str, issues: list[int]) -
     for numero in sorted(set(issues)):
         demanda = None
         try:
-            demanda = demanda_vinculada(supabase, numero)
+            demanda = demanda_vinculada(supabase, PROJETO_HOSPITAL, numero)
             if demanda is not None and _carimbar_em_producao(supabase, demanda, versao=versao, data=data):
                 marcadas += 1
         except Exception:
@@ -555,10 +573,15 @@ def reconciliar_em_producao(supabase) -> dict[str, int]:
 
     O carimbo e o mesmo do webhook (`_carimbar_em_producao`), e por isso a
     mesma idempotencia.
+
+    So a Demanda do Hospital entra (issue #1713): o `history.json` e do
+    Hospital, e a issue #50 que ele lista nao e a #50 da Ana, que nunca chega a
+    Em producao (ADR 0093, decisao 6).
     """
     result = (
         supabase.table(TABELA_DEMANDAS)
         .select("*")
+        .eq("projeto", PROJETO_HOSPITAL)
         .eq("etapa", ETAPA_ENTREGUE)
         .in_("estado", list(ESTADOS_ABERTOS))
         .not_.is_("github_issue_numero", "null")
@@ -586,7 +609,8 @@ def reconciliar_em_producao(supabase) -> dict[str, int]:
             continue
         versao, data = subida
         try:
-            if not _subiu_depois_do_fechamento(data, github_client.ler_issue(numero).get("closed_at")):
+            fechada_em = github_client.ler_issue(numero, projeto=PROJETO_HOSPITAL).get("closed_at")
+            if not _subiu_depois_do_fechamento(data, fechada_em):
                 continue
             if _carimbar_em_producao(supabase, demanda, versao=versao, data=data):
                 marcadas += 1
@@ -622,12 +646,18 @@ def reconciliar_vinculos(supabase) -> dict[str, int]:
         .execute()
     )
     demandas = result.data or []
-    prs_abertos = _prs_abertos_do_lote() if demandas else None
+    # Uma leitura por Projeto que tem Demanda no lote (issue #1713): o PR da Ana
+    # que fecha a #50 fecha a #50 da Ana, e nao a do Hospital.
+    prs_por_projeto: dict[str, list[dict[str, Any]] | None] = {}
 
     mudadas = 0
     falhas = 0
     for demanda in demandas:
         try:
+            projeto = projeto_da_demanda(demanda)
+            if projeto not in prs_por_projeto:
+                prs_por_projeto[projeto] = _prs_abertos_do_lote(projeto)
+            prs_abertos = prs_por_projeto[projeto]
             ajustar = None
             if prs_abertos is not None:
                 numero = demanda.get("github_issue_numero")

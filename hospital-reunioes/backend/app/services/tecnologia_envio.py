@@ -166,7 +166,15 @@ def enviar(
 
     titulo = titulo_da_issue(demanda.get("titulo"))
     try:
-        dados = github_client.criar_issue(titulo=titulo, corpo=corpo(titulo), labels=labels, assignees=assignees)
+        # O "Criar o card" e do Assistente, que so cria no Hospital (ADR 0093,
+        # decisao 5): a Demanda que ele envia e do Hospital, o default da coluna.
+        dados = github_client.criar_issue(
+            projeto=github_client.PROJETO_HOSPITAL,
+            titulo=titulo,
+            corpo=corpo(titulo),
+            labels=labels,
+            assignees=assignees,
+        )
         numero = dados.get("number")
         if not isinstance(numero, int):
             # A issue pode ter nascido; o Vinculo, nao. Sem o numero nao ha par,

@@ -7,8 +7,12 @@ modulo importa `httpx` para falar com o GitHub.
 
 Tres invariantes que o resto do app herda:
 
-- **So este repositorio.** O repositorio vem de `GITHUB_INTEGRACAO_REPO` e
-  entra no caminho da URL uma vez so, aqui.
+- **So os repositorios dos Projetos** (issue #1713, ADR 0093, decisao 2). O
+  do Hospital vem de `GITHUB_INTEGRACAO_REPO` e o da Ana de
+  `GITHUB_INTEGRACAO_REPO_ANA`. Toda chamada que mexe numa issue ou num PR
+  recebe o Projeto, e o repositorio entra no caminho da URL uma vez so, aqui.
+  A leitura do codigo, o `history.json` e a lista das issues fechadas sao do
+  Hospital, o unico Projeto com o app e a subida.
 - **Leitura do codigo so com GET** (issue #1385, ADR 0077, decisao 5): o
   agente da aba le arquivo, pasta, busca e issues abertas por
   `ler_do_repositorio`, `buscar_no_codigo` e `listar_issues_abertas`, e
@@ -62,7 +66,7 @@ _VERSAO_DA_API = "2022-11-28"
 
 
 class GithubNaoConfiguradoError(RuntimeError):
-    """Falta `GITHUB_INTEGRACAO_TOKEN` ou `GITHUB_INTEGRACAO_REPO`."""
+    """Falta `GITHUB_INTEGRACAO_TOKEN` ou o repositorio do Projeto."""
 
 
 class GithubIndisponivelError(RuntimeError):
@@ -73,22 +77,57 @@ class IssueNaoEncontradaError(RuntimeError):
     """O numero pedido nao existe no repositorio da integracao."""
 
 
-def integracao_configurada() -> bool:
-    """Se as duas variaveis estao de pe.
+# O Projeto da Demanda (issue #1713, ADR 0093, decisoes 1 e 2): o Aplicativo
+# do Hospital ou a Ana. E a mesma lista do CHECK da migration 145.
+PROJETO_HOSPITAL = "hospital"
+PROJETO_ANA = "ana"
+PROJETOS: tuple[str, ...] = (PROJETO_HOSPITAL, PROJETO_ANA)
+
+
+def repositorio_do_projeto(projeto: str) -> str:
+    """O `dono/repositorio` do Projeto, ou "" quando a variavel dele esta vazia
+    (a Ana desligada). Projeto fora da lista tambem e "": nunca cai no Hospital
+    por engano."""
+    if projeto == PROJETO_HOSPITAL:
+        return settings.github_integracao_repo or ""
+    if projeto == PROJETO_ANA:
+        return settings.github_integracao_repo_ana or ""
+    return ""
+
+
+def projeto_do_repositorio(nome: object) -> str | None:
+    """O Projeto cujo repositorio configurado e este nome, ou `None`.
+
+    E a traducao do webhook: o `repository.full_name` da entrega vira o Projeto
+    da Demanda. Sem diferenca de maiuscula, como o GitHub. Repositorio vazio
+    nao casa com nada, e e assim que a Ana desligada descarta a entrega dela.
+    """
+    alvo = str(nome or "").strip().lower()
+    if not alvo:
+        return None
+    for projeto in PROJETOS:
+        repositorio = repositorio_do_projeto(projeto)
+        if repositorio and repositorio.lower() == alvo:
+            return projeto
+    return None
+
+
+def integracao_configurada(projeto: str = PROJETO_HOSPITAL) -> bool:
+    """Se o token e o repositorio do Projeto estao de pe.
 
     A tela pergunta isto ANTES de desenhar os controles: um campo de vincular
     que so descobre no clique que a integracao nao existe faz a pessoa digitar
     o numero a toa.
     """
-    return bool(settings.github_integracao_token and settings.github_integracao_repo)
+    return bool(settings.github_integracao_token and repositorio_do_projeto(projeto))
 
 
-def _exigir_configuracao() -> tuple[str, str]:
-    if not integracao_configurada():
+def _exigir_configuracao(projeto: str) -> tuple[str, str]:
+    if not integracao_configurada(projeto):
         raise GithubNaoConfiguradoError(
-            "GITHUB_INTEGRACAO_TOKEN e GITHUB_INTEGRACAO_REPO precisam estar configurados no ambiente"
+            f"GITHUB_INTEGRACAO_TOKEN e o repositorio do Projeto {projeto!r} precisam estar configurados no ambiente"
         )
-    return settings.github_integracao_token, settings.github_integracao_repo
+    return settings.github_integracao_token, repositorio_do_projeto(projeto)
 
 
 def _headers(token: str) -> dict[str, str]:
@@ -99,7 +138,7 @@ def _headers(token: str) -> dict[str, str]:
     }
 
 
-def _chamar(metodo: str, caminho: str, *, json: dict | None = None, no_repositorio: bool = True) -> Any:
+def _chamar(metodo: str, caminho: str, *, projeto: str, json: dict | None = None, no_repositorio: bool = True) -> Any:
     """Uma chamada a API, com a traducao de erro da casa.
 
     O 404 e o unico status que vira excecao PROPRIA: ele e uma resposta ("esse
@@ -107,7 +146,7 @@ def _chamar(metodo: str, caminho: str, *, json: dict | None = None, no_repositor
     resto (401 de token vencido, 403 de permissao, 5xx, timeout) e ausencia de
     resposta, e a pessoa precisa saber que o app nao conseguiu conferir.
     """
-    token, repo = _exigir_configuracao()
+    token, repo = _exigir_configuracao(projeto)
     # A busca de codigo e a unica rota fora de `/repos/{repo}`: ela recebe o
     # repositorio dentro da consulta (`buscar_no_codigo`).
     url = f"{BASE_URL}/repos/{repo}{caminho}" if no_repositorio else f"{BASE_URL}{caminho}"
@@ -170,8 +209,8 @@ _FECHAMENTO = re.compile(
 )
 
 
-def issues_que_o_corpo_fecha(corpo: str | None) -> list[int]:
-    """As issues DESTE repositorio que o corpo de um PR fecha, em ordem.
+def issues_que_o_corpo_fecha(corpo: str | None, *, projeto: str) -> list[int]:
+    """As issues do repositorio do Projeto que o corpo de um PR fecha, em ordem.
 
     E a mesma leitura para os dois gatilhos (o webhook `pull_request` e a
     reconciliacao), e por isso mora aqui: lida de dois jeitos, a issue que o
@@ -181,7 +220,7 @@ def issues_que_o_corpo_fecha(corpo: str | None) -> list[int]:
     Referencia a outro repositorio (`outra-pessoa/repo#673`) nao conta: o
     numero e de la, e a issue #673 daqui nao tem nada com isso.
     """
-    repo = (settings.github_integracao_repo or "").lower()
+    repo = repositorio_do_projeto(projeto).lower()
     numeros: list[int] = []
     for outro_repo, numero in _FECHAMENTO.findall(corpo or ""):
         if outro_repo and outro_repo.lower() != repo:
@@ -191,7 +230,7 @@ def issues_que_o_corpo_fecha(corpo: str | None) -> list[int]:
     return numeros
 
 
-def ler_prs_abertos() -> list[dict[str, Any]]:
+def ler_prs_abertos(*, projeto: str) -> list[dict[str, Any]]:
     """Os PRs abertos do repositorio, cada um com as issues que ele fecha.
 
     Uma leitura so para o lote inteiro da reconciliacao (issue #1064), e nao
@@ -200,11 +239,11 @@ def ler_prs_abertos() -> list[dict[str, Any]]:
     repositorio; um PR alem dela so perde o fato "PR aberto" no lote, e o
     webhook continua cobrindo.
     """
-    dados = _chamar("GET", "/pulls?state=open&per_page=100")
+    dados = _chamar("GET", "/pulls?state=open&per_page=100", projeto=projeto)
     if not isinstance(dados, list):
         raise GithubIndisponivelError("GitHub respondeu a lista de PRs fora do formato")
     return [
-        {"numero": pr.get("number"), "fecha": issues_que_o_corpo_fecha(pr.get("body"))}
+        {"numero": pr.get("number"), "fecha": issues_que_o_corpo_fecha(pr.get("body"), projeto=projeto)}
         for pr in dados
         if isinstance(pr, dict) and isinstance(pr.get("number"), int)
     ]
@@ -219,7 +258,7 @@ PASTA_DO_APP = "hospital-reunioes/"
 _PAGINAS_DE_ARQUIVOS = 30
 
 
-def pr_toca_o_app(numero: int) -> bool:
+def pr_toca_o_app(numero: int, *, projeto: str) -> bool:
     """Se o PR mexe em algum arquivo do app, e por isso leva uma subida
     (revisao do PR #1100, ADR 0069, decisao 5).
 
@@ -228,7 +267,7 @@ def pr_toca_o_app(numero: int) -> bool:
     quem chama decide o que "nao sei" quer dizer.
     """
     for pagina in range(1, _PAGINAS_DE_ARQUIVOS + 1):
-        dados = _chamar("GET", f"/pulls/{numero}/files?per_page=100&page={pagina}")
+        dados = _chamar("GET", f"/pulls/{numero}/files?per_page=100&page={pagina}", projeto=projeto)
         if not isinstance(dados, list):
             raise GithubIndisponivelError("GitHub respondeu os arquivos do PR fora do formato")
         if any(isinstance(a, dict) and str(a.get("filename") or "").startswith(PASTA_DO_APP) for a in dados):
@@ -254,7 +293,7 @@ def ler_historico_de_deploys() -> list[dict[str, Any]]:
     arquivo que nao conseguiu ler.
     """
     try:
-        dados = _chamar("GET", f"/contents/{CAMINHO_DO_HISTORICO}?ref=main")
+        dados = _chamar("GET", f"/contents/{CAMINHO_DO_HISTORICO}?ref=main", projeto=PROJETO_HOSPITAL)
     except IssueNaoEncontradaError as exc:
         raise GithubIndisponivelError("O history.json nao esta na main") from exc
     if not isinstance(dados, dict) or dados.get("encoding") != "base64" or not isinstance(dados.get("content"), str):
@@ -287,7 +326,7 @@ def ler_do_repositorio(caminho: str) -> str | list[str]:
     Pela API de conteudo, so GET. Arquivo que nao e texto (imagem, binario)
     volta como indisponivel: o agente segue sem ele.
     """
-    dados = _chamar("GET", f"/contents/{quote(_caminho_do_repositorio(caminho))}?ref=main")
+    dados = _chamar("GET", f"/contents/{quote(_caminho_do_repositorio(caminho))}?ref=main", projeto=PROJETO_HOSPITAL)
     if isinstance(dados, list):
         return [str(item.get("name")) for item in dados if isinstance(item, dict) and item.get("name")]
     if not isinstance(dados, dict) or dados.get("encoding") != "base64" or not isinstance(dados.get("content"), str):
@@ -305,9 +344,9 @@ _RESULTADOS_DA_BUSCA = 20
 def buscar_no_codigo(termo: str) -> list[str]:
     """Os caminhos dos arquivos da `main` onde o termo aparece, pela busca de
     codigo do GitHub restrita a este repositorio."""
-    _, repo = _exigir_configuracao()
+    _, repo = _exigir_configuracao(PROJETO_HOSPITAL)
     consulta = urlencode({"q": f"{termo} repo:{repo}", "per_page": _RESULTADOS_DA_BUSCA})
-    dados = _chamar("GET", f"/search/code?{consulta}", no_repositorio=False)
+    dados = _chamar("GET", f"/search/code?{consulta}", projeto=PROJETO_HOSPITAL, no_repositorio=False)
     itens = dados.get("items") if isinstance(dados, dict) else None
     if not isinstance(itens, list):
         raise GithubIndisponivelError("GitHub respondeu a busca fora do formato")
@@ -316,7 +355,7 @@ def buscar_no_codigo(termo: str) -> list[str]:
 
 def listar_issues_abertas() -> list[dict[str, Any]]:
     """As issues abertas (sem os PRs), numero e titulo, a primeira pagina."""
-    dados = _chamar("GET", "/issues?state=open&per_page=100")
+    dados = _chamar("GET", "/issues?state=open&per_page=100", projeto=PROJETO_HOSPITAL)
     if not isinstance(dados, list):
         raise GithubIndisponivelError("GitHub respondeu a lista de issues fora do formato")
     return [
@@ -336,7 +375,7 @@ def listar_issues_fechadas() -> list[dict[str, Any]]:
     issues: list[dict[str, Any]] = []
     pagina = 1
     while True:
-        dados = _chamar("GET", f"/issues?state=closed&per_page={_POR_PAGINA}&page={pagina}")
+        dados = _chamar("GET", f"/issues?state=closed&per_page={_POR_PAGINA}&page={pagina}", projeto=PROJETO_HOSPITAL)
         if not isinstance(dados, list):
             raise GithubIndisponivelError("GitHub respondeu a lista de issues fora do formato")
         issues.extend(
@@ -353,16 +392,16 @@ def e_pull_request(dados: dict[str, Any]) -> bool:
     return bool(dados.get("pull_request"))
 
 
-def ler_issue(numero: int) -> dict[str, Any]:
+def ler_issue(numero: int, *, projeto: str) -> dict[str, Any]:
     """O JSON cru da issue. Cru de proposito: quem decide se e PR e a rota."""
-    return _chamar("GET", f"/issues/{numero}")
+    return _chamar("GET", f"/issues/{numero}", projeto=projeto)
 
 
-def ler_comentarios(numero: int) -> list[dict[str, Any]]:
+def ler_comentarios(numero: int, *, projeto: str) -> list[dict[str, Any]]:
     """Os comentarios da issue, do mais antigo ao mais novo, a primeira pagina
     (issue #1557): quem escreveu, o texto e quando. E o que a Revisao com o
     codigo de hoje le do que se combinou por fora do app."""
-    dados = _chamar("GET", f"/issues/{numero}/comments?per_page={_POR_PAGINA}")
+    dados = _chamar("GET", f"/issues/{numero}/comments?per_page={_POR_PAGINA}", projeto=projeto)
     if not isinstance(dados, list):
         raise GithubIndisponivelError("GitHub respondeu os comentarios fora do formato")
     return [
@@ -376,7 +415,7 @@ def ler_comentarios(numero: int) -> list[dict[str, Any]]:
     ]
 
 
-def ler_sub_issues(numero: int) -> list[dict[str, Any]]:
+def ler_sub_issues(numero: int, *, projeto: str) -> list[dict[str, Any]]:
     """As partes da issue-raiz.
 
     Repositorio sem sub-issues, ou issue sem nenhuma, responde lista vazia. Um
@@ -385,13 +424,15 @@ def ler_sub_issues(numero: int) -> list[dict[str, Any]]:
     partes em vez de recusar o Vinculo inteiro.
     """
     try:
-        dados = _chamar("GET", f"/issues/{numero}/sub_issues")
+        dados = _chamar("GET", f"/issues/{numero}/sub_issues", projeto=projeto)
     except IssueNaoEncontradaError:
         return []
     return dados if isinstance(dados, list) else []
 
 
-def criar_issue(*, titulo: str, corpo: str, labels: list[str], assignees: list[str] | None = None) -> dict[str, Any]:
+def criar_issue(
+    *, projeto: str, titulo: str, corpo: str, labels: list[str], assignees: list[str] | None = None
+) -> dict[str, Any]:
     """Abre uma issue nova no repositorio da integracao (issue #677).
 
     `assignees` e o login do responsavel da Demanda, quando ele tem um: a
@@ -411,14 +452,14 @@ def criar_issue(*, titulo: str, corpo: str, labels: list[str], assignees: list[s
     que devolve 502 em vez de uma frase sobre um numero que ninguem digitou.
     """
     try:
-        dados = _chamar("POST", "/issues", json={"title": titulo, "body": corpo, "labels": labels})
+        dados = _chamar("POST", "/issues", projeto=projeto, json={"title": titulo, "body": corpo, "labels": labels})
     except IssueNaoEncontradaError as exc:
         raise GithubIndisponivelError("O repositorio da integracao nao aceitou a criacao da issue") from exc
 
     numero = dados.get("number") if isinstance(dados, dict) else None
     if assignees and isinstance(numero, int):
         try:
-            designada = designar(numero, assignees)
+            designada = designar(numero, assignees, projeto=projeto)
             # Os donos saem da resposta do PATCH: e por eles que quem chama
             # sabe se a designacao pegou (`designado`, issue #1536).
             dados = {**dados, "assignees": designada.get("assignees") or []}
@@ -436,7 +477,7 @@ def designado(dados: dict[str, Any], logins: list[str]) -> bool:
     return {login.casefold() for login in logins} <= donos
 
 
-def designar(numero: int, logins: list[str]) -> dict[str, Any]:
+def designar(numero: int, logins: list[str], *, projeto: str) -> dict[str, Any]:
     """Pede ao GitHub so a designacao da issue (issue #1536, ADR 0083, decisao 7).
 
     Devolve a issue como o GitHub a devolve. Levanta `GithubIndisponivelError`
@@ -444,7 +485,7 @@ def designar(numero: int, logins: list[str]) -> dict[str, Any]:
     resposta, e o 200 que volta sem o login pedido entre os donos.
     """
     try:
-        dados = _chamar("PATCH", f"/issues/{numero}", json={"assignees": logins})
+        dados = _chamar("PATCH", f"/issues/{numero}", projeto=projeto, json={"assignees": logins})
     except IssueNaoEncontradaError as exc:
         raise GithubIndisponivelError(f"A issue #{numero} nao foi encontrada para designar") from exc
     if not isinstance(dados, dict) or not designado(dados, logins):
@@ -452,7 +493,7 @@ def designar(numero: int, logins: list[str]) -> dict[str, Any]:
     return dados
 
 
-def fechar_como_nao_planejada(numero: int, *, comentario: str) -> None:
+def fechar_como_nao_planejada(numero: int, *, projeto: str, comentario: str) -> None:
     """Comenta o motivo e fecha a issue como nao planejada (issue #1549, ADR 0084,
     decisao 2).
 
@@ -461,28 +502,33 @@ def fechar_como_nao_planejada(numero: int, *, comentario: str) -> None:
     indisponibilidade, e quem chama nao apaga nada no app.
     """
     try:
-        _chamar("POST", f"/issues/{numero}/comments", json={"body": comentario})
-        _chamar("PATCH", f"/issues/{numero}", json={"state": "closed", "state_reason": FECHAMENTO_NAO_PLANEJADA})
+        _chamar("POST", f"/issues/{numero}/comments", projeto=projeto, json={"body": comentario})
+        _chamar(
+            "PATCH",
+            f"/issues/{numero}",
+            projeto=projeto,
+            json={"state": "closed", "state_reason": FECHAMENTO_NAO_PLANEJADA},
+        )
     except IssueNaoEncontradaError as exc:
         raise GithubIndisponivelError(f"A issue #{numero} nao foi encontrada para fechar") from exc
 
 
-def comentar(numero: int, corpo: str) -> None:
+def comentar(numero: int, corpo: str, *, projeto: str) -> None:
     """Deixa um comentario na issue (issue #1558, ADR 0084, decisao 3): o que
     o "Atualizar o card" mudou. Um 404 aqui nao e resposta (a issue estava
     vinculada): vira indisponibilidade."""
     try:
-        _chamar("POST", f"/issues/{numero}/comments", json={"body": corpo})
+        _chamar("POST", f"/issues/{numero}/comments", projeto=projeto, json={"body": corpo})
     except IssueNaoEncontradaError as exc:
         raise GithubIndisponivelError(f"A issue #{numero} nao foi encontrada para comentar") from exc
 
 
-def regravar(numero: int, *, corpo: str, labels: list[str]) -> dict[str, Any]:
+def regravar(numero: int, *, projeto: str, corpo: str, labels: list[str]) -> dict[str, Any]:
     """Regrava o corpo e as labels da issue num PATCH so (issue #1558, ADR
     0084, decisao 3): o PRD revisado e a volta para a triagem saem juntos, ou
     nenhum dos dois. Devolve a issue como o GitHub a devolve."""
     try:
-        dados = _chamar("PATCH", f"/issues/{numero}", json={"body": corpo, "labels": labels})
+        dados = _chamar("PATCH", f"/issues/{numero}", projeto=projeto, json={"body": corpo, "labels": labels})
     except IssueNaoEncontradaError as exc:
         raise GithubIndisponivelError(f"A issue #{numero} nao foi encontrada para regravar") from exc
     if not isinstance(dados, dict):
@@ -490,12 +536,12 @@ def regravar(numero: int, *, corpo: str, labels: list[str]) -> dict[str, Any]:
     return dados
 
 
-def regravar_corpo(numero: int, *, corpo: str) -> dict[str, Any]:
+def regravar_corpo(numero: int, *, projeto: str, corpo: str) -> dict[str, Any]:
     """Regrava so o corpo da issue, sem tocar nas labels (issue #1636): a
     passada unica que poe o bloco "Para o desenvolvedor" nas Demandas abertas.
     Devolve a issue como o GitHub a devolve."""
     try:
-        dados = _chamar("PATCH", f"/issues/{numero}", json={"body": corpo})
+        dados = _chamar("PATCH", f"/issues/{numero}", projeto=projeto, json={"body": corpo})
     except IssueNaoEncontradaError as exc:
         raise GithubIndisponivelError(f"A issue #{numero} nao foi encontrada para regravar") from exc
     if not isinstance(dados, dict):

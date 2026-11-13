@@ -100,6 +100,14 @@ class Settings(BaseSettings):
     github_integracao_token: str = ""
     github_integracao_repo: str = ""
 
+    # O repositorio da Ana, o segundo Projeto da aba Tecnologia (issue #1713,
+    # ADR 0093, decisoes 2 e 7), no mesmo formato `dono/repositorio`. O token
+    # e o mesmo de cima, que passa a incluir este repositorio.
+    #
+    # Vazio = Ana desligada: o webhook descarta a entrega do repositorio dela e
+    # nenhuma chamada ao GitHub vai la. O Hospital segue igual.
+    github_integracao_repo_ana: str = ""
+
     # O login do dono da empresa no GitHub (issue #1349, ADR 0075). O PRD do
     # diretor que o "Criar o card" da melhoria cria nasce atribuído a ele: é ele
     # quem redistribui.

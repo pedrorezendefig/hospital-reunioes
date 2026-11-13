@@ -1003,6 +1003,8 @@ def _demanda(did: str, **campos) -> dict:
         "concluida_por": None,
         "cancelada_em": None,
         "cancelada_por": None,
+        # O default da migration 145 (issue #1713): a Demanda de hoje e do Hospital.
+        "projeto": "hospital",
         "github_issue_numero": None,
         "etapa": ETAPA_REGISTRADA,
         "partes_entregues": None,
@@ -1046,7 +1048,7 @@ class _GithubFalso:
         self.leituras: list[int] = []
         self.criadas: list[dict] = []
 
-    def ler_issue(self, numero: int) -> dict:
+    def ler_issue(self, numero: int, *, projeto: str) -> dict:
         if self.erro is not None:
             raise self.erro
         self.leituras.append(numero)
@@ -1054,15 +1056,19 @@ class _GithubFalso:
             raise github_client.IssueNaoEncontradaError(str(numero))
         return self.issues[numero]
 
-    def ler_sub_issues(self, numero: int) -> list[dict]:
+    def ler_sub_issues(self, numero: int, *, projeto: str) -> list[dict]:
         return self.sub_issues.get(numero, [])
 
-    def criar_issue(self, *, titulo: str, corpo: str, labels: list[str], assignees: list[str] | None = None) -> dict:
+    def criar_issue(
+        self, *, projeto: str, titulo: str, corpo: str, labels: list[str], assignees: list[str] | None = None
+    ) -> dict:
         """A issue nova, como o GitHub a devolve (issue #677).
 
         Devolve a issue INTEIRA, e nao so o numero: e dela que a foto e a Etapa
-        saem, sem uma segunda leitura.
+        saem, sem uma segunda leitura. O "Criar o card" e do Assistente, que so
+        cria no Hospital (issue #1713, ADR 0093, decisao 5).
         """
+        assert projeto == "hospital", f"o Criar o card foi ao Projeto {projeto!r}"
         if self.erro_ao_criar is not None:
             raise self.erro_ao_criar
         self.criadas.append(
@@ -1161,13 +1167,13 @@ class TestATravaDeRedeContinuaDePe:
         verdade, e ficaria verde. Aqui a tentativa e cobrada.
         """
         with pytest.raises(AssertionError, match="chamado de verdade"):
-            github_client.ler_issue(673)
+            github_client.ler_issue(673, projeto="hospital")
 
     def test_criar_issue_esta_trancada(self):
         """O verbo mais caro de todos: um teste que esquecesse de dubla-lo
         abriria uma issue de verdade num repositorio PUBLICO (issue #677)."""
         with pytest.raises(AssertionError, match="chamado de verdade"):
-            github_client.criar_issue(titulo="Teste", corpo="Teste", labels=[])
+            github_client.criar_issue(projeto="hospital", titulo="Teste", corpo="Teste", labels=[])
 
 
 # ─── 4. O "O que muda" que a sincronizacao grava ─────────────────────────────
@@ -1262,7 +1268,9 @@ class TestADesignacaoNaoDerrubaACriacao:
         transporte = _TransporteGithub()
         monkeypatch.setattr(github_client.httpx, "request", transporte)
 
-        github_client.criar_issue(titulo="T", corpo="C", labels=["needs-triage"], assignees=["lucas-sampaio"])
+        github_client.criar_issue(
+            projeto="hospital", titulo="T", corpo="C", labels=["needs-triage"], assignees=["lucas-sampaio"]
+        )
 
         assert transporte.chamadas == [
             ("POST", f"{self.URL}/issues", {"title": "T", "body": "C", "labels": ["needs-triage"]}),
@@ -1273,7 +1281,7 @@ class TestADesignacaoNaoDerrubaACriacao:
         transporte = _TransporteGithub()
         monkeypatch.setattr(github_client.httpx, "request", transporte)
 
-        github_client.criar_issue(titulo="T", corpo="C", labels=["needs-triage"], assignees=[])
+        github_client.criar_issue(projeto="hospital", titulo="T", corpo="C", labels=["needs-triage"], assignees=[])
 
         assert transporte.chamadas == [
             ("POST", f"{self.URL}/issues", {"title": "T", "body": "C", "labels": ["needs-triage"]}),
@@ -1283,7 +1291,9 @@ class TestADesignacaoNaoDerrubaACriacao:
         transporte = _TransporteGithub(status_da_designacao=422, numero=901)
         monkeypatch.setattr(github_client.httpx, "request", transporte)
 
-        dados = github_client.criar_issue(titulo="T", corpo="C", labels=[], assignees=["login-errado"])
+        dados = github_client.criar_issue(
+            projeto="hospital", titulo="T", corpo="C", labels=[], assignees=["login-errado"]
+        )
 
         assert dados["number"] == 901
         assert [metodo for metodo, _, _ in transporte.chamadas] == ["POST", "PATCH"]

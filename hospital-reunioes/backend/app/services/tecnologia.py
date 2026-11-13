@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.dependencies import is_super_admin
-from app.services.github_client import FATO_ASSIGNEE
+from app.services.github_client import FATO_ASSIGNEE, PROJETO_ANA, PROJETO_HOSPITAL
 from app.services.tecnologia_vinculo import (
     ETAPA_EM_ANALISE,
     ETAPA_EM_DESENVOLVIMENTO,
@@ -154,6 +154,13 @@ def e_desenvolvedor(pessoa: dict[str, Any] | None) -> bool:
 def origem_da_demanda(demanda: dict[str, Any]) -> str:
     """A Origem da Demanda; a linha de antes da coluna (migration 130) e do diretor."""
     return ORIGEM_VITTA if demanda.get("origem") == ORIGEM_VITTA else ORIGEM_DIRETOR
+
+
+def projeto_da_demanda(demanda: dict[str, Any]) -> str:
+    """O Projeto da Demanda (issue #1713, ADR 0093, decisao 2), que diz de qual
+    repositorio e a issue dela. A linha de antes da coluna (migration 145) e do
+    Hospital, como o default que a migration da as Demandas de hoje."""
+    return PROJETO_ANA if demanda.get("projeto") == PROJETO_ANA else PROJETO_HOSPITAL
 
 
 def pode_ver(pessoa: dict[str, Any], demanda: dict[str, Any]) -> bool:

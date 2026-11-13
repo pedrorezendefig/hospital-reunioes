@@ -110,24 +110,27 @@ def _produto_padrao(supabase) -> dict[str, Any] | None:
     return min(produtos, key=lambda p: p.get("ordem") or 0) if produtos else None
 
 
-def espelhar(supabase, numero: int) -> dict[str, Any] | None:
-    """Rele a issue e cria a Demanda Vitta se o espelho manda. Devolve a linha
-    criada, ou `None` quando nao cria. Quem chama sincroniza em seguida, e e a
-    sincronizacao que da a Etapa, as partes e o Responsavel.
+def espelhar(supabase, projeto: str, numero: int) -> dict[str, Any] | None:
+    """Rele a issue no repositorio do Projeto e cria a Demanda Vitta se o
+    espelho manda. Devolve a linha criada, ou `None` quando nao cria. Quem
+    chama sincroniza em seguida, e e a sincronizacao que da a Etapa, as partes
+    e o Responsavel.
 
     As falhas do GitHub sobem para quem chamou. A corrida de dois eventos da
-    mesma issue para no indice unico do numero: quem perde ve "ja existe".
+    mesma issue para no indice unico de projeto mais numero: quem perde ve "ja
+    existe".
     """
-    issue = github_client.ler_issue(numero)
-    if decidir(issue, demanda_vinculada(supabase, numero)) != CRIA:
+    issue = github_client.ler_issue(numero, projeto=projeto)
+    if decidir(issue, demanda_vinculada(supabase, projeto, numero)) != CRIA:
         return None
-    return criar(supabase, issue)
+    return criar(supabase, issue, projeto=projeto)
 
 
-def criar(supabase, issue: dict[str, Any]) -> dict[str, Any] | None:
+def criar(supabase, issue: dict[str, Any], *, projeto: str) -> dict[str, Any] | None:
     """A Demanda Vitta desta issue, que quem chama ja releu e passou por
     `decidir`. A carga do historico (issue #1555) entra por aqui com a issue
-    que ja releu, sem gastar uma segunda leitura."""
+    que ja releu, sem gastar uma segunda leitura. A Demanda nasce no Projeto
+    do repositorio de onde a issue veio (issue #1713)."""
     numero = int(issue["number"])
     produto = _produto_padrao(supabase)
     if produto is None:
@@ -143,13 +146,14 @@ def criar(supabase, issue: dict[str, Any]) -> dict[str, Any] | None:
         "autor_id": _autor_id(supabase, issue),
         "prioridade": "normal",
         "origem": ORIGEM_VITTA,
+        "projeto": projeto,
         "github_issue_numero": numero,
         "etapa": ETAPA_REGISTRADA,
     }
     try:
         criada = supabase.table(TABELA_DEMANDAS).insert(linha).execute().data
     except APIError:
-        if demanda_vinculada(supabase, numero) is not None:
+        if demanda_vinculada(supabase, projeto, numero) is not None:
             return None
         raise
     return criada[0] if criada else None

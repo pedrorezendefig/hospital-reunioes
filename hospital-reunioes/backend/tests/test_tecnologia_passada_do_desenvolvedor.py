@@ -76,12 +76,15 @@ class _GithubDeMentira:
         self.erro_ao_gravar = erro_ao_gravar or {}
         self.gravacoes: list[tuple[int, str]] = []
 
-    def ler_issue(self, numero: int) -> dict:
+    def ler_issue(self, numero: int, *, projeto: str) -> dict:
+        # A passada e das Demandas do diretor, todas do Hospital (issue #1713).
+        assert projeto == "hospital", f"a passada leu do Projeto {projeto!r}"
         if numero not in self.issues:
             raise github_client.IssueNaoEncontradaError(str(numero))
         return dict(self.issues[numero])
 
-    def regravar_corpo(self, numero: int, *, corpo: str) -> dict:
+    def regravar_corpo(self, numero: int, *, projeto: str, corpo: str) -> dict:
+        assert projeto == "hospital", f"a passada gravou no Projeto {projeto!r}"
         if numero in self.erro_ao_gravar:
             raise self.erro_ao_gravar[numero]
         self.gravacoes.append((numero, corpo))

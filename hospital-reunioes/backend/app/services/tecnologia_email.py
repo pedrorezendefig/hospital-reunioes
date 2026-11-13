@@ -17,6 +17,8 @@ from urllib.parse import quote
 
 from app.config import settings
 from app.services.email_service import _enviar_email, jinja_env
+from app.services.github_client import repositorio_do_projeto
+from app.services.tecnologia import projeto_da_demanda
 
 logger = logging.getLogger(__name__)
 
@@ -142,14 +144,15 @@ AVISO_DO_VITTA_OS = "Este link abre o Vitta OS do seu próprio computador e só 
 _PARTE_DO_BLOCO = re.compile(r"^\*\*([^*]+):\*\*\s*(.*)$")
 
 
-def link_do_vitta_os(numero: int) -> str:
-    """A sessao da issue `numero` no Vitta OS, com o dono e o repositorio da integracao."""
-    dono, _, repositorio = settings.github_integracao_repo.partition("/")
+def link_do_vitta_os(numero: int, *, projeto: str) -> str:
+    """A sessao da issue `numero` no Vitta OS, com o dono e o repositorio do
+    Projeto da Demanda (issue #1713)."""
+    dono, _, repositorio = repositorio_do_projeto(projeto).partition("/")
     return f"{VITTA_OS_LOCAL}/#/sessao/{quote(dono, safe='')}/{quote(repositorio, safe='')}/{numero}"
 
 
-def link_da_issue(numero: int) -> str:
-    return f"https://github.com/{settings.github_integracao_repo}/issues/{numero}"
+def link_da_issue(numero: int, *, projeto: str) -> str:
+    return f"https://github.com/{repositorio_do_projeto(projeto)}/issues/{numero}"
 
 
 def enviar_card_novo(supabase, *, demanda: dict, resumo: dict | None) -> bool:
@@ -175,12 +178,13 @@ def enviar_card_novo(supabase, *, demanda: dict, resumo: dict | None) -> bool:
             return False
 
         numero = int(demanda["github_issue_numero"])
+        projeto = projeto_da_demanda(demanda)
         titulo = str(demanda.get("titulo") or "Demanda sem título")
         bloco = bloco_do_desenvolvedor((resumo or {}).get("para_o_desenvolvedor"))
         partes = [m.groups() for m in (_PARTE_DO_BLOCO.match(linha) for linha in (bloco or "").splitlines()) if m]
         links = {
-            "vitta_os": link_do_vitta_os(numero),
-            "issue": link_da_issue(numero),
+            "vitta_os": link_do_vitta_os(numero, projeto=projeto),
+            "issue": link_da_issue(numero, projeto=projeto),
             "demanda": link_da_demanda(demanda["id"]),
         }
         html = jinja_env.get_template("email_tecnologia_card_novo.html").render(

@@ -44,16 +44,20 @@ def _fechar_no_github(numero: int) -> None:
 
     A raiz que ja esta fechada (o card em Nao sera feita, issue #1637) nao fecha
     de novo nem ganha um segundo comentario. O estado e lido da issue, e nao da
-    Etapa, porque a label `wontfix` leva a Nao sera feita com a issue aberta."""
+    Etapa, porque a label `wontfix` leva a Nao sera feita com a issue aberta.
+
+    O Apagar e do Hospital (issue #1713): o card da Ana e so leitura neste
+    passo (ADR 0093, decisao 5), e `recusa_de_apagar` o recusa antes daqui."""
+    hospital = github_client.PROJETO_HOSPITAL
     abertas = [
         parte["number"]
-        for parte in github_client.ler_sub_issues(numero)
+        for parte in github_client.ler_sub_issues(numero, projeto=hospital)
         if isinstance(parte, dict) and parte.get("state") == "open" and isinstance(parte.get("number"), int)
     ]
     for parte in abertas:
-        github_client.fechar_como_nao_planejada(parte, comentario=COMENTARIO_DO_APAGAR)
-    if github_client.ler_issue(numero).get("state") == "open":
-        github_client.fechar_como_nao_planejada(numero, comentario=COMENTARIO_DO_APAGAR)
+        github_client.fechar_como_nao_planejada(parte, projeto=hospital, comentario=COMENTARIO_DO_APAGAR)
+    if github_client.ler_issue(numero, projeto=hospital).get("state") == "open":
+        github_client.fechar_como_nao_planejada(numero, projeto=hospital, comentario=COMENTARIO_DO_APAGAR)
 
 
 def apagar(supabase, demanda: dict[str, Any], *, ator: dict[str, Any]) -> None:

@@ -138,6 +138,7 @@ from app.services.tecnologia import (
     login_do_responsavel,
     origem_da_demanda,
     pode_ver,
+    projeto_da_demanda,
     quem_avisar,
     recusa_de_apagar,
     recusa_de_revisar,
@@ -283,14 +284,15 @@ def _nomes(supabase: Client, ids: set) -> dict[str, str]:
 
 def _url_da_issue(demanda: dict) -> str | None:
     """O endereco da issue-raiz: o que a foto do GitHub guardou, ou o montado
-    pelo numero quando a foto ainda nao veio."""
+    pelo numero quando a foto ainda nao veio, no repositorio do Projeto da
+    Demanda (issue #1713)."""
     numero = demanda.get("github_issue_numero")
     if not numero:
         return None
     foto = demanda.get("github_foto")
     if isinstance(foto, dict) and foto.get("url"):
         return str(foto["url"])
-    repo = settings.github_integracao_repo
+    repo = github_client.repositorio_do_projeto(projeto_da_demanda(demanda))
     return f"https://github.com/{repo}/issues/{numero}" if repo else None
 
 
@@ -499,6 +501,9 @@ def _nascer_a_demanda(supabase: Client, *, ator: dict, titulo: str, tipo: str, p
                 "responsavel_id": None,
                 "autor_id": ator["id"],
                 "prioridade": "normal",
+                # O Assistente so cria card no Hospital (issue #1713, ADR 0093,
+                # decisao 5): a conversa nasce no Projeto do card que ela vira.
+                "projeto": github_client.PROJETO_HOSPITAL,
             }
         )
         .execute()
@@ -1480,7 +1485,7 @@ async def designar_de_novo(
         _conflito(MOTIVO_SEM_LOGIN_PARA_DESIGNAR)
     _exigir_integracao()
     try:
-        github_client.designar(int(demanda["github_issue_numero"]), logins)
+        github_client.designar(int(demanda["github_issue_numero"]), logins, projeto=projeto_da_demanda(demanda))
     except (github_client.GithubIndisponivelError, github_client.GithubNaoConfiguradoError) as exc:
         supabase.table(TABELA_DEMANDAS).update({"envio_motivo": str(exc), "envio_em": _agora()}).eq(
             "id", demanda_id
@@ -1615,8 +1620,10 @@ async def revisar_com_o_codigo_de_hoje(
     _exigir_integracao()
     numero = int(demanda["github_issue_numero"])
     try:
-        issue = github_client.ler_issue(numero)
-        comentarios = github_client.ler_comentarios(numero)
+        # A Revisao e do Hospital (issue #1713): `recusa_de_revisar` so deixa
+        # passar a melhoria do chat, que o Assistente cria no Hospital.
+        issue = github_client.ler_issue(numero, projeto=github_client.PROJETO_HOSPITAL)
+        comentarios = github_client.ler_comentarios(numero, projeto=github_client.PROJETO_HOSPITAL)
         historico = github_client.ler_historico_de_deploys()
     except (github_client.GithubIndisponivelError, github_client.IssueNaoEncontradaError) as exc:
         logger.warning("[tecnologia] a revisão da Demanda %s não leu o GitHub: %s", demanda_id, exc)

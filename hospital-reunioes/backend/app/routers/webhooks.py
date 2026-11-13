@@ -419,23 +419,23 @@ def _assinatura_do_github_confere(corpo: bytes, cabecalho: str | None, segredo: 
     )
 
 
-def _e_do_repositorio_configurado(payload: dict) -> bool:
-    """Se a entrega diz vir do repositório da integração.
+def _projeto_da_entrega(payload: dict) -> str | None:
+    """O Projeto do repositório de onde a entrega diz vir, ou `None`.
+
+    O webhook aceita o repositório do Hospital e o da Ana, quando configurado,
+    e traduz o nome do repositório no Projeto da Demanda (issue #1713, ADR
+    0093, decisões 2 e 7). Qualquer outro é descartado, e com a variável da Ana
+    vazia o dela também.
 
     Defesa em profundidade, e não a guarda principal: quem forja o payload não
     consegue nada com ele, porque a sincronização relê a issue do repositório
-    CONFIGURADO e nunca escreve campo vindo daqui. O que esta linha fecha é o
-    mesmo segredo reaproveitado noutro repositório ou num fork, que mandaria o
-    app reler issues pelo número errado.
-
-    Sem repositório configurado não há com o que comparar, e a sincronização vai
-    falhar adiante de qualquer jeito (o cliente exige as duas variáveis).
+    CONFIGURADO do Projeto e nunca escreve campo vindo daqui. O que esta linha
+    fecha é o mesmo segredo reaproveitado noutro repositório ou num fork, que
+    mandaria o app reler issues pelo número errado.
     """
-    esperado = settings.github_integracao_repo
-    if not esperado:
-        return True
-    veio_de = (payload.get("repository") or {}).get("full_name")
-    return str(veio_de or "").lower() == esperado.lower()
+    from app.services import github_client
+
+    return github_client.projeto_do_repositorio((payload.get("repository") or {}).get("full_name"))
 
 
 @router.post("/github")
@@ -465,7 +465,8 @@ async def webhook_github(
        corpo ou dono (o dono é o Responsável, issue #1534), e `pull_request`,
        só ao abrir, reabrir e fechar. O resto sai em
        2xx sem gastar cota do GitHub.
-    5. **Repositório**, como defesa em profundidade.
+    5. **Repositório**, como defesa em profundidade. É dele que sai o Projeto
+       da Demanda (issue #1713): o do Hospital ou o da Ana.
     6. **Demanda vinculada.** A esmagadora maioria das issues do repositório não
        tem Demanda nenhuma atrás, e isso não é erro. A exceção é a issue-raiz do
        app aberta pelo terminal, que o espelho transforma em Demanda de Origem
@@ -539,12 +540,13 @@ async def webhook_github(
     if not isinstance(payload, dict) or payload.get("action") not in acoes:
         return {"ignorado": "acao"}
 
-    if not _e_do_repositorio_configurado(payload):
+    projeto = _projeto_da_entrega(payload)
+    if projeto is None:
         logger.warning("[GitHub webhook] Entrega de outro repositório; ignorada.")
         return {"ignorado": "outro_repositorio"}
 
     if evento == "pull_request":
-        return await _tratar_pull_request(supabase, payload)
+        return await _tratar_pull_request(supabase, payload, projeto)
 
     numero = (payload.get("issue") or {}).get("number")
     # `isinstance(numero, int)` sozinho aceitaria `True`, porque em Python bool é
@@ -553,10 +555,10 @@ async def webhook_github(
         logger.warning("[GitHub webhook] Evento 'issues' sem número de issue utilizável; ignorado.")
         return {"ignorado": "issue"}
 
-    demanda = tecnologia_sincronizacao.demanda_vinculada(supabase, numero)
+    demanda = tecnologia_sincronizacao.demanda_vinculada(supabase, projeto, numero)
     if demanda is None:
         if _espelho_aceita(payload):
-            return await _espelhar(supabase, numero)
+            return await _espelhar(supabase, projeto, numero)
         return {"ignorado": "sem_vinculo"}
 
     return await _sincronizar(
@@ -580,7 +582,7 @@ def _espelho_aceita(payload: dict) -> bool:
     )
 
 
-async def _espelhar(supabase, numero: int) -> dict:
+async def _espelhar(supabase, projeto: str, numero: int) -> dict:
     """A issue-raiz do app aberta pelo terminal vira Demanda de Origem Vitta
     (issue #1554, ADR 0084, decisao 4), e a sincronizacao lhe da a Etapa, as
     partes e o Responsavel na mesma entrega.
@@ -592,7 +594,7 @@ async def _espelhar(supabase, numero: int) -> dict:
     from app.services import tecnologia_espelho, tecnologia_sincronizacao
 
     try:
-        criada = await run_in_threadpool(tecnologia_espelho.espelhar, supabase, numero)
+        criada = await run_in_threadpool(tecnologia_espelho.espelhar, supabase, projeto, numero)
     except Exception:
         logger.warning("[GitHub webhook] Falha ao espelhar a issue #%s como Demanda.", numero, exc_info=True)
         return {"recebido": True, "espelhada": False, "falhou": True}
@@ -645,7 +647,7 @@ async def _sincronizar(sincronizar, demanda: dict, numero: int) -> dict:
     return {"recebido": True, "sincronizada": mudou}
 
 
-async def _tratar_pull_request(supabase, payload: dict) -> dict:
+async def _tratar_pull_request(supabase, payload: dict, projeto: str) -> dict:
     """O PR que fecha a raiz de uma Demanda (issue #1064, ADR 0069, decisão 6).
 
     As issues que o PR fecha saem do corpo dele, pelas palavras de fechamento
@@ -666,8 +668,8 @@ async def _tratar_pull_request(supabase, payload: dict) -> dict:
 
     demandas = [
         (numero, demanda)
-        for numero in github_client.issues_que_o_corpo_fecha(pr.get("body"))
-        if (demanda := tecnologia_sincronizacao.demanda_vinculada(supabase, numero)) is not None
+        for numero in github_client.issues_que_o_corpo_fecha(pr.get("body"), projeto=projeto)
+        if (demanda := tecnologia_sincronizacao.demanda_vinculada(supabase, projeto, numero)) is not None
     ]
     if not demandas:
         return {"ignorado": "sem_vinculo"}
