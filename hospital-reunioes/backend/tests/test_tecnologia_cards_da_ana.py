@@ -316,3 +316,19 @@ class TestOPainelDoCardDaAna:
         assert "acompanhar" in resposta.json()["detail"]
         assert not next(d for d in sb.tabelas["tecnologia_demandas"] if d["id"] == "d-ana").get("apagada_em")
         assert fechadas == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. O Kit de conhecimento
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def test_o_produto_ana_no_kit_diz_que_os_pedidos_dela_aparecem_na_tecnologia_so_para_acompanhar():
+    from app.services.conhecimento import CONHECIMENTO_DIR
+
+    texto = (CONHECIMENTO_DIR / "ana.md").read_text(encoding="utf-8")
+    secao = texto.split("## Os pedidos da Ana na aba Tecnologia", 1)[1].split("\n## ", 1)[0]
+
+    assert "só para acompanhar" in secao
+    assert "**Entregue**" in secao
+    assert "não dá para apagar nem revisar" in secao.lower()
