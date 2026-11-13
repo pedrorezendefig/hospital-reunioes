@@ -629,6 +629,17 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     "apagamento_pedido_em",
     "apagamento_pedido_por",
     "apagamento_motivo",
+    # O apontamento do agente ao Núcleo de Segurança do Paciente e a decisão
+    # do ouvidor (issue #1621, migration 139). A justificativa simples é o
+    # texto do alerta "Possível evento de segurança do paciente"; a técnica é
+    # a que o Núcleo lê pelo link. A decisão confirmada é o selo "Em análise
+    # pelo NSP". Dossiê, e não índice: as duas justificativas descrevem o caso.
+    "nsp_sugerido",
+    "nsp_justificativa_simples",
+    "nsp_justificativa_tecnica",
+    "nsp_decisao",
+    "nsp_decisao_motivo",
+    "nsp_decidido_em",
 )
 _CAMPOS_DOSSIE = ", ".join(_CAMPOS_DOSSIE_TUPLA)
 
@@ -4550,6 +4561,71 @@ def mandar_ao_nucleo(supabase, me: dict, caso: dict, nucleo: NucleoAcionavel, gr
     if ciencia is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=falha)
     return ciencia
+
+
+class PedidoSetorDoNucleo(BaseModel):
+    """Qual setor da taxonomia é o Núcleo de Segurança do Paciente."""
+
+    setor: str = Field(max_length=LIMITE_SETOR)
+
+    @field_validator("setor")
+    @classmethod
+    def _setor_limpo(cls, valor: str) -> str:
+        return limpar_setor(valor)
+
+
+@router.get("/nucleo")
+@limiter.limit("60/minute")
+async def ler_o_setor_do_nucleo(
+    request: Request,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """O setor do Núcleo na configuração da Ouvidoria, "" quando ninguém o
+    escolheu ainda."""
+    try:
+        return {"setor": ouvidoria_nucleo.setor_configurado(supabase)}
+    except (APIError, HTTPError) as exc:
+        logger.error("Falha ao ler o setor do Núcleo na configuração da Ouvidoria")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível ler a configuração da Ouvidoria agora. Tente de novo em instantes.",
+        ) from exc
+
+
+@router.put("/nucleo")
+@limiter.limit("30/minute")
+async def escolher_o_setor_do_nucleo(
+    request: Request,
+    pedido: PedidoSetorDoNucleo,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """O ouvidor escolhe qual setor é o Núcleo (ADR 0088, decisão 3). O setor
+    tem de existir na taxonomia, e o que fica gravado é a grafia dela: é ela
+    que casa com o cadastro de responsáveis. A troca fica no audit."""
+    setor = exigir_setor_da_taxonomia(supabase, pedido.setor)
+    try:
+        anterior = ouvidoria_nucleo.setor_configurado(supabase)
+        supabase.table("ouvidoria_config").update(
+            {"nsp_setor": setor, "atualizada_em": agora_utc().isoformat()}
+        ).eq("id", True).execute()
+    except (APIError, HTTPError) as exc:
+        logger.error("Falha ao gravar o setor do Núcleo na configuração da Ouvidoria")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível gravar o setor do Núcleo agora. Tente de novo em instantes.",
+        ) from exc
+    audit.log_action(
+        supabase,
+        actor=me,
+        action="OUVIDORIA_SETOR_DO_NUCLEO",
+        target_type="ouvidoria_config",
+        target_id="nsp_setor",
+        metadata={"anterior": anterior, "novo": setor},
+        request=request,
+    )
+    return {"setor": setor}
 
 
 @router.post("/manifestacoes/{manifestacao_id}/nsp")

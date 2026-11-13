@@ -557,3 +557,106 @@ class TestCobrancaDoRecebido:
         from app.cron import scheduler
 
         assert "ouvidoria_nucleo.cobrar_o_recebido" in inspect.getsource(scheduler.escalonar_prazos_ouvidoria)
+
+
+# =====================================================================
+# 7. O caso com o selo responde e encerra normalmente
+# =====================================================================
+
+
+class TestOCasoComOSelo:
+    def test_o_caso_com_selo_responde_e_encerra_normalmente(self, monkeypatch, emails):
+        """A ciência do Núcleo corre em paralelo (ADR 0088, decisão 8): sem o
+        Recebido, a área responde e o ouvidor encerra, e a ciência continua
+        esperando o Núcleo."""
+        client, supabase = _client(monkeypatch, _banco(_caso_apontado()))
+        assert _validar(client, nsp_decisao="confirmado").status_code == 200
+        email_da_area = next(e for e in emails if e["destinatario"] == "carlos@hsm.br")
+        token_da_area = re.search(r"/ouvidoria-setor/([A-Za-z0-9_-]{20,})", email_da_area["html"]).group(1)
+
+        respondeu = client.post(
+            f"/api/ouvidoria-setor/{token_da_area}/responder",
+            data={"resposta": "A equipe de enfermagem reviu o protocolo de quedas do 4o andar."},
+        )
+        encerrou = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/transicoes",
+            json={
+                "estado": "encerrado",
+                "desfecho": "procedente",
+                "desfecho_descricao": "A area reviu o protocolo e o caso segue em analise pelo Nucleo.",
+            },
+        )
+
+        assert respondeu.status_code == 200, respondeu.text
+        assert encerrou.status_code == 200, encerrou.text
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "encerrado"
+        assert caso["nsp_decisao"] == "confirmado"
+        assert _ciencias_do_nucleo(supabase)[0]["status"] == "pendente"
+
+    def test_o_nucleo_confirma_mesmo_com_o_caso_encerrado(self, monkeypatch, emails):
+        caso = _caso(status="encerrado")
+        client, supabase = _client(monkeypatch, _banco(caso))
+        assert _enviar_ao_nucleo(client).status_code == 200
+
+        r = _recebido(client, _token_do_nucleo(_email_do_nucleo(emails)))
+
+        assert r.status_code == 200, r.text
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["status"] == "encerrado"
+
+
+# =====================================================================
+# O Dossiê mostra o apontamento e a decisão; a configuração diz o setor
+# =====================================================================
+
+
+class TestODossieEAConfiguracao:
+    def test_o_dossie_traz_o_alerta_e_a_decisao_sobre_o_nucleo(self, monkeypatch):
+        client, _supabase = _client(monkeypatch, _banco(_caso_apontado(nsp_decisao="descartado")))
+
+        dossie = client.get("/api/ouvidoria/manifestacoes/uuid-7").json()
+
+        assert dossie["nsp_sugerido"] is True
+        assert dossie["nsp_justificativa_simples"] == JUSTIFICATIVA_SIMPLES
+        assert dossie["nsp_decisao"] == "descartado"
+
+    def test_sem_o_setor_do_nucleo_configurado_o_envio_e_recusado(self, monkeypatch, emails):
+        supabase = _banco()
+        supabase.tabelas["ouvidoria_config"] = [{"id": True, "nsp_setor": ""}]
+        client, supabase = _client(monkeypatch, supabase)
+
+        r = _enviar_ao_nucleo(client)
+
+        assert r.status_code == 409
+        assert "Responsáveis por setor" in r.json()["detail"]
+        assert _ciencias_do_nucleo(supabase) == []
+        assert emails == []
+
+    def test_o_caso_ja_enviado_nao_vai_ao_nucleo_de_novo(self, monkeypatch, emails):
+        client, supabase = _client(monkeypatch)
+        assert _enviar_ao_nucleo(client).status_code == 200
+
+        r = _enviar_ao_nucleo(client)
+
+        assert r.status_code == 409
+        assert len(_ciencias_do_nucleo(supabase)) == 1
+
+    def test_o_ouvidor_le_e_escolhe_o_setor_do_nucleo(self, monkeypatch):
+        supabase = _banco()
+        supabase.tabelas["ouvidoria_config"] = [{"id": True, "nsp_setor": ""}]
+        client, supabase = _client(monkeypatch, supabase)
+
+        gravou = client.put("/api/ouvidoria/nucleo", json={"setor": "nucleo de seguranca do paciente"})
+        lido = client.get("/api/ouvidoria/nucleo")
+
+        assert gravou.status_code == 200, gravou.text
+        assert supabase.tabelas["ouvidoria_config"][0]["nsp_setor"] == NUCLEO, "grava a grafia da taxonomia"
+        assert lido.json() == {"setor": NUCLEO}
+
+    def test_setor_fora_da_taxonomia_nao_vira_o_nucleo(self, monkeypatch):
+        client, supabase = _client(monkeypatch)
+
+        r = client.put("/api/ouvidoria/nucleo", json={"setor": "Setor que nao existe"})
+
+        assert r.status_code == 422
+        assert supabase.tabelas["ouvidoria_config"][0]["nsp_setor"] == NUCLEO
