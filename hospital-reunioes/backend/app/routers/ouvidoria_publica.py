@@ -21,7 +21,7 @@ import logging
 import secrets
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Request, status
 from fastapi.responses import RedirectResponse
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -503,6 +503,29 @@ async def avaliar_pelo_cartaz(
             detail="Não foi possível registrar sua avaliação agora. Tente novamente em instantes.",
         )
     return {"id": linha["id"], "nota": linha["nota"], "convite_google": bool(linha.get("convite_google_exibido"))}
+
+
+@router.get("/publico/avaliacoes/{avaliacao_id}/convite-google")
+@limiter.limit("10/minute")
+async def seguir_convite_google(
+    request: Request,
+    avaliacao_id: str = Path(max_length=40),
+    supabase=Depends(get_supabase_client),
+):
+    """O botão "Avaliar no Google" da tela N3 (issue #1625, ADR 0089 decisão
+    7): conta o clique e só então leva ao link de avaliação da configuração.
+
+    O destino sai só da configuração, nunca do pedido. Sem link https
+    configurado, 404: a página não tem para onde mandar a pessoa."""
+    try:
+        destino = ouvidoria_convite_google.link_de_avaliacao(supabase)
+    except Exception:
+        logger.warning("[Ouvidoria] Falha ao ler o link de avaliação do Google")
+        destino = None
+    if not destino:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Convite indisponível")
+    ouvidoria_convite_google.registrar_clique(supabase, avaliacao_id)
+    return RedirectResponse(destino, status_code=status.HTTP_302_FOUND)
 
 
 @router.get("/publico/locais")

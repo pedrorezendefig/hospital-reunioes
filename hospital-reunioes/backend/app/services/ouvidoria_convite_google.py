@@ -66,3 +66,26 @@ def deve_convidar(supabase, ponto: dict, nota: int) -> bool:
         logger.warning("[Ouvidoria] Falha ao ler a chave geral do convite ao Google; a nota segue sem convite")
         return False
     return config["global"] and config["url"].startswith("https://")
+
+
+def registrar_clique(supabase, avaliacao_id: str) -> None:
+    """Conta o clique no "Avaliar no Google". Só na nota que viu o convite: o
+    id solto de uma nota sem convite não infla a taxa. Falha aqui não segura
+    a pessoa: perder um clique é melhor que deixá-la sem o Google."""
+    try:
+        (
+            supabase.table(TABELA_AVALIACOES)
+            .update({"convite_google_clicado": True})
+            .eq("id", avaliacao_id)
+            .eq("convite_google_exibido", True)
+            .execute()
+        )
+    except Exception:
+        logger.warning("[Ouvidoria] Falha ao contar o clique no convite ao Google")
+
+
+def link_de_avaliacao(supabase) -> str | None:
+    """O link de avaliação da configuração, ou None quando não é um https (o
+    destino do redirecionamento nunca sai do pedido)."""
+    url = ler_config(supabase)["url"]
+    return url if url.startswith("https://") else None

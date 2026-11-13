@@ -253,3 +253,51 @@ class TestNotasBaixasNuncaConvidam:
         assert r.status_code == 201, r.text
         assert r.json()["convite_google"] is False
         assert banco.avaliacoes[0]["convite_google_exibido"] is False
+
+
+def _clique(client: TestClient, avaliacao_id: str):
+    return client.get(f"/api/ouvidoria/publico/avaliacoes/{avaliacao_id}/convite-google")
+
+
+class TestOCliqueEContadoAntesDeRedirecionar:
+    """CA: o clique é gravado antes do redirecionamento."""
+
+    def test_o_clique_grava_e_so_entao_redireciona_ao_link_da_configuracao(self):
+        banco = _Banco(pontos=[_ponto(CODIGO, convite=True)], global_ligado=True)
+        client = _publico(banco)
+        avaliacao_id = _avaliar(client, 5).json()["id"]
+
+        r = _clique(client, avaliacao_id)
+
+        assert r.status_code == 302
+        assert r.headers["location"] == URL_DO_GOOGLE
+        assert banco.avaliacoes[0]["convite_google_clicado"] is True
+        # A escrita do clique aconteceu dentro do pedido, antes da resposta que
+        # leva a pessoa ao Google.
+        assert ("ouvidoria_avaliacoes", "update", {"convite_google_clicado": True}) in banco.escritas
+
+    def test_clique_numa_nota_que_nao_viu_o_convite_nao_conta(self):
+        """Quem chama a rota com o id de uma nota sem convite não infla a taxa."""
+        banco = _Banco(pontos=[_ponto(CODIGO)], global_ligado=True)
+        client = _publico(banco)
+        avaliacao_id = _avaliar(client, 5).json()["id"]
+
+        r = _clique(client, avaliacao_id)
+
+        assert r.status_code == 302
+        assert banco.avaliacoes[0]["convite_google_clicado"] is False
+
+    def test_o_destino_vem_so_da_configuracao(self):
+        """Nada da URL do pedido decide para onde a pessoa vai, e link que não
+        é https não vira redirecionamento."""
+        banco = _Banco(pontos=[_ponto(CODIGO, convite=True)], global_ligado=True)
+        client = _publico(banco)
+        avaliacao_id = _avaliar(client, 5).json()["id"]
+        banco.tabelas["ouvidoria_config"][0]["google_review_url"] = "javascript:alert(1)"
+
+        r = client.get(
+            f"/api/ouvidoria/publico/avaliacoes/{avaliacao_id}/convite-google",
+            params={"url": "https://exemplo.com"},
+        )
+
+        assert r.status_code == 404
