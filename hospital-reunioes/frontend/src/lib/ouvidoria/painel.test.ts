@@ -14,6 +14,7 @@ import {
   atrasosDasAreas,
   avisosDeDegradacao,
   calendarioUtilFoiLido,
+  casosDoNumero,
   classificarFalha,
   classificarJanela,
   contarPorStatus,
@@ -21,9 +22,12 @@ import {
   diaNoHospital,
   diaSeguinte,
   hojeNoHospital,
+  idadeDoMaisAntigo,
   intervaloDeAtualizacao,
   INTERVALO_BASE_MS,
   INTERVALO_MAXIMO_MS,
+  linhasPorArea,
+  percentualRespondidoNoPrazo,
   podeVerPainel,
   precisaDaMarcaDeSigilo,
   proximosVencimentos,
@@ -236,16 +240,15 @@ describe("os próximos vencimentos", () => {
     expect(proximosVencimentos([quarta, terca, segunda], SEXTA, 2).casos).toEqual([segunda, terca]);
   });
 
-  it("não repete o que os blocos vizinhos mostram, nem ressuscita o parado", () => {
-    // Vencido e "vence hoje" têm bloco próprio: repetir aqui faria o mesmo caso
-    // ser cobrado duas vezes na mesma tela, e a soma dos três blocos deixaria
-    // de fazer sentido para quem lê.
+  it("não repete o vencido, nem ressuscita o parado", () => {
+    // O vencido tem faixa própria (atrasos das áreas ou da Ouvidoria, issue
+    // #1628): repetir aqui faria o mesmo caso ser cobrado duas vezes na mesma
+    // tela.
     const vencido = caso({ prazo_area_em: "2026-08-27T20:00:00+00:00", prazo_estourado: true });
-    const venceHoje = caso({ prazo_area_em: `${SEXTA}T20:00:00+00:00` });
     const parado = caso({ prazo_area_em: "2026-08-31T20:00:00+00:00", status: "encerrado" });
     const semPrazo = naTriagem("");
 
-    expect(proximosVencimentos([vencido, venceHoje, parado, semPrazo], SEXTA, 5).casos).toEqual([]);
+    expect(proximosVencimentos([vencido, parado, semPrazo], SEXTA, 5).casos).toEqual([]);
   });
 
   it("mostra 5 sem que ninguém peça, e é esse o limite do bloco", () => {
@@ -743,5 +746,116 @@ describe("as duas faixas de atraso do Painel (issue #1628, seção 4.11 do anexo
       semGravidadeAntigo,
       semGravidadeRecente,
     ]);
+  });
+
+  it("o elogio não entra em faixa de atraso nenhuma, nem com a área nem na triagem", () => {
+    // O elogio com a área não tem prazo de resposta (ADR 0088), e o prazo de
+    // referência da fundação já passou: é a armadilha que o punha em atraso.
+    const elogioComAArea = caso({ tipo_manifestacao: "elogio", prazo_area_em: null, prazo_resposta: "2026-08-20" });
+    const elogioNaTriagem = naTriagem("2026-08-20", { tipo_manifestacao: "elogio" });
+
+    expect(atrasosDasAreas([elogioComAArea, elogioNaTriagem], HOJE)).toEqual([]);
+    expect(atrasosDaOuvidoria([elogioComAArea, elogioNaTriagem], HOJE)).toEqual([]);
+    expect(casosDoNumero("atrasados", [elogioComAArea, elogioNaTriagem], HOJE)).toEqual([]);
+  });
+});
+
+describe("os números do agora (issue #1628, faixa 2)", () => {
+  it("atrasados soma as duas faixas de atraso, na ordem de gravidade e atraso", () => {
+    const daArea = caso({ gravidade: "baixo", prazo_area_em: "2026-08-24T20:00:00+00:00", prazo_estourado: true });
+    const daTriagem = naTriagem("2026-08-24", { gravidade: "alto" });
+    const noPrazo = caso({ prazo_area_em: "2026-08-31T20:00:00+00:00" });
+
+    expect(casosDoNumero("atrasados", [daArea, noPrazo, daTriagem], HOJE)).toEqual([daTriagem, daArea]);
+  });
+
+  it("vence em até 2 dias úteis pela folga útil que o motor mediu, e não pelo calendário de parede", () => {
+    // 1080 minutos úteis são dois dias de expediente de 9 horas (RN-22).
+    const comDoisDias = caso({ prazo_area_em: "2026-08-31T20:00:00+00:00", minutos_uteis_restantes: 1080 });
+    const comTresDias = caso({ prazo_area_em: "2026-09-01T20:00:00+00:00", minutos_uteis_restantes: 1620 });
+    const venceHoje = caso({ prazo_area_em: `${HOJE}T20:00:00+00:00`, minutos_uteis_restantes: 120 });
+    const jaVenceu = caso({ prazo_area_em: "2026-08-24T20:00:00+00:00", prazo_estourado: true, minutos_uteis_restantes: 0 });
+
+    expect(casosDoNumero("vencem", [comTresDias, comDoisDias, jaVenceu, venceHoje], HOJE)).toEqual([
+      venceHoje,
+      comDoisDias,
+    ]);
+  });
+
+  it("na triagem, a sexta conta a segunda como o próximo dia útil", () => {
+    // O prazo da triagem é data civil. Segunda está a 3 dias de parede da
+    // sexta e a 1 dia útil: é o segundo número que diz se alguém precisa correr.
+    const naSegunda = naTriagem("2026-08-31");
+    const naTerca = naTriagem("2026-09-01");
+    const naQuarta = naTriagem("2026-09-02");
+
+    expect(casosDoNumero("vencem", [naQuarta, naTerca, naSegunda], SEXTA)).toEqual([naSegunda, naTerca]);
+  });
+
+  it("o elogio não vence, então também não vence em 2 dias", () => {
+    const elogio = naTriagem(HOJE, { tipo_manifestacao: "elogio" });
+
+    expect(casosDoNumero("vencem", [elogio], HOJE)).toEqual([]);
+  });
+
+  it("aguardando triagem é o que está com a Ouvidoria, o mais antigo primeiro", () => {
+    const antigo = naTriagem("2026-08-30", { data_abertura: "2026-08-19" });
+    const recente = naTriagem("2026-09-02", { data_abertura: "2026-08-25", status: "em_classificacao" });
+    const comAArea = caso({ data_abertura: "2026-08-01" });
+
+    expect(casosDoNumero("triagem", [recente, comAArea, antigo], HOJE)).toEqual([antigo, recente]);
+    expect(idadeDoMaisAntigo([recente, comAArea, antigo], HOJE)).toBe(7);
+  });
+
+  it("sem caso na triagem, não há idade para mostrar", () => {
+    expect(idadeDoMaisAntigo([caso({ data_abertura: "2026-08-01" })], HOJE)).toBeNull();
+  });
+
+  it("% respondido no prazo no mês é o trecho da área das métricas, o mesmo do relatório", () => {
+    const prazo = {
+      trechos: [
+        { trecho: "triagem", percentual_cumprido: 50 },
+        { trecho: "area", percentual_cumprido: 82.5 },
+        { trecho: "conclusiva", percentual_cumprido: 90 },
+      ],
+    };
+
+    expect(percentualRespondidoNoPrazo(prazo)).toBe(82.5);
+  });
+
+  it("sem caso medido no mês, a porcentagem não existe, e não é zero", () => {
+    expect(percentualRespondidoNoPrazo({ trechos: [{ trecho: "area", percentual_cumprido: null }] })).toBeNull();
+    expect(percentualRespondidoNoPrazo(undefined)).toBeNull();
+  });
+});
+
+describe("a tabela por área com o % no prazo do mês (issue #1628, faixa 6)", () => {
+  it("cada área com pendência ganha o % do mês, e a área sem pendência que respondeu no mês também aparece", () => {
+    const linhas = linhasPorArea(
+      [pendencia({ setor: "Recepcao", responsavel: "Carlos Titular", pendentes: 3, vencidas: 1 })],
+      [
+        { setor: "Recepcao", responsavel: "Carlos Titular", medidos: 4, cumpridos: 3, percentual_cumprido: 75 },
+        { setor: "Farmacia", responsavel: "Paula Gestora", medidos: 2, cumpridos: 2, percentual_cumprido: 100 },
+      ]
+    );
+
+    expect(linhas.map((linha) => [linha.setor, linha.responsavel, linha.pendentes, linha.percentual_no_prazo])).toEqual([
+      ["Recepcao", "Carlos Titular", 3, 75],
+      ["Farmacia", "Paula Gestora", 0, 100],
+    ]);
+  });
+
+  it("a área que deve e não teve caso medido no mês fica sem %", () => {
+    const [linha] = linhasPorArea([pendencia({ setor: "Recepcao" })], []);
+
+    expect(linha.percentual_no_prazo).toBeNull();
+  });
+});
+
+describe("os próximos vencimentos no Painel de seis faixas (issue #1628, faixa 5)", () => {
+  it("o que vence hoje e ainda não rompeu entra nos próximos, porque a faixa Vence hoje saiu", () => {
+    const venceHoje = caso({ prazo_area_em: `${HOJE}T20:00:00+00:00` });
+
+    expect(proximosVencimentos([venceHoje], HOJE, 5).casos).toEqual([venceHoje]);
   });
 });
