@@ -46,4 +46,5 @@ Várias sessões Claude Code rodam issues `ready-for-agent` distintas ao mesmo t
 <!-- claude-reflect: learned rules (saved from the band; edit freely) -->
 ## Learned rules
 - Before closing any issue, verify every acceptance criterion is actually met and check them off; never close an issue with unchecked criteria.
+- Default to effort high, not medium, whenever invoking fable 5.2, including when planning.
 <!-- end claude-reflect -->
