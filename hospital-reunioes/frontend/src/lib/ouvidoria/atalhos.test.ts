@@ -23,7 +23,14 @@ function chaves(perfil: string | null | undefined) {
 
 describe("quem vê cada atalho", () => {
   it("o ouvidor vê também a porta dos responsáveis por setor (issue #711)", () => {
-    expect(chaves("ouvidor")).toEqual(["painel", "avaliacoes", "nota_externa", "pontos", "responsaveis"]);
+    expect(chaves("ouvidor")).toEqual([
+      "painel",
+      "avaliacoes",
+      "nota_externa",
+      "pontos",
+      "responsaveis",
+      "como_funciona",
+    ]);
   });
 
   it("a aba Avaliações é dos dois perfis da Ouvidoria e de mais ninguém (issue #1626)", () => {
@@ -41,7 +48,7 @@ describe("quem vê cada atalho", () => {
     expect(chaves("ouvidor")).not.toContain("prazos");
   });
 
-  it("a diretoria executiva vê os seis, na ordem do trabalho", () => {
+  it("a diretoria executiva vê os sete, na ordem do trabalho", () => {
     expect(chaves("diretoria_executiva")).toEqual([
       "painel",
       "avaliacoes",
@@ -49,7 +56,16 @@ describe("quem vê cada atalho", () => {
       "pontos",
       "responsaveis",
       "prazos",
+      "como_funciona",
     ]);
+  });
+
+  it("a tela Como funciona é dos dois perfis da Ouvidoria (issue #1629, regra T9)", () => {
+    // O primeiro acesso de quem chega à Ouvidoria. Quem está fora dela só lê o
+    // índice da fila e não trata caso, então o passo a passo não é para ele.
+    expect(chaves("ouvidor")).toContain("como_funciona");
+    expect(chaves("diretoria_executiva")).toContain("como_funciona");
+    expect(chaves("secretaria")).not.toContain("como_funciona");
   });
 
   it("quem está fora da Ouvidoria não vê porta nenhuma", () => {
@@ -65,7 +81,15 @@ describe("o rótulo curto e o nome inteiro são coisas diferentes (RN-77)", () =
   it("a pílula do desktop leva o rótulo curto", () => {
     const rotulos = atalhosDoPerfil("diretoria_executiva").map((a) => a.rotulo);
 
-    expect(rotulos).toEqual(["Painel", "Avaliações", "Nota externa", "Pontos", "Responsáveis", "Prazos"]);
+    expect(rotulos).toEqual([
+      "Painel",
+      "Avaliações",
+      "Nota externa",
+      "Pontos",
+      "Responsáveis",
+      "Prazos",
+      "Como funciona",
+    ]);
   });
 
   it("o nome inteiro continua existindo, para o leitor de tela e para o menu", () => {
@@ -78,11 +102,12 @@ describe("o rótulo curto e o nome inteiro são coisas diferentes (RN-77)", () =
       "Pontos de escuta",
       "Responsáveis por setor",
       "Tabela de prazos",
+      "Como funciona a Ouvidoria",
     ]);
   });
 
   it("a barra inteira cabe na linha da tela mais estreita em que ela aparece", () => {
-    // O perfil que vê as seis portas é o pior caso da barra. Ela é uma linha
+    // O perfil que vê as sete portas é o pior caso da barra. Ela é uma linha
     // só, `whitespace-nowrap` e sem `flex-wrap`: o que não couber transborda,
     // e nenhum teste de contagem de palavras enxerga isso.
     const barra = larguraDaBarra(atalhosDoPerfil("diretoria_executiva"));
@@ -108,7 +133,7 @@ describe("o rótulo curto e o nome inteiro são coisas diferentes (RN-77)", () =
     // (1280px) para cima, e abaixo dele quem atende é o menu.
     expect(BREAKPOINT_DA_BARRA).toBe("xl");
     expect(LARGURA_MINIMA_COM_BARRA).toBe(1280);
-    const seis = atalhosDoPerfil("diretoria_executiva");
+    const seis = atalhosDoPerfil("diretoria_executiva").filter((a) => a.chave !== "como_funciona");
     expect(seis).toHaveLength(6);
     expect(larguraDaBarra(seis)).toBeGreaterThan(1024 - 256 - 4 * 32);
   });
@@ -125,6 +150,7 @@ describe("o rótulo curto e o nome inteiro são coisas diferentes (RN-77)", () =
       pontos: "/ouvidoria/pontos",
       responsaveis: "/ouvidoria/responsaveis",
       prazos: "/ouvidoria/prazos",
+      como_funciona: "/ouvidoria/como-funciona",
     });
   });
 });

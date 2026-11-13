@@ -299,7 +299,8 @@ describe("a barra de atalhos numa linha só (RN-77, D-16)", () => {
 
     const nav = screen.getByRole("navigation", { name: /atalhos da ouvidoria/i });
     const pilulas = within(nav).getAllByRole("link");
-    expect(pilulas).toHaveLength(6);
+    // Sete desde a porta Como funciona (issue #1629).
+    expect(pilulas).toHaveLength(7);
     for (const pilula of pilulas) {
       expect(pilula.className).toContain("whitespace-nowrap");
     }
@@ -371,7 +372,8 @@ describe("no celular os atalhos colapsam em menu (RN-77)", () => {
     fireEvent.click(gatilho);
     expect(gatilho.getAttribute("aria-expanded")).toBe("true");
     const itens = within(flutuante).getAllByRole("link");
-    expect(itens).toHaveLength(6);
+    expect(itens).toHaveLength(7);
+    expect(itens[6].textContent).toBe("Como funciona a Ouvidoria");
     // No menu há largura: o nome inteiro é o texto, e não só o rótulo curto.
     expect(itens[0].textContent).toBe("Painel em tempo real");
     for (const item of itens) {
