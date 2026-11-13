@@ -73,6 +73,87 @@ export const RECUSA_DO_ENVIO =
 export const ENVIO_RECUSADO_PELA_PAGINA =
   "Não foi possível registrar sua manifestação com os dados desta página. Copie o que você escreveu, recarregue a página e envie de novo.";
 
+/**
+ * As listas fechadas da Manifestação guiada (issue #1620, seção 4.2 da
+ * especificação). Valem de novo no backend e no CHECK do banco.
+ */
+export type Periodo = "manha" | "tarde" | "noite" | "madrugada";
+
+export const PERIODOS: { valor: Periodo; rotulo: string }[] = [
+  { valor: "manha", rotulo: "Manhã" },
+  { valor: "tarde", rotulo: "Tarde" },
+  { valor: "noite", rotulo: "Noite" },
+  { valor: "madrugada", rotulo: "Madrugada" },
+];
+
+export type Expectativa = "resposta" | "providencia" | "registro";
+
+export const EXPECTATIVAS: { valor: Expectativa; rotulo: string }[] = [
+  { valor: "resposta", rotulo: "Uma resposta" },
+  { valor: "providencia", rotulo: "Uma providência" },
+  { valor: "registro", rotulo: "Só registrar" },
+];
+
+/** Um lugar da lista de "Onde": o nome público de um cartaz ativo. */
+export interface LocalPublico {
+  nome: string;
+  ala_internacao: boolean;
+}
+
+/** A opção de quem não acha o lugar na lista dos cartazes. */
+export const OUTRO_LUGAR = "Outro lugar do hospital";
+
+/**
+ * Quem se identifica pode deixar só o telefone (decisão 8 do diretor no PRD
+ * #1527), mas o acuse e o aviso de encerramento saem só por e-mail.
+ */
+export const AVISO_SO_TELEFONE =
+  "As respostas da Ouvidoria saem por e-mail. Só com o telefone, você não recebe o aviso de que a manifestação chegou nem a resposta final.";
+
+// Mesma régua do backend: oito dígitos é o menor telefone que se disca, e o
+// e-mail precisa de arroba e domínio com ponto.
+const DIGITOS_DO_MENOR_TELEFONE = 8;
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function telefoneValido(telefone: string | undefined): boolean {
+  return (telefone ?? "").replace(/\D/g, "").length >= DIGITOS_DO_MENOR_TELEFONE;
+}
+
+function emailValido(email: string): boolean {
+  return EMAIL.test(email.trim());
+}
+
+/**
+ * O passo já pode seguir? É a régua do botão Continuar (e do Enviar, no passo
+ * 5). O passo 1 é a escolha de identificação, que a tela guarda à parte.
+ */
+export function passoCompleto(passo: number, form: FormularioPublico): boolean {
+  switch (passo) {
+    case 2:
+      return form.sobre !== null;
+    case 3:
+      return Boolean(form.dataOcorrencia && form.periodo && form.local?.trim());
+    case 4:
+      return !relatoEstaVazio(form.relato) && Boolean(form.expectativa);
+    case 5: {
+      if (form.anonimo) return true;
+      const email = form.contato.trim();
+      const telefone = (form.telefone ?? "").trim();
+      if (!form.nome.trim()) return false;
+      if (email && !emailValido(email)) return false;
+      if (telefone && !telefoneValido(telefone)) return false;
+      return Boolean(email || telefone);
+    }
+    default:
+      return true;
+  }
+}
+
+/** Quem se identificou e deixou só o telefone vê o aviso do e-mail. */
+export function precisaDoAvisoDoEmail(form: FormularioPublico): boolean {
+  return !form.anonimo && !form.contato.trim() && telefoneValido(form.telefone);
+}
+
 export function avisoDoPaciente(anonimo: boolean): string {
   return anonimo
     ? `${AVISO_SEM_NOME_DO_PACIENTE} ${AVISO_PACIENTE_PODE_IDENTIFICAR}`
@@ -104,6 +185,23 @@ export interface FormularioPublico {
   p: string | null;
   /** A natureza que a pessoa marcou, ou nada: marcar é opcional. */
   natureza: NaturezaInformada | null;
+  /*
+   * Os campos da Manifestação guiada (issue #1620). Opcionais no tipo porque o
+   * registro de antes não os tinha; o passo a passo sempre os preenche, e é
+   * pela presença deles que o servidor sabe que o envio veio dos cinco passos.
+   * O e-mail continua em `contato`.
+   */
+  dataOcorrencia?: string;
+  periodo?: Periodo | null;
+  horaAprox?: string;
+  local?: string;
+  /** O lugar escolhido é ala de internação: só aí o quarto vale. */
+  localEhAla?: boolean;
+  quarto?: string;
+  profissionais?: string;
+  pacienteNascimento?: string;
+  expectativa?: Expectativa | null;
+  telefone?: string;
 }
 
 export interface EnvioPublico {
@@ -116,6 +214,15 @@ export interface EnvioPublico {
   sobre?: SobreQuem;
   paciente_nome?: string;
   paciente_referencia?: string;
+  data_ocorrencia?: string;
+  periodo?: Periodo;
+  hora_aprox?: string;
+  local_informado?: string;
+  quarto?: string;
+  profissionais?: string;
+  paciente_nascimento?: string;
+  expectativa?: Expectativa;
+  telefone?: string;
 }
 
 /**
@@ -160,6 +267,32 @@ export function montarEnvio(form: FormularioPublico): EnvioPublico {
     const pacienteReferencia = form.pacienteReferencia?.trim();
     if (pacienteNome) envio.paciente_nome = pacienteNome;
     if (pacienteReferencia) envio.paciente_referencia = pacienteReferencia;
+  }
+
+  // Quando, onde e o que a pessoa espera (issue #1620). Campo em branco fica
+  // de fora, como no resto do envio.
+  const texto = (valor: string | undefined) => valor?.trim() || undefined;
+  const guiados: Partial<EnvioPublico> = {
+    data_ocorrencia: texto(form.dataOcorrencia),
+    periodo: form.periodo ?? undefined,
+    hora_aprox: texto(form.horaAprox),
+    local_informado: texto(form.local),
+    // O quarto só vale em ala de internação: quem digitou e trocou de lugar
+    // não leva o quarto do lugar de antes.
+    quarto: form.localEhAla ? texto(form.quarto) : undefined,
+    profissionais: texto(form.profissionais),
+    expectativa: form.expectativa ?? undefined,
+    // O telefone é identificação: o anônimo não leva, como não leva o nome.
+    telefone: form.anonimo ? undefined : texto(form.telefone),
+    // O nascimento do paciente segue a régua do nome, com um caminho a mais:
+    // quem se identifica e fala de si É o paciente.
+    paciente_nascimento:
+      form.sobre === "outra_pessoa" || (form.sobre === "mim" && !form.anonimo)
+        ? texto(form.pacienteNascimento)
+        : undefined,
+  };
+  for (const [chave, valor] of Object.entries(guiados)) {
+    if (valor !== undefined) (envio as unknown as Record<string, unknown>)[chave] = valor;
   }
   return envio;
 }
