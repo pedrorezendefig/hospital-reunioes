@@ -1925,7 +1925,7 @@ describe("O card do Quadro abre num painel à direita (issue #1643, ADR 0090, de
     expect(classes).toContain("bottom-0");
     expect(classes.filter((c) => /^(inset-0|inset-y-\S+|top-\S+)$/.test(c))).toEqual([`top-${altura}`]);
     // Abaixo da camada da barra: o sino e o menu do usuário abrem por cima do painel.
-    const camadaDoPainel = Number(classes.find((c) => /^z-\d+$/.test(c))?.slice(2));
+    const camadaDoPainel = Number(classes.find((c) => /^z-(\d+|\[\d+\])$/.test(c))?.replace(/^z-\[?|\]$/g, ""));
     expect(camadaDoPainel).toBeLessThan(camadaDaBarra);
     // Os dois botões da linha do topo seguem no painel e funcionam pelo clique.
     expect(within(painel).getByRole("button", { name: AMPLIAR })).toBeTruthy();
