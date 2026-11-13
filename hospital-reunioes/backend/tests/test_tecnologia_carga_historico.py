@@ -500,7 +500,10 @@ class TestDataDoPedido:
             github_foto={"numero": 1600, "titulo": "Pedido da Vitta", "partes": []},
         )
         gravada = _demanda(
-            "D2", github_issue_numero=1800, origem="vitta", github_foto={"numero": 1800, "criada_em": "2026-07-01T00:00:00Z"}
+            "D2",
+            github_issue_numero=1800,
+            origem="vitta",
+            github_foto={"numero": 1800, "criada_em": "2026-07-01T00:00:00Z"},
         )
         return _Cenario(monkeypatch, fechadas=[], demandas=[vitta, gravada], relidas=[aberta, ja_tem])
 
@@ -524,6 +527,45 @@ class TestDataDoPedido:
         assert primeira.criada_em == {1600: CRIADA_EM}
         assert segunda.criada_em == {}
         assert len(fotos_gravadas) == 1
+
+    def test_dry_run_lista_a_data_do_pedido_e_nao_grava(self, monkeypatch, capsys):
+        cenario = self._cenario_da_carga(monkeypatch)
+        antes = [dict(d) for d in cenario.demandas]
+        monkeypatch.setattr("app.dependencies.get_supabase_client", lambda: cenario.sb)
+
+        saida = tecnologia_carga_historico.main(["--dry-run"])
+
+        impresso = capsys.readouterr().out
+        assert saida == 0
+        assert f"preencheria a data do pedido na issue #1600: criada_em={CRIADA_EM}" in impresso
+        assert "data do pedido na issue #1800" not in impresso
+        assert "1 com a data do pedido" in impresso
+        assert cenario.demandas == antes
+
+    def test_carga_da_data_do_pedido_nao_avisa_ninguem(self, monkeypatch):
+        """Com o autor e a diretoria cadastrados, ha para quem avisar: nem o
+        sino nem o e-mail saem."""
+        enviados: list[tuple] = []
+        monkeypatch.setattr(email_service, "_enviar_email", lambda *a, **kw: enviados.append(a) or True)
+        monkeypatch.setattr(tecnologia_email, "_enviar_email", lambda *a, **kw: enviados.append(a) or True)
+        cenario = self._cenario_da_carga(monkeypatch)
+        cenario.sb.tabelas["participantes"].extend(
+            {
+                "id": pid,
+                "nome_completo": nome,
+                "email": f"{pid.lower()}@hsm.test",
+                "ativo": True,
+                "is_super_admin": True,
+                "access_profile": "super_admin",
+            }
+            for pid, nome in (("P1", "Autor do pedido"), ("P9", "Diretor Geral"))
+        )
+
+        relatorio = carregar(cenario.sb, dry_run=False)
+
+        assert relatorio.criada_em == {1600: CRIADA_EM}
+        assert cenario.sb.tabelas["notificacoes"] == []
+        assert enviados == []
 
 
 # ═══════════════════════════════════════════════════════════════════════════
