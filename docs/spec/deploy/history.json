@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-12T23:36:21-03:00",
+      "sha": "0bda2f0cc83939e4fd23d841f06ec73006312d94",
+      "app_version": "0.265.0",
+      "subject": "Onda hsm-conector-onda1: Conector lista casos da Ouvidoria com prazo estourado por setor",
+      "raw_subject": "chore(deploy): registro da onda hsm-conector-onda1 (#1663)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1571
+      ],
+      "result": "healthy",
+      "duration_seconds": 53,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-conector-onda1: PR #1663 (issue #1611), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 14
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-12T23:32:39-03:00",
       "sha": "11ee65463f469acd9e45eee3d1e186365833d649",
       "app_version": "0.264.0",
