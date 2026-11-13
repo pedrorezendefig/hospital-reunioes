@@ -647,3 +647,34 @@ class TestAListaComOsFiltros:
         # O contador é de todas as datas: a marca antiga também espera.
         assert corpo["para_revisar_total"] == 2
         assert corpo["total"] == 3
+
+
+class TestOKitDeConhecimentoDizOComportamentoNovo:
+    """CA: o texto do Produto Ouvidoria no kit de conhecimento diz o
+    comportamento novo."""
+
+    @pytest.fixture
+    def secao(self) -> str:
+        from app.services.conhecimento import CONHECIMENTO_DIR
+
+        texto = (CONHECIMENTO_DIR / "ouvidoria.md").read_text(encoding="utf-8")
+        partes = texto.split("\n## ")
+        achadas = [parte for parte in partes if parte.startswith("A aba Avaliações\n")]
+        assert len(achadas) == 1
+        return achadas[0]
+
+    def test_diz_quem_ve_e_o_que_a_aba_mostra(self, secao):
+        assert "Só o ouvidor e a diretoria executiva" in secao
+        assert "nota média" in secao
+        assert "notas 4 e 5" in secao
+        assert "pediu retorno" in secao
+        assert "por ponto, por turno, por dia da semana e por semana" in secao
+        assert "últimos 30 dias" in secao
+
+    def test_diz_como_converter_e_arquivar(self, secao):
+        assert "Converter em manifestação" in secao
+        assert "hora da avaliação" in secao
+        assert "sem tipo" in secao
+        assert "não tem para quem responder" in secao
+        assert "Arquivar revisão" in secao
+        assert "motivo curto" in secao
