@@ -69,6 +69,7 @@ import jwt
 from app.config import settings
 from app.services.central_de_comando import (
     cache,
+    ferramenta_ouvidoria_dossie,
     ferramenta_ouvidoria_prazo,
     ferramenta_pendencias,
     ferramenta_reunioes,
@@ -116,6 +117,7 @@ FERRAMENTA_INSTAGRAM = "get_instagram_analytics"
 FERRAMENTA_PENDENCIAS = ferramenta_pendencias.NOME
 FERRAMENTA_REUNIOES = ferramenta_reunioes.NOME
 FERRAMENTA_OUVIDORIA_PRAZO = "get_ouvidoria_prazo_estourado"
+FERRAMENTA_OUVIDORIA_DOSSIE = ferramenta_ouvidoria_dossie.NOME
 
 # Os períodos que cada ferramenta de tendência aceita: o Site tem 7, 28 e 90
 # dias; o Instagram só 7 e 28 (a Graph API entrega no máximo 30 dias por
@@ -362,6 +364,7 @@ def _gates() -> dict:
         FERRAMENTA_PENDENCIAS: tem_diretoria_executiva,
         FERRAMENTA_REUNIOES: tem_diretoria_executiva,
         FERRAMENTA_OUVIDORIA_PRAZO: tem_diretoria_executiva,
+        FERRAMENTA_OUVIDORIA_DOSSIE: tem_diretoria_executiva,
     }
 
 
@@ -514,6 +517,7 @@ def ferramentas() -> list[dict]:
         ferramenta_pendencias.definicao(),
         ferramenta_reunioes.definicao(),
         ferramenta_ouvidoria_prazo.definicao(),
+        ferramenta_ouvidoria_dossie.definicao(),
     ]
 
 
@@ -554,6 +558,8 @@ async def _executar_ferramenta(nome: str, argumentos: dict, participante: dict |
         return await anyio.to_thread.run_sync(_ferramenta_reunioes, argumentos, participante, supabase)
     if nome == FERRAMENTA_OUVIDORIA_PRAZO:
         return await anyio.to_thread.run_sync(_ferramenta_ouvidoria_prazo, argumentos, participante, supabase)
+    if nome == FERRAMENTA_OUVIDORIA_DOSSIE:
+        return await anyio.to_thread.run_sync(_ferramenta_ouvidoria_dossie, argumentos, participante, supabase)
     if nome == FERRAMENTA_AO_VIVO:
         return await _ferramenta_ao_vivo()
     if nome == FERRAMENTA_SITE:
@@ -583,6 +589,14 @@ def _ferramenta_ouvidoria_prazo(argumentos: dict, participante: dict, supabase) 
     try:
         payload = ferramenta_ouvidoria_prazo.executar(argumentos, participante, supabase)
     except ferramenta_ouvidoria_prazo.PedidoRecusadoError as exc:
+        return _resultado_de_erro(str(exc))
+    return _resultado_estruturado(payload)
+
+
+def _ferramenta_ouvidoria_dossie(argumentos: dict, participante: dict, supabase) -> dict:
+    try:
+        payload = ferramenta_ouvidoria_dossie.executar(argumentos, participante, supabase)
+    except ferramenta_ouvidoria_dossie.PedidoRecusadoError as exc:
         return _resultado_de_erro(str(exc))
     return _resultado_estruturado(payload)
 
