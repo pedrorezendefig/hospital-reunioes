@@ -18,6 +18,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { AlertCircle, ArrowLeft, Loader2, Plus, Trash2, UserRoundX } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
+import { SetorDoNucleo } from "@/components/ouvidoria/SetorDoNucleo";
 import {
   AJUDA_PAPEL,
   LABEL_PAPEL,
@@ -235,6 +236,13 @@ export default function ResponsaveisDaOuvidoriaPage() {
           {erro}
         </div>
       )}
+
+      {/* Qual setor é o Núcleo de Segurança do Paciente (issue #1621). Fica
+          antes do cadastro porque é ele que diz a qual setor a presidência do
+          NSP precisa ser cadastrada como titular. */}
+      <div className="mb-6">
+        <SetorDoNucleo token={token} setores={setores} />
+      </div>
 
       <section className="bg-white rounded-2xl border border-border shadow-premium p-5 mb-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700 mb-3">Cadastrar responsável</h2>
