@@ -13,7 +13,9 @@ O que a tela não mostra para a pessoa, a ferramenta também não mostra (ADR
 esconde dela a Ata e as Pendências), recebe a recusa.
 
 Lista longa volta cortada em `TETO`, com o total e o aviso de que há mais,
-para o Claude refinar a busca.
+para o Claude refinar a busca. As Pendências são cortadas por Reunião, em
+`TETO_DE_PENDENCIAS`, e cada Reunião diz quantas tem e se veio cortada: uma
+Reunião cheia não esvazia a outra em silêncio.
 """
 
 from __future__ import annotations
@@ -31,8 +33,9 @@ NOME = "get_reunioes"
 # busca mais fina.
 TETO = 20
 
-# Quantas Pendências, somadas, as Reuniões de uma resposta trazem.
-TETO_DE_PENDENCIAS = 200
+# Quantas Pendências cada Reunião de uma resposta traz, no máximo (20 Reuniões
+# vezes 15 dá 300 no pior caso).
+TETO_DE_PENDENCIAS = 15
 
 
 class PedidoRecusadoError(Exception):
@@ -53,7 +56,10 @@ def definicao() -> dict:
             'ASSINADA, APROVADA, CANCELADA e outros); "ata" é nula quando a Reunião ainda não tem Ata. '
             'Cada Pendência traz o responsável, o prazo e a "situacao" (atrasada, pendente, em_progresso, '
             "concluida, cancelada, repactuada), a mesma da tela de Pendências; o diretor chama de meta a "
-            'Pendência com prazo. A lista vem da mais recente para a mais antiga; "total" é quantas atendem '
+            f"Pendência com prazo. Cada Reunião traz até {TETO_DE_PENDENCIAS} Pendências, pelo prazo (as sem "
+            'prazo, como a repactuada, no fim); "totalDePendencias" é quantas ela tem e "pendenciasCortadas" '
+            "verdadeiro quer dizer que só vieram as primeiras: nesse caso não diga que a Reunião não tem uma "
+            'Pendência que não veio. A lista vem da mais recente para a mais antiga; "total" é quantas atendem '
             f'à busca e "haMais" verdadeiro quer dizer que só as {TETO} primeiras vieram: refine a busca '
             "para ver o resto. Não invente Reuniões, decisões ou Pendências que não estejam no payload."
         ),
@@ -92,14 +98,16 @@ def executar(argumentos: dict, participante: dict, supabase) -> dict:
     )
     ids = [r["id_reuniao"] for r in reunioes]
     participantes = participantes_por_reuniao(supabase, ids)
-    # As Pendências das Reuniões desta página, pela consulta da tela de
+    # As Pendências de cada Reunião desta página, pela consulta da tela de
     # Pendências: a visibilidade é a das próprias Reuniões, já filtradas acima.
-    pendencias, total_de_pendencias = consultar_pendencias(
-        supabase, allowed_reuniao_ids=ids, my_participante_id=None, limit=TETO_DE_PENDENCIAS
-    )
-    por_reuniao: dict[str, list[dict]] = {i: [] for i in ids}
-    for linha in pendencias:
-        por_reuniao.setdefault(linha.get("id_reuniao"), []).append(ferramenta_pendencias.serializar_pendencia(linha))
+    # Uma consulta por Reunião, para o teto valer por Reunião e o total de cada
+    # uma ser o de verdade.
+    pendencias = {
+        i: consultar_pendencias(
+            supabase, allowed_reuniao_ids=[i], my_participante_id=None, id_reuniao=i, limit=TETO_DE_PENDENCIAS
+        )
+        for i in ids
+    }
 
     ha_mais = total > len(reunioes)
     return {
@@ -111,9 +119,8 @@ def executar(argumentos: dict, participante: dict, supabase) -> dict:
             if ha_mais
             else None
         ),
-        "pendenciasCortadas": total_de_pendencias > len(pendencias),
         "reunioes": [
-            _reuniao(r, participantes.get(r["id_reuniao"], []), por_reuniao.get(r["id_reuniao"], [])) for r in reunioes
+            _reuniao(r, participantes.get(r["id_reuniao"], []), *pendencias[r["id_reuniao"]]) for r in reunioes
         ],
     }
 
@@ -141,7 +148,7 @@ def _termo(valor: object) -> str | None:
     raise PedidoRecusadoError('"termo" é uma palavra ou trecho, em texto.')
 
 
-def _reuniao(linha: dict, participantes: list[dict], pendencias: list[dict]) -> dict:
+def _reuniao(linha: dict, participantes: list[dict], pendencias: list[dict], total_de_pendencias: int) -> dict:
     return {
         "id": linha.get("id_reuniao"),
         "titulo": linha.get("titulo"),
@@ -153,7 +160,9 @@ def _reuniao(linha: dict, participantes: list[dict], pendencias: list[dict]) -> 
         "situacaoDaAta": linha.get("status_ata"),
         "ata": _ata(linha.get("json_ata")),
         "participantes": [{"nome": p["nome"], "cargo": p["cargo"]} for p in participantes],
-        "pendencias": pendencias,
+        "pendencias": [ferramenta_pendencias.serializar_pendencia(p) for p in pendencias],
+        "totalDePendencias": total_de_pendencias,
+        "pendenciasCortadas": total_de_pendencias > len(pendencias),
     }
 
 

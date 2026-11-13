@@ -586,6 +586,39 @@ class TestListaLongaCortadaNoTeto:
         assert payload["haMais"] is True
         assert "25" in payload["aviso"]
 
+    def test_reuniao_com_muitas_pendencias_nao_esvazia_a_outra_em_silencio(self, chave_do_emissor):
+        """Mais de 200 Pendências somadas: a Reunião de prazos tardios (e a
+        repactuada, sem prazo) chega inteira, e a que passou do teto vem
+        marcada como cortada, com o total dela."""
+        cheia = [pendencia(f"C{i:03d}", "PENDENTE", "CHEIA", prazo="2026-01-01") for i in range(250)]
+        tardias = [
+            pendencia("T1", "PENDENTE", "TARDIA", prazo="2026-12-01"),
+            pendencia("T2", "ATRASADO", "TARDIA", prazo="2026-12-15"),
+            pendencia("T3", "REPACTUADA", "TARDIA", prazo=None),
+        ]
+        banco = BancoFalso(
+            participantes=[DIRETOR_SUPER],
+            reunioes=[
+                reuniao("CHEIA", "2026-10-01", "Reunião com muitas ações"),
+                reuniao("TARDIA", "2026-10-02", "Reunião de prazos tardios"),
+            ],
+            reuniao_participantes=[],
+            pendencias=[*cheia, *tardias],
+        )
+
+        payload = reunioes_do_claude(banco, chave_do_emissor, DIRETOR_SUPER)
+
+        por_id = {r["id"]: r for r in payload["reunioes"]}
+        tardia = por_id["TARDIA"]
+        assert [p["id"] for p in tardia["pendencias"]] == ["T1", "T2", "T3"]
+        assert tardia["totalDePendencias"] == 3
+        assert tardia["pendenciasCortadas"] is False
+
+        cheia_no_claude = por_id["CHEIA"]
+        assert cheia_no_claude["pendencias"]
+        assert cheia_no_claude["totalDePendencias"] == 250
+        assert cheia_no_claude["pendenciasCortadas"] is True
+
 
 class TestSoLeitura:
     def test_a_ferramenta_nao_escreve_em_reuniao_ata_nem_pendencia(self, chave_do_emissor):
