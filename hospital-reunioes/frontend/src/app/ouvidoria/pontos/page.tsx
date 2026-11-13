@@ -29,6 +29,8 @@ import {
   Power,
 } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
+import { RotuloComAjuda } from "@/components/ouvidoria/Ajuda";
+import { FRASE_DO_TOPO } from "@/lib/ouvidoria/orientacao";
 import {
   CARTAZ_VAZIO,
   TITULOS_DO_CARTAZ,
@@ -49,6 +51,8 @@ import {
 const CAMPO =
   "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40";
 const ROTULO = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1";
+/** O rótulo que divide a linha com o "?": a margem de baixo é da linha. */
+const ROTULO_DA_LINHA = "text-xs font-semibold text-slate-500 uppercase tracking-wide";
 
 const VAZIO = { setor: "", ...CARTAZ_VAZIO };
 
@@ -106,9 +110,12 @@ function CamposDoCartaz({
   return (
     <>
       <div>
-        <label className={ROTULO} htmlFor={`${prefixo}-rotulo`}>
-          Rótulo do ponto
-        </label>
+        <RotuloComAjuda
+          htmlFor={`${prefixo}-rotulo`}
+          rotulo="Rótulo do ponto"
+          explicacao="O nome interno do cartaz. Só a equipe vê; o paciente lê o nome público."
+          className={ROTULO_DA_LINHA}
+        />
         <input
           id={`${prefixo}-rotulo`}
           className={CAMPO}
@@ -133,9 +140,12 @@ function CamposDoCartaz({
         <p className="text-xs text-slate-400 mt-1">O que o paciente lê. Em branco, vale o rótulo do ponto.</p>
       </div>
       <div className="md:col-span-2">
-        <label className={ROTULO} htmlFor={`${prefixo}-descricao-local`}>
-          Descrição do local
-        </label>
+        <RotuloComAjuda
+          htmlFor={`${prefixo}-descricao-local`}
+          rotulo="Descrição do local"
+          explicacao="Cartaz mudou de lugar? Aposente o ponto antigo e crie um novo. Mover o cartaz sem trocar o ponto faz o painel mostrar dados do lugar errado."
+          className={ROTULO_DA_LINHA}
+        />
         <input
           id={`${prefixo}-descricao-local`}
           className={CAMPO}
@@ -146,9 +156,12 @@ function CamposDoCartaz({
         />
       </div>
       <div>
-        <label className={ROTULO} htmlFor={`${prefixo}-titulo`}>
-          Título do cartaz
-        </label>
+        <RotuloComAjuda
+          htmlFor={`${prefixo}-titulo`}
+          rotulo="Título do cartaz"
+          explicacao="Os dois títulos aprovados pela Diretoria. O subtítulo do cartaz muda junto com o título."
+          className={ROTULO_DA_LINHA}
+        />
         <select
           id={`${prefixo}-titulo`}
           className={CAMPO}
@@ -163,9 +176,12 @@ function CamposDoCartaz({
         </select>
       </div>
       <div>
-        <label className={ROTULO} htmlFor={`${prefixo}-codigo-controle`}>
-          Código de controle
-        </label>
+        <RotuloComAjuda
+          htmlFor={`${prefixo}-codigo-controle`}
+          rotulo="Código de controle"
+          explicacao="Sai impresso fora da moldura, para quem instala saber qual cartaz é qual."
+          className={ROTULO_DA_LINHA}
+        />
         <input
           id={`${prefixo}-codigo-controle`}
           className={CAMPO}
@@ -386,8 +402,7 @@ export default function PontosDeEscutaPage() {
 
       <h1 className="text-2xl font-bold text-slate-900">Pontos de escuta</h1>
       <p className="text-slate-500 text-sm mt-0.5 mb-6">
-        Cada ponto é um cartaz de QR code. Baixe o cartaz A4 e cole no lugar cadastrado: quem ler o
-        código cai no formulário da Ouvidoria, e o caso já chega dizendo de onde veio.
+        {FRASE_DO_TOPO.pontos}
       </p>
 
       {erro && (
@@ -435,9 +450,12 @@ export default function PontosDeEscutaPage() {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700 mb-3">Novo ponto de escuta</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className={ROTULO} htmlFor="ponto-setor">
-              Setor
-            </label>
+            <RotuloComAjuda
+              htmlFor="ponto-setor"
+              rotulo="Setor"
+              explicacao="O setor de onde o relato veio. Não decide a área que vai responder."
+              className={ROTULO_DA_LINHA}
+            />
             <select
               id="ponto-setor"
               className={CAMPO}
