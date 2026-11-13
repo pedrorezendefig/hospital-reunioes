@@ -867,6 +867,8 @@ export function ConversasDaTecnologia({
   const [noPainel, setNoPainel] = useState(false);
   /** O Quadro, onde o painel procura o card para devolver o foco quando fecha. */
   const quadroRef = useRef<HTMLDivElement>(null);
+  /** O painel, onde o "Conversar" acha a caixa da Conversa da Demanda. */
+  const painelRef = useRef<HTMLElement>(null);
   const [desenvolvedor, setDesenvolvedor] = useState(false);
   /** Nulo até o servidor dizer quem está logado: o Desenvolvedor abre em Para mim. */
   const [filtro, setFiltro] = useState<Filtro | null>(null);
@@ -1346,11 +1348,27 @@ export function ConversasDaTecnologia({
 
       {painelAberto && aberta && (
         <aside
+          ref={painelRef}
           aria-label="Pedido aberto"
-          className="fixed inset-y-0 right-0 z-40 w-[min(40rem,100vw)] overflow-y-auto border-l border-border bg-bg shadow-premium-strong p-5 space-y-3"
+          className="fixed inset-y-0 right-0 z-40 w-[min(40rem,100vw)] overflow-y-auto border-l border-border bg-bg shadow-premium-strong p-5 space-y-3 animate-fade-in-right"
         >
           <div className="flex items-center gap-2">
             <span className="normal-case mr-auto text-xs text-text-secondary">{textoDaAbertura(aberta.criado_em)}</span>
+            <button
+              type="button"
+              onClick={() => {
+                const caixa = painelRef.current?.querySelector<HTMLTextAreaElement>(
+                  'textarea[aria-label="Mensagem para a Conversa"]',
+                );
+                caixa?.scrollIntoView?.({ block: "center" });
+                caixa?.focus();
+              }}
+              title="Conversar com quem cuida deste pedido"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold text-primary hover:bg-primary/5"
+            >
+              <MessageSquare className="w-4 h-4" />
+              {CONVERSAR}
+            </button>
             <button
               type="button"
               onClick={() => {

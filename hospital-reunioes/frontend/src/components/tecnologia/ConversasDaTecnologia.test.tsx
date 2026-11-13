@@ -11,6 +11,9 @@
  * "Nova conversa"; e a lista como tela própria no celular.
  */
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,10 +23,14 @@ import { caixaDoDado } from "@/lib/testes/caixaDoDado";
 import { ABERTURA, SEM_CONVERSA_GUARDADA } from "./ChatDaTecnologia";
 import {
   AMPLIAR,
+  APAGAR,
   ConversasDaTecnologia,
+  DESIGNAR_DE_NOVO,
   FECHAR_O_PAINEL,
   NOVA_CONVERSA,
   NOVO_PEDIDO,
+  REENVIAR,
+  REVISAR_COM_O_CODIGO_DE_HOJE,
   SEM_ACESSO,
   VOLTAR_AO_QUADRO,
   VOLTAR_PARA_A_LISTA,
@@ -1809,5 +1816,68 @@ describe("O card do Quadro abre num painel à direita (issue #1643, ADR 0090, de
 
     expect(within(painel).queryByRole("listbox", { name: "Quem vê este pedido" })).toBeNull();
     expect(screen.getByRole("complementary", { name: "Pedido aberto" })).toBeTruthy();
+  });
+
+  it("Apagar, Reenviar, Designar de novo e Revisar com o código de hoje aparecem no painel nas mesmas condições de hoje", async () => {
+    const COM_TUDO = demanda("p-3", "Pedido com tudo", {
+      etapa: "em_analise",
+      tem_vinculo: true,
+      pode_apagar: true,
+      pode_revisar: true,
+      envio_falhou: true,
+      designacao_falhou: true,
+    });
+    const SEM_NADA = demanda("p-4", "Pedido sem botão", { etapa: "planejada", tem_vinculo: true });
+    telaLarga();
+    montar((url) => {
+      if (url === "/api/admin/tecnologia/eu") return { status: 200, corpo: { desenvolvedor: true } };
+      if (url === `${LISTA}?filtro=para_mim`) return { status: 200, corpo: [COM_TUDO, SEM_NADA] };
+      if (url.endsWith("/conversa")) return { status: 200, corpo: { mensagens: [], mencionaveis: [] } };
+      if (url.startsWith(`${LISTA}/`)) return { status: 200, corpo: conversa("p-3", { estado: "enviado" }) };
+      return { status: 404, corpo: {} };
+    });
+    await within(await screen.findByRole("region", { name: "Quadro" })).findByText("Pedido com tudo");
+    const BOTOES = [APAGAR, REENVIAR, DESIGNAR_DE_NOVO, REVISAR_COM_O_CODIGO_DE_HOJE];
+
+    fireEvent.click(cardDe(/Pedido com tudo/));
+    let painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    for (const nome of BOTOES) expect(within(painel).getByRole("button", { name: nome })).toBeTruthy();
+
+    fireEvent.click(within(painel).getByRole("button", { name: FECHAR_O_PAINEL }));
+    fireEvent.click(cardDe(/Pedido sem botão/));
+    painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    await within(painel).findByRole("heading", { level: 2, name: "Pedido sem botão" });
+    for (const nome of BOTOES) expect(within(painel).queryByRole("button", { name: nome })).toBeNull();
+  });
+
+  it("Conversar, no painel, põe a caixa da Conversa da Demanda em foco", async () => {
+    comOQuadro();
+    await screen.findByRole("region", { name: "Quadro" });
+    fireEvent.click(cardDe(/Aviso da ata por e-mail/));
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+    const caixa = await within(painel).findByRole("textbox", { name: "Mensagem para a Conversa" });
+    // O clique no card abre o painel sem roubar o foco para a Conversa.
+    expect(document.activeElement).not.toBe(caixa);
+
+    fireEvent.click(within(painel).getByRole("button", { name: "Conversar" }));
+
+    expect(document.activeElement).toBe(caixa);
+  });
+
+  it("com prefers-reduced-motion, o painel abre sem animação", async () => {
+    comOQuadro();
+    await screen.findByRole("region", { name: "Quadro" });
+    fireEvent.click(cardDe(/Aviso da ata por e-mail/));
+    const painel = await screen.findByRole("complementary", { name: "Pedido aberto" });
+
+    // O painel entra deslizando só pelas animações que o globals.css desliga com
+    // o pedido de menos movimento.
+    const animacoes = painel.className.split(/\s+/).filter((c) => /(^|:)animate-/.test(c));
+    expect(animacoes).toEqual(["animate-fade-in-right"]);
+    const css = readFileSync(resolve(process.cwd(), "src/app/globals.css"), "utf8");
+    const reduzido = css.match(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+    const regra = reduzido.match(/([^{}]*)\{([^}]*)\}/)!;
+    expect(regra[1].split(",").map((s) => s.trim())).toContain(".animate-fade-in-right");
+    expect(regra[2]).toMatch(/animation:\s*none/);
   });
 });
