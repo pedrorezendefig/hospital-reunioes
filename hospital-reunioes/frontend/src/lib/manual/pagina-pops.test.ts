@@ -181,8 +181,14 @@ describe("o roteiro dos prints da página de POPs", () => {
 });
 
 describe("os dados de exemplo dos prints", () => {
-  const seed = lerDoRoteiro("semear.sql");
   const roteiro = lerDoRoteiro("roteiro.sh");
+  // O SQL vive dentro do roteiro.sh (heredoc 'SQL'): .sql fora das pastas
+  // liberadas trava o CI, porque o repositório é público.
+  const seed = roteiro.match(/<<'SQL'\n([\s\S]*?)\nSQL\n/)?.[1] ?? "";
+
+  it("o SQL de exemplo está dentro do roteiro", () => {
+    expect(seed).toContain("insert into participantes");
+  });
 
   it("só usam e-mails do domínio de exemplo, inclusive o de quem entra nos prints", () => {
     const emails = [...`${seed}\n${roteiro}`.matchAll(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g)].map((m) => m[0]);
