@@ -675,3 +675,18 @@ class TestKit:
         assert "**G**, de 6 partes em diante" in secao
         assert "ninguém estima" in secao
         assert "por mês" not in _kit()
+
+    def test_o_kit_diz_que_cada_entrega_abre_com_o_que_mudou_e_a_demonstracao(self):
+        """A lista por semana (issue #1703, ADR 0092, decisoes 4 e 5): o mouse
+        abre a entrega com o que mudou, e a Demonstracao, quando ha."""
+        secao = _secao("As Entregas")
+        for trecho in (
+            "agrupada por semana",
+            "abre com o que mudou",
+            "**Demonstração**",
+            "quando há",
+            "**Abrir o card**",
+            "**Copiar link**",
+            "O clique deixa a entrega aberta",
+        ):
+            assert trecho in secao, trecho
