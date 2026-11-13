@@ -140,11 +140,13 @@ def _payload(linhas: list[dict], total: int) -> dict:
             if ha_mais
             else None
         ),
-        "pendencias": [_pendencia(linha) for linha in linhas],
+        "pendencias": [serializar_pendencia(linha) for linha in linhas],
     }
 
 
-def _pendencia(linha: dict) -> dict:
+def serializar_pendencia(linha: dict) -> dict:
+    """Uma pendência para o Claude, com a situação da tela. A ferramenta de
+    Reuniões (#1610) serializa as pendências de cada Reunião por aqui."""
     status = linha.get("status")
     return {
         "id": linha.get("id_acao"),

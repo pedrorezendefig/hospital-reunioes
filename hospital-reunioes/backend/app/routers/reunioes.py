@@ -42,6 +42,7 @@ from app.models.schemas import (
     TipoReuniao,
 )
 from app.services import audit, participantes_ata_service, reuniao_email_service
+from app.services.reunioes_consulta import consultar_reunioes, participantes_por_reuniao
 from app.services.teto_dos_chats import motivo_corpo_grande
 from app.utils.query_params import parse_csv_param
 
@@ -301,30 +302,8 @@ async def list_reunioes_calendario(
     result = query.order("data", desc=False).execute()
     reunioes = result.data
 
-    # Enriquecer com participantes
-    ids = [r["id_reuniao"] for r in reunioes]
-    participantes_map = {r: [] for r in ids}
-    if ids:
-        part_result = (
-            supabase.table("reuniao_participantes")
-            .select("id_reuniao, participante_id, participantes(nome_completo, cargo)")
-            .in_("id_reuniao", ids)
-            .execute()
-        )
-        for row in part_result.data:
-            rid = row["id_reuniao"]
-            if rid in participantes_map:
-                part = row.get("participantes")
-                if isinstance(part, list) and part:
-                    part = part[0]
-                if part and isinstance(part, dict) and part.get("nome_completo"):
-                    participantes_map[rid].append(
-                        {
-                            "id": row["participante_id"],
-                            "nome": part["nome_completo"],
-                            "cargo": part.get("cargo", ""),
-                        }
-                    )
+    # Enriquecer com participantes (a mesma consulta do Conector, issue #1610)
+    participantes_map = participantes_por_reuniao(supabase, [r["id_reuniao"] for r in reunioes])
 
     for r in reunioes:
         r["participantes"] = participantes_map.get(r["id_reuniao"], [])
@@ -345,44 +324,24 @@ async def list_reunioes(
     current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
-    query = supabase.table("reunioes").select("*", count="exact").is_("deleted_at", "null")
-
-    statuses = parse_csv_param(status)
-    if statuses:
-        query = query.in_("status_ata", statuses) if len(statuses) > 1 else query.eq("status_ata", statuses[0])
-
-    tipos = parse_csv_param(tipo)
-    if tipos:
-        query = query.in_("tipo", tipos) if len(tipos) > 1 else query.eq("tipo", tipos[0])
-
-    facilitadores = parse_csv_param(facilitador_id)
-    if facilitadores:
-        query = (
-            query.in_("facilitador_id", facilitadores)
-            if len(facilitadores) > 1
-            else query.eq("facilitador_id", facilitadores[0])
-        )
-
-    if data_inicio:
-        query = query.gte("data", str(data_inicio))
-    if data_fim:
-        query = query.lte("data", str(data_fim))
-
-    # Visibilidade binária
-    allowed_ids = await get_allowed_reuniao_ids(current_user, supabase)
-    if allowed_ids is not None:
-        if not allowed_ids:
-            response.headers["X-Total-Count"] = "0"
-            return []
-        query = query.in_("id_reuniao", allowed_ids)
-
-    result = query.order("data", desc=True).range(offset, offset + limit - 1).execute()
-    response.headers["X-Total-Count"] = str(result.count or 0)
+    # A mesma consulta da ferramenta de Reuniões do Conector (issue #1610).
+    linhas, total = consultar_reunioes(
+        supabase,
+        allowed_reuniao_ids=await get_allowed_reuniao_ids(current_user, supabase),
+        statuses=parse_csv_param(status),
+        tipos=parse_csv_param(tipo),
+        facilitadores=parse_csv_param(facilitador_id),
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        limit=limit,
+        offset=offset,
+    )
+    response.headers["X-Total-Count"] = str(total)
 
     me = await get_participante_for_user(current_user, supabase)
     if is_secretaria(me):
-        return [_redact_ata_fields(r) for r in (result.data or [])]
-    return result.data
+        return [_redact_ata_fields(r) for r in linhas]
+    return linhas
 
 
 @router.get("/{id_reuniao}")

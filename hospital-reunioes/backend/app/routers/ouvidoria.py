@@ -427,6 +427,53 @@ async def listar_protocolos(
             detail="Só a Ouvidoria lê o arquivo das manifestações",
         )
 
+    # Pelo relógio do módulo, como o resto do painel: rótulo de prazo e
+    # indicador de cumprimento saem da MESMA leitura do relógio em toda rota.
+    casos, degradado = ler_fila(supabase, me, arquivados, agora_utc())
+    # O marcador de novidade (issue #484, RN-66). Só é derivado para quem tem o
+    # Perfil da Ouvidoria: o ponto diz "a Ouvidoria ainda não viu", o que não
+    # significa nada para a secretária, e agregar a trilha para ela seria uma
+    # ida ao banco por carga sem ninguém do outro lado para ler o resultado.
+    da_ouvidoria = tem_perfil_ouvidoria(me)
+    # A trilha entra no MESMO `degradado` do calendário (issue #449): a fila
+    # sem ponto nenhum é indistinguível de uma fila sem novidade, e é essa
+    # confusão que apagaria o sinal desta fatia sem ninguém saber. Quem está
+    # fora da Ouvidoria não lê a trilha, então também não pode degradar por ela.
+    ultimos, degradado_da_trilha = (
+        ouvidoria_novidade.ultimo_movimento_ou_degradado(supabase) if da_ouvidoria else ({}, [])
+    )
+    # O resumo é um recorte literal do relato (issue #753): no formulário
+    # público são as primeiras letras do que a pessoa escreveu. O caso aberto
+    # chega a quem está fora da Ouvidoria, e o resumo não vai junto.
+    campos = _CAMPOS_INDICE_TUPLA if da_ouvidoria else _CAMPOS_INDICE_FORA_DA_OUVIDORIA
+    return {
+        "protocolos": [
+            {campo: row.get(campo) for campo in campos}
+            | prazo
+            | {
+                # Caso arquivado nunca acende o ponto (issue #592, ADR 0047):
+                # o arquivo não pode parecer trabalho pendente. Na lista sem o
+                # filtro isto não muda nada (ali não há arquivado nenhum); é a
+                # lista COM o filtro que precisa da guarda, e é ela que fica
+                # igual ao contador do menu, que também os ignora.
+                "tem_novidade": da_ouvidoria
+                and not row.get("arquivada_em")
+                and ouvidoria_novidade.tem_novidade(row.get("vista_pela_ouvidoria_em"), ultimos.get(str(row.get("id"))))
+            }
+            for row, prazo in casos
+        ],
+        "degradado": degradado + degradado_da_trilha,
+    }
+
+
+def ler_fila(
+    supabase, me: dict, arquivados: Literal["nao", "sim", "todos"], agora: dt.datetime
+) -> tuple[list[tuple[dict, dict]], list[str]]:
+    """Os casos da fila que `me` vê, cada um com o prazo projetado, e o que não
+    pôde ser lido (casos e calendário). É o código da fila na tela e da
+    ferramenta da fila no Conector (issue #1611, ADR 0085, decisão 3): um
+    segundo cálculo de prazo faria o Claude discordar da tela. Só lê."""
+
     def consulta():
         # A resposta segue fechada em _CAMPOS_INDICE, campo a campo, e o select
         # pede um pouco mais do que ela devolve: o carimbo do visto (issue #484)
@@ -473,43 +520,7 @@ async def listar_protocolos(
         feriados, degradado = carregar_feriados_ou_degradado(supabase)
     else:
         feriados, degradado = frozenset(), []
-    # Pelo relógio do módulo, como o resto do painel: rótulo de prazo e
-    # indicador de cumprimento saem da MESMA leitura do relógio em toda rota.
-    agora = agora_utc()
-    # O marcador de novidade (issue #484, RN-66). Só é derivado para quem tem o
-    # Perfil da Ouvidoria: o ponto diz "a Ouvidoria ainda não viu", o que não
-    # significa nada para a secretária, e agregar a trilha para ela seria uma
-    # ida ao banco por carga sem ninguém do outro lado para ler o resultado.
-    da_ouvidoria = tem_perfil_ouvidoria(me)
-    # A trilha entra no MESMO `degradado` do calendário (issue #449): a fila
-    # sem ponto nenhum é indistinguível de uma fila sem novidade, e é essa
-    # confusão que apagaria o sinal desta fatia sem ninguém saber. Quem está
-    # fora da Ouvidoria não lê a trilha, então também não pode degradar por ela.
-    ultimos, degradado_da_trilha = (
-        ouvidoria_novidade.ultimo_movimento_ou_degradado(supabase) if da_ouvidoria else ({}, [])
-    )
-    # O resumo é um recorte literal do relato (issue #753): no formulário
-    # público são as primeiras letras do que a pessoa escreveu. O caso aberto
-    # chega a quem está fora da Ouvidoria, e o resumo não vai junto.
-    campos = _CAMPOS_INDICE_TUPLA if da_ouvidoria else _CAMPOS_INDICE_FORA_DA_OUVIDORIA
-    return {
-        "protocolos": [
-            {campo: row.get(campo) for campo in campos}
-            | _projetar_prazo(row, agora, feriados)
-            | {
-                # Caso arquivado nunca acende o ponto (issue #592, ADR 0047):
-                # o arquivo não pode parecer trabalho pendente. Na lista sem o
-                # filtro isto não muda nada (ali não há arquivado nenhum); é a
-                # lista COM o filtro que precisa da guarda, e é ela que fica
-                # igual ao contador do menu, que também os ignora.
-                "tem_novidade": da_ouvidoria
-                and not row.get("arquivada_em")
-                and ouvidoria_novidade.tem_novidade(row.get("vista_pela_ouvidoria_em"), ultimos.get(str(row.get("id"))))
-            }
-            for row in linhas
-        ],
-        "degradado": degradado_dos_casos + degradado + degradado_da_trilha,
-    }
+    return [(row, _projetar_prazo(row, agora, feriados)) for row in linhas], degradado_dos_casos + degradado
 
 
 # Dossiê completo (ADR 0034, decisão 1): o índice mais o que só ouvidor e
