@@ -49,8 +49,13 @@ CAMINHO_MCP = f"{settings.api_prefix}/mcp"
 FERRAMENTAS_DA_CENTRAL = {"get_active_now", "get_site_analytics", "get_instagram_analytics"}
 FERRAMENTA_PENDENCIAS = "get_pendencias"
 # As de Reuniões e Ouvidoria, todas no gate da diretoria executiva (ADR 0085):
-# Pendências, Reuniões (#1610) e a fila da Ouvidoria (#1611).
-FERRAMENTAS_DA_DIRETORIA = {FERRAMENTA_PENDENCIAS, "get_reunioes", "get_ouvidoria_prazo_estourado"}
+# Pendências, Reuniões (#1610), a fila da Ouvidoria (#1611) e o Dossiê (#1612).
+FERRAMENTAS_DA_DIRETORIA = {
+    FERRAMENTA_PENDENCIAS,
+    "get_reunioes",
+    "get_ouvidoria_prazo_estourado",
+    "get_ouvidoria_dossie",
+}
 
 
 def diretoria(pid: str, access_profile: str | None) -> dict:

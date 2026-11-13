@@ -1091,6 +1091,17 @@ async def abrir_manifestacao(
 PROTOCOLO_RE = re.compile(r"^\d{4}-\d{4,}$")
 
 
+def ler_caso_por_protocolo(supabase, protocolo: str) -> dict | None:
+    """A linha do Dossiê pelo protocolo, ou `None` quando o protocolo não tem a
+    forma de um ou não existe. Falha de leitura sobe (`APIError`, `HTTPError`)
+    para o chamador não a confundir com caso inexistente. A página do caso e a
+    ferramenta do Conector (issue #1612) leem por aqui."""
+    if not PROTOCOLO_RE.match(protocolo):
+        return None
+    result = supabase.table("ouvidoria_protocolos").select(_CAMPOS_DOSSIE).eq("protocolo", protocolo).execute()
+    return result.data[0] if result.data else None
+
+
 @router.get("/manifestacoes/por-protocolo/{protocolo}")
 @limiter.limit("60/minute")
 async def abrir_manifestacao_por_protocolo(
@@ -1110,10 +1121,8 @@ async def abrir_manifestacao_por_protocolo(
     existe e para o que não existe, o que impede a URL de virar contador de
     manifestações do hospital.
     """
-    if not PROTOCOLO_RE.match(protocolo):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
     try:
-        result = supabase.table("ouvidoria_protocolos").select(_CAMPOS_DOSSIE).eq("protocolo", protocolo).execute()
+        row = ler_caso_por_protocolo(supabase, protocolo)
     except (APIError, HTTPError) as exc:
         # Falha de leitura não é caso inexistente: dizer "não encontrada" aqui
         # faria o ouvidor acreditar que o protocolo do email está errado.
@@ -1121,9 +1130,8 @@ async def abrir_manifestacao_por_protocolo(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Não foi possível abrir a manifestação agora. Tente novamente.",
         ) from exc
-    if not result.data:
+    if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
-    row = result.data[0]
     registrar_acesso(supabase, me, row["id"], "abrir_dossie")
     # O visto da Ouvidoria (issue #484): esta é a porta que a fila usa, e é
     # abri-la que apaga o ponto de novidade da linha.
@@ -2431,6 +2439,22 @@ async def listar_movimentos(
     página e a seguinte, e a paginação repete uma e perde a outra. O `id` não
     sai na resposta, ele existe só para o recorte ser estável."""
     carregar_manifestacao(supabase, manifestacao_id, campos="id")
+    try:
+        movimentos = ler_movimentos_do_caso(supabase, manifestacao_id)
+    except (APIError, HTTPError) as exc:
+        logger.error("Falha ao ler a trilha da manifestação %s", manifestacao_id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível ler a linha do tempo agora. Tente novamente.",
+        ) from exc
+    registrar_acesso(supabase, me, manifestacao_id, "listar_movimentos")
+    return linha_do_tempo_do_caso(supabase, movimentos)
+
+
+def ler_movimentos_do_caso(supabase, manifestacao_id: str) -> list[dict]:
+    """A trilha inteira do caso, paginada e em ordem total (ver
+    `listar_movimentos`). Falha de leitura sobe. A página do caso e a
+    ferramenta do Conector (issue #1612) leem por aqui."""
 
     def consulta():
         return (
@@ -2441,15 +2465,12 @@ async def listar_movimentos(
             .order("id")
         )
 
-    try:
-        movimentos = ler_tudo(consulta, rotulo="movimentos do caso")
-    except (APIError, HTTPError) as exc:
-        logger.error("Falha ao ler a trilha da manifestação %s", manifestacao_id)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Não foi possível ler a linha do tempo agora. Tente novamente.",
-        ) from exc
-    registrar_acesso(supabase, me, manifestacao_id, "listar_movimentos")
+    return ler_tudo(consulta, rotulo="movimentos do caso")
+
+
+def linha_do_tempo_do_caso(supabase, movimentos: list[dict]) -> dict:
+    """A linha do tempo como a página do caso a recebe, com o calendário útil
+    lido pela porta nomeada."""
     feriados, degradado = carregar_feriados_ou_degradado(supabase)
     return {
         "movimentos": ouvidoria_trilha.linha_do_tempo(movimentos, feriados),
