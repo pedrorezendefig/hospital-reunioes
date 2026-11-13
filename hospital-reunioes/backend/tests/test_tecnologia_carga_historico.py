@@ -22,6 +22,7 @@ from test_tecnologia_webhook_github import (  # noqa: E402
 
 from app.services import email_service, github_client, tecnologia_carga_historico, tecnologia_email  # noqa: E402
 from app.services.tecnologia_carga_historico import carregar  # noqa: E402
+from app.services.tecnologia_sincronizacao import sincronizar_demanda  # noqa: E402
 from app.services.tecnologia_vinculo import ETAPA_EM_PRODUCAO, ETAPA_ENTREGUE  # noqa: E402
 
 PRODUTO = {"id": "prod-1", "nome": "App do Hospital", "ativo": True, "ordem": 1}
@@ -461,6 +462,110 @@ class TestDryRun:
         assert "issue #1600 tem anexo guardado: o cron apagaria os prints" in impresso
         assert "issue #1800 tem anexo" not in impresso
         assert "1 com anexo que o cron apagaria" in impresso
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# A data do pedido: `criada_em` na foto (issue #1702, PRD #1689)
+# ═══════════════════════════════════════════════════════════════════════════
+
+CRIADA_EM = "2026-08-03T11:20:00Z"
+
+
+class TestDataDoPedido:
+    """O pedido da Origem Vitta conta na semana em que a issue-raiz nasceu: a
+    foto guarda a data de criacao dela, e a carga a preenche onde falta."""
+
+    def test_sincronizacao_guarda_na_foto_a_criacao_da_issue_raiz(self, monkeypatch):
+        issue = _fechada(1600, fechada_em="2026-10-08T15:00:00Z", created_at=CRIADA_EM)
+        existente = _demanda("D1", github_issue_numero=1600, etapa=ETAPA_ENTREGUE, origem="vitta")
+        cenario = _Cenario(monkeypatch, fechadas=[issue], demandas=[existente])
+
+        sincronizar_demanda(cenario.sb, cenario.demanda(1600), avisar=False)
+
+        assert cenario.demanda(1600)["github_foto"]["criada_em"] == CRIADA_EM
+
+    def _cenario_da_carga(self, monkeypatch):
+        """A #1600 e um pedido da Vitta aberto, sem marcador no corpo e com a
+        foto de antes desta fatia; a #1800 ja tem `criada_em` na foto."""
+        aberta = {
+            **_fechada(1600, fechada_em=None, created_at=CRIADA_EM),
+            "state": "open",
+            "state_reason": None,
+        }
+        ja_tem = {**_fechada(1800, fechada_em=None, created_at="2026-09-01T08:00:00Z"), "state": "open"}
+        vitta = _demanda(
+            "D1",
+            github_issue_numero=1600,
+            origem="vitta",
+            github_foto={"numero": 1600, "titulo": "Pedido da Vitta", "partes": []},
+        )
+        gravada = _demanda(
+            "D2",
+            github_issue_numero=1800,
+            origem="vitta",
+            github_foto={"numero": 1800, "criada_em": "2026-07-01T00:00:00Z"},
+        )
+        return _Cenario(monkeypatch, fechadas=[], demandas=[vitta, gravada], relidas=[aberta, ja_tem])
+
+    def test_carga_preenche_criada_em_so_onde_falta_e_uma_vez_so(self, monkeypatch):
+        cenario = self._cenario_da_carga(monkeypatch)
+        fotos_gravadas: list[dict] = []
+        cenario.sb.antes_do_update = lambda nome, update, _linhas: (
+            fotos_gravadas.append(update["github_foto"]) if "github_foto" in update else None
+        )
+
+        primeira = carregar(cenario.sb, dry_run=False)
+        segunda = carregar(cenario.sb, dry_run=False)
+
+        assert cenario.demanda(1600)["github_foto"] == {
+            "numero": 1600,
+            "titulo": "Pedido da Vitta",
+            "partes": [],
+            "criada_em": CRIADA_EM,
+        }
+        assert cenario.demanda(1800)["github_foto"]["criada_em"] == "2026-07-01T00:00:00Z"
+        assert primeira.criada_em == {1600: CRIADA_EM}
+        assert segunda.criada_em == {}
+        assert len(fotos_gravadas) == 1
+
+    def test_dry_run_lista_a_data_do_pedido_e_nao_grava(self, monkeypatch, capsys):
+        cenario = self._cenario_da_carga(monkeypatch)
+        antes = [dict(d) for d in cenario.demandas]
+        monkeypatch.setattr("app.dependencies.get_supabase_client", lambda: cenario.sb)
+
+        saida = tecnologia_carga_historico.main(["--dry-run"])
+
+        impresso = capsys.readouterr().out
+        assert saida == 0
+        assert f"preencheria a data do pedido na issue #1600: criada_em={CRIADA_EM}" in impresso
+        assert "data do pedido na issue #1800" not in impresso
+        assert "1 com a data do pedido" in impresso
+        assert cenario.demandas == antes
+
+    def test_carga_da_data_do_pedido_nao_avisa_ninguem(self, monkeypatch):
+        """Com o autor e a diretoria cadastrados, ha para quem avisar: nem o
+        sino nem o e-mail saem."""
+        enviados: list[tuple] = []
+        monkeypatch.setattr(email_service, "_enviar_email", lambda *a, **kw: enviados.append(a) or True)
+        monkeypatch.setattr(tecnologia_email, "_enviar_email", lambda *a, **kw: enviados.append(a) or True)
+        cenario = self._cenario_da_carga(monkeypatch)
+        cenario.sb.tabelas["participantes"].extend(
+            {
+                "id": pid,
+                "nome_completo": nome,
+                "email": f"{pid.lower()}@hsm.test",
+                "ativo": True,
+                "is_super_admin": True,
+                "access_profile": "super_admin",
+            }
+            for pid, nome in (("P1", "Autor do pedido"), ("P9", "Diretor Geral"))
+        )
+
+        relatorio = carregar(cenario.sb, dry_run=False)
+
+        assert relatorio.criada_em == {1600: CRIADA_EM}
+        assert cenario.sb.tabelas["notificacoes"] == []
+        assert enviados == []
 
 
 # ═══════════════════════════════════════════════════════════════════════════

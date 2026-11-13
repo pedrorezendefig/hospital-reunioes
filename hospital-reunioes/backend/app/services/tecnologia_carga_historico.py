@@ -11,7 +11,11 @@ do repositorio e o `history.json` da `main`, e:
   `entregue_em` (o fechamento da issue), `em_producao_em` e
   `versao_em_producao` (a PRIMEIRA subida do `history.json` de depois do
   fechamento atual que fecha a issue por PR ou a cita em `prds`). Com a versao
-  gravada, a Etapa Entregue vira Em producao, como no carimbo da subida.
+  gravada, a Etapa Entregue vira Em producao, como no carimbo da subida;
+- em toda Demanda com Vinculo, aberta ou fechada no GitHub, preenche o
+  `criada_em` da foto (a data de criacao da issue-raiz, issue #1702) quando ele
+  falta. A issue e lida pelo numero guardado na Demanda, e nunca pelo marcador:
+  a Demanda da Origem Vitta nao tem marcador.
 
 A carga e do Hospital (issue #1713): as issues e o `history.json` sao do
 repositorio dele, e so as Demandas do Hospital entram. Da Ana, as concluidas
@@ -69,6 +73,8 @@ class Relatorio:
     # As Demandas com anexo guardado cujo print a mudanca faz vencer: a
     # passada seguinte do cron (`apagar_vencidos`) apaga os binarios de vez.
     anexos_vencem: list[int] = field(default_factory=list)
+    # A data de criacao da issue-raiz que a carga pos na foto (issue #1702).
+    criada_em: dict[int, str] = field(default_factory=dict)
 
 
 def _entregue(issue: dict[str, Any]) -> bool:
@@ -138,6 +144,9 @@ def carregar(supabase, *, dry_run: bool) -> Relatorio:
     agora = datetime.now(UTC)
 
     relatorio = Relatorio()
+    # Antes das datas: a linha regravada aqui (com o `atualizado_em` novo) e a
+    # que a passada das datas trava no UPDATE dela.
+    _preencher_criada_em(supabase, demandas, relatorio, dry_run=dry_run)
     for issue in sorted(github_client.listar_issues_fechadas(), key=lambda i: i["number"]):
         numero = int(issue["number"])
         if not _entregue(issue):
@@ -173,6 +182,53 @@ def carregar(supabase, *, dry_run: bool) -> Relatorio:
             relatorio.falhas.append(numero)
             logger.warning("[tecnologia] A carga do histórico falhou na issue #%s.", numero, exc_info=True)
     return relatorio
+
+
+def _preencher_criada_em(supabase, demandas: dict[int, dict[str, Any]], relatorio: Relatorio, *, dry_run: bool) -> None:
+    """O `criada_em` da foto nas Demandas com Vinculo que ainda nao o tem
+    (issue #1702). A foto ja com a data nao e relida nem regravada: rodar de
+    novo nao grava nada. A lapide e o estado congelado nao sao tocados, como no
+    resto da carga. A Demanda sem foto fica para a sincronizacao, que a grava
+    inteira, ja com a data.
+    """
+    for numero, demanda in sorted(demandas.items()):
+        foto = demanda.get("github_foto")
+        if not isinstance(foto, dict) or foto.get(github_client.FATO_CRIADA_EM):
+            continue
+        if demanda.get("apagada_em") or str(demanda.get("estado") or "") in ESTADOS_FECHADOS:
+            continue
+        try:
+            criada_em = github_client.ler_issue(numero).get("created_at")
+            if not criada_em:
+                continue
+            if not dry_run:
+                linha = _gravar_foto(supabase, demanda, {**foto, github_client.FATO_CRIADA_EM: criada_em})
+                if linha is None:
+                    relatorio.falhas.append(numero)
+                    logger.warning(
+                        "[tecnologia] A Demanda da issue #%s mudou durante a carga; rode de novo para completar.",
+                        numero,
+                    )
+                    continue
+                demandas[numero] = linha
+            relatorio.criada_em[numero] = criada_em
+        except Exception:
+            relatorio.falhas.append(numero)
+            logger.warning("[tecnologia] A data do pedido falhou na issue #%s.", numero, exc_info=True)
+
+
+def _gravar_foto(supabase, demanda: dict[str, Any], foto: dict[str, Any]) -> dict[str, Any] | None:
+    """O UPDATE da foto, so se a Demanda segue como foi lida (a trava do
+    `atualizado_em`, como em `_gravar`). Devolve a linha gravada, ou `None`
+    quando ela nao casou."""
+    casou = (
+        supabase.table(TABELA_DEMANDAS)
+        .update({"github_foto": foto})
+        .eq("id", str(demanda["id"]))
+        .eq("atualizado_em", demanda.get("atualizado_em"))
+        .execute()
+    )
+    return casou.data[0] if casou.data else None
 
 
 def _gravar(supabase, demanda: dict[str, Any], mudanca: dict[str, str]) -> bool:
@@ -231,6 +287,8 @@ def _imprimir(relatorio: Relatorio, *, dry_run: bool) -> None:
     for numero, mudanca in sorted(relatorio.datas.items()):
         campos = ", ".join(f"{coluna}={valor}" for coluna, valor in mudanca.items())
         print(f"{verbo} na issue #{numero}: {campos}")
+    for numero, criada_em in sorted(relatorio.criada_em.items()):
+        print(f"{verbo} a data do pedido na issue #{numero}: criada_em={criada_em}")
     verbo = "apagaria" if dry_run else "apaga"
     for numero in relatorio.anexos_vencem:
         print(f"atenção: a issue #{numero} tem anexo guardado: o cron {verbo} os prints na próxima passada")
@@ -238,6 +296,7 @@ def _imprimir(relatorio: Relatorio, *, dry_run: bool) -> None:
         print(f"falhou na issue #{numero} (ver o log)")
     print(
         f"{len(relatorio.criadas)} Demanda(s), {len(relatorio.datas)} com datas, "
+        f"{len(relatorio.criada_em)} com a data do pedido, "
         f"{len(relatorio.anexos_vencem)} com anexo que o cron {verbo}, {len(relatorio.falhas)} falha(s)"
         + (" (dry-run: nada gravado)" if dry_run else "")
     )
