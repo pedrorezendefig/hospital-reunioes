@@ -35,6 +35,9 @@ TABELA = "ouvidoria_acionamentos"
 RESPOSTA = "resposta"
 CIENCIA = "ciencia"
 MOTIVO_ELOGIO = "elogio"
+# O caso enviado ao Núcleo de Segurança do Paciente (issue #1621). A regra dele
+# mora em `ouvidoria_nucleo`; aqui só o que o registro precisa saber.
+MOTIVO_NSP = "nsp"
 
 PENDENTE = "pendente"
 CIENTE = "ciente"
@@ -144,12 +147,16 @@ def ciencia_pendente(supabase, manifestacao_id: str) -> dict | None:
 
 
 def emitir_link(supabase, acionamento: dict) -> str:
-    """O link do botão "Elogio recebido", com token novo, e o hash dele gravado
-    no acionamento. Chamado na hora do envio do email: o reenvio emite outro, e
-    o link anterior deixa de abrir."""
+    """O link da ciência, com token novo, e o hash dele gravado no acionamento.
+    Chamado na hora do envio do email: o reenvio emite outro, e o link anterior
+    deixa de abrir.
+
+    O caminho é o do motivo: o elogio abre o botão "Elogio recebido" e o Núcleo
+    abre a tela do caso com o botão "Recebido pelo NSP" (issue #1621)."""
     token = secrets.token_urlsafe(32)
     supabase.table(TABELA).update({"token_hash": _hash(token)}).eq("id", acionamento["id"]).execute()
-    return f"{settings.frontend_url}/ouvidoria-setor/elogio/{token}"
+    caminho = "nsp" if acionamento.get("motivo_ciencia") == MOTIVO_NSP else "elogio"
+    return f"{settings.frontend_url}/ouvidoria-setor/{caminho}/{token}"
 
 
 def carregar_pelo_token(supabase, token: str) -> dict:

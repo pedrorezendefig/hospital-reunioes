@@ -54,6 +54,7 @@ from app.services import (
     ouvidoria_nota_externa,
     ouvidoria_notificacoes,
     ouvidoria_novidade,
+    ouvidoria_nucleo,
     ouvidoria_pontos,
     ouvidoria_prorrogacao,
     ouvidoria_redirecionamento,
@@ -4429,6 +4430,114 @@ def acionar_a_ciencia_do_elogio(
         row = completo.data[0]
     return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA} | _projetar_prazo(row, agora, area.feriados)
 
+
+# =====================================================================
+# O envio ao Núcleo de Segurança do Paciente (issue #1621, ADR 0088)
+# =====================================================================
+
+NUCLEO_SEM_SETOR = (
+    "O setor do Núcleo de Segurança do Paciente não está configurado. Escolha o setor em Responsáveis "
+    "por setor antes de enviar."
+)
+NUCLEO_JA_ENVIADO = "Este caso já foi enviado ao Núcleo de Segurança do Paciente."
+
+
+@dataclass(frozen=True)
+class NucleoAcionavel:
+    """O Núcleo pronto para receber o caso, conferido sem escrever nada."""
+
+    setor: str
+    destinatario: Destinatario
+    feriados: frozenset[dt.date]
+
+
+def conferir_o_nucleo(supabase, hoje: dt.date) -> NucleoAcionavel:
+    """Tudo o que pode recusar o envio ao Núcleo, sem escrever nada: o setor
+    configurado e alguém vigente para receber. Mesmas recusas do acionamento
+    da área, porque o Núcleo é um setor como os outros (ADR 0088, decisão 3)."""
+    try:
+        setor = ouvidoria_nucleo.setor_configurado(supabase)
+    except (APIError, HTTPError) as exc:
+        logger.error("Falha ao ler o setor do Núcleo na configuração da Ouvidoria")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível ler a configuração da Ouvidoria agora. Tente de novo em instantes.",
+        ) from exc
+    if not setor:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=NUCLEO_SEM_SETOR)
+    destinatario = escolher_destinatario(carregar_responsaveis(supabase, setor), hoje)
+    if destinatario is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=recusa_de_setor_sem_responsavel(setor))
+    return NucleoAcionavel(setor=setor, destinatario=destinatario, feriados=carregar_feriados(supabase))
+
+
+def mandar_ao_nucleo(supabase, me: dict, caso: dict, nucleo: NucleoAcionavel, gravidade, agora) -> dict:
+    """O envio em si, com a recusa que o banco dá quando o caso já tem a
+    ciência do Núcleo (índice único da migration 139)."""
+    falha = "Não foi possível enviar o caso ao Núcleo agora. Tente de novo em instantes."
+    try:
+        ciencia = ouvidoria_nucleo.enviar(
+            supabase,
+            caso=caso,
+            setor=nucleo.setor,
+            destinatario=nucleo.destinatario,
+            gravidade=gravidade,
+            autor=me,
+            agora=agora,
+            feriados=nucleo.feriados,
+        )
+    except APIError as exc:
+        if exc.code == "23505":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=NUCLEO_JA_ENVIADO) from exc
+        logger.error("Falha ao enviar o caso %s ao Núcleo (código %s)", caso["id"], exc.code)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=falha) from exc
+    except HTTPError as exc:
+        logger.error("Falha de rede ao enviar o caso %s ao Núcleo", caso["id"])
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=falha) from exc
+    if ciencia is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=falha)
+    return ciencia
+
+
+@router.post("/manifestacoes/{manifestacao_id}/nsp")
+@limiter.limit("30/minute")
+async def enviar_ao_nucleo(
+    request: Request,
+    manifestacao_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """O botão Enviar ao NSP do Dossiê, sempre disponível (ADR 0088, decisão 4).
+
+    Com ou sem o apontamento do agente, e em qualquer estado do caso: a ciência
+    do Núcleo corre em paralelo e não mexe no estado. O prazo do Recebido sai
+    da gravidade gravada no caso (crítico na hora, os demais em 1 dia útil)."""
+    try:
+        atual = (
+            supabase.table("ouvidoria_protocolos")
+            .select("id, protocolo, status, gravidade, nsp_decisao, anonimizada_em, apagamento_pedido_em")
+            .eq("id", manifestacao_id)
+            .execute()
+        )
+    except APIError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada") from exc
+    if not atual.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
+    caso = atual.data[0]
+    barrar_caso_apagado(caso, "enviado ao Núcleo de Segurança do Paciente")
+    if caso.get("nsp_decisao") == ouvidoria_nucleo.CONFIRMADO:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=NUCLEO_JA_ENVIADO)
+
+    agora = agora_utc()
+    nucleo = conferir_o_nucleo(supabase, agora.astimezone(FUSO_HOSPITAL).date())
+    ciencia = mandar_ao_nucleo(supabase, me, caso, nucleo, caso.get("gravidade"), agora)
+    registrar_acesso(supabase, me, manifestacao_id, "enviar_ao_nucleo")
+    return {
+        "nsp_decisao": ouvidoria_nucleo.CONFIRMADO,
+        "selo": ouvidoria_nucleo.SELO,
+        "setor": nucleo.setor,
+        "prazo": ciencia.get("prazo"),
+    }
 
 # =====================================================================
 # Redirecionamento pelo ouvidor (issue #708, PRD #706, ADR 0055)

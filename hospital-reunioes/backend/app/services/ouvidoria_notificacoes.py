@@ -126,6 +126,21 @@ GATILHO_REDIRECIONAMENTO_AREA = "redirecionamento_area"
 # `GATILHOS_QUE_COBRAM_A_AREA`, porque não cobra nada; quem decide se ainda
 # vale mandar é a ciência pendente do caso, lida na hora do envio.
 GATILHO_CIENCIA_ELOGIO = "ciencia_elogio"
+# O caso enviado ao Núcleo de Segurança do Paciente (issue #1621, ADR 0088,
+# decisões 5 e 6). O email só avisa e traz o link: o relato e a justificativa
+# técnica ficam na tela que o link abre, porque o email passa por um
+# processador fora do Brasil. Fora de `GATILHOS_COM_PORTAL` e de
+# `GATILHOS_QUE_COBRAM_A_AREA` pelo mesmo motivo do elogio: o link não abre o
+# portal de resposta, e quem decide se ainda vale mandar é a ciência do
+# Núcleo, lida na hora do envio.
+GATILHO_CIENCIA_NSP = "ciencia_nsp"
+# Os dois degraus da cobrança do Núcleo sem o Recebido no prazo (ADR 0088,
+# decisão 8): o gestor do setor do Núcleo e, depois, a Diretoria Executiva.
+# Gatilhos próprios, e não os da escada da área: aqueles levam link do portal
+# de resposta e só valem com o caso aguardando a área, e a ciência do Núcleo
+# corre em paralelo ao caso, em qualquer estado.
+GATILHO_COBRANCA_NSP_GESTOR = "cobranca_nsp_gestor"
+GATILHO_COBRANCA_NSP_DIRETORIA = "cobranca_nsp_diretoria"
 GATILHOS = (
     GATILHO_NOVA_DEMANDA,
     GATILHO_ALERTA_SEM_TITULAR,
@@ -144,6 +159,9 @@ GATILHOS = (
     GATILHO_DEVOLVIDO_A_OUVIDORIA,
     GATILHO_REDIRECIONAMENTO_AREA,
     GATILHO_CIENCIA_ELOGIO,
+    GATILHO_CIENCIA_NSP,
+    GATILHO_COBRANCA_NSP_GESTOR,
+    GATILHO_COBRANCA_NSP_DIRETORIA,
 )
 
 # O que vai na coluna `destinatario_nome` (NOT NULL) quando quem manifestou não
@@ -270,6 +288,10 @@ LINK_FORA_DA_AREA = "O destinatário não responde mais pelo setor do caso; link
 ELOGIO_JA_CONFIRMADO = (
     "O elogio já foi confirmado pelo setor, mandado de novo ou o caso mudou de setor ou de tipo; email não enviado"
 )
+
+# O motivo no registro quando o email do Núcleo não sai porque a ciência dele já
+# não espera o Recebido (issue #1621).
+NUCLEO_JA_RECEBEU = "O Núcleo de Segurança do Paciente já confirmou o recebimento; email não enviado"
 
 # Paleta da estratificação visual (RN-34). Os hex são os da spec da Diretoria,
 # como default trocável: a paleta da casa ainda aguarda confirmação do DP, e
@@ -1036,6 +1058,37 @@ def montar_ciencia_elogio(manifestacao: dict, destinatario_nome: str, link: str)
     return (f"Ouvidoria {protocolo}: um elogio para o setor {setor}", html, texto)
 
 
+def montar_ciencia_nsp(
+    manifestacao: dict, destinatario_nome: str, link: str, prazo: str | None
+) -> tuple[str, str, str]:
+    """Assunto, HTML e texto do caso enviado ao Núcleo de Segurança do Paciente
+    (issue #1621, ADR 0088, decisão 6).
+
+    Só o aviso, o protocolo, o prazo do Recebido e o link. Nada do caso viaja:
+    nem relato, nem justificativa técnica, nem paciente, nem setor. Quem lê o
+    caso é a tela do link, que fica no app."""
+    from app.services.email_constants import get_logo_data_uri
+
+    protocolo = manifestacao.get("protocolo") or ""
+    quando = formatar_vencimento(prazo) if prazo else "o fim do próximo dia útil"
+    html = jinja_env.get_template("email_ouvidoria_ciencia_nsp.html").render(
+        destinatario_nome=destinatario_nome,
+        protocolo=protocolo,
+        prazo=quando,
+        link=link,
+        logo_base64=get_logo_data_uri(),
+    )
+    texto = (
+        f"Ola {destinatario_nome},\n\n"
+        "A Ouvidoria enviou ao Nucleo de Seguranca do Paciente um caso que pode descrever um incidente "
+        "relacionado a assistencia. O relato e o que a Ouvidoria apurou estao na tela do link abaixo.\n\n"
+        f"Protocolo {protocolo}. Confirme o recebimento ate {quando}.\n\n"
+        f"{link}\n\n"
+        "O link abre sem senha. Nao encaminhe este email.\n"
+    )
+    return (f"Ouvidoria {protocolo}: caso para o Núcleo de Segurança do Paciente", html, texto)
+
+
 def montar_acuse_recebimento(protocolo: str) -> tuple[str, str, str]:
     """Assunto, HTML e texto do acuse ao manifestante (issue #493, ADR 0042).
 
@@ -1488,6 +1541,10 @@ def _montar(
         return montar_devolvido_a_ouvidoria(manifestacao, notificacao["destinatario_nome"], notificacao.get("detalhe"))
     if notificacao["gatilho"] == GATILHO_CIENCIA_ELOGIO:
         return montar_ciencia_elogio(manifestacao, notificacao["destinatario_nome"], link or "")
+    if notificacao["gatilho"] == GATILHO_CIENCIA_NSP:
+        # O prazo vem da ciência, e não do caso: o Recebido do Núcleo tem
+        # relógio próprio, que não é o da área. Viaja no `detalhe` da linha.
+        return montar_ciencia_nsp(manifestacao, notificacao["destinatario_nome"], link or "", notificacao.get("detalhe"))
     if notificacao["gatilho"] == GATILHO_PRAZO_ROMPIDO:
         return montar_prazo_rompido(manifestacao, notificacao["destinatario_nome"], agora, feriados, link=link)
     if notificacao["gatilho"] == GATILHO_NOVA_DEMANDA:
@@ -1762,6 +1819,17 @@ def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozens
                 or manifestacao.get("status") != "aguardando_area"
             ):
                 _marcar(supabase, notificacao["id"], {"status": FALHA, "ultimo_erro": ELOGIO_JA_CONFIRMADO})
+                return False
+            link = ouvidoria_acionamentos.emitir_link(supabase, ciencia)
+        if notificacao["gatilho"] == GATILHO_CIENCIA_NSP:
+            # O link do Núcleo nasce aqui, como o do elogio, e só enquanto a
+            # ciência espera o Recebido: o reenvio de um caso já recebido não
+            # emite link novo para uma tela que mostra o relato integral.
+            from app.services import ouvidoria_nucleo
+
+            ciencia = ouvidoria_nucleo.ciencia_do_caso(supabase, notificacao["manifestacao_id"])
+            if ciencia is None or ciencia.get("status") != "pendente":
+                _marcar(supabase, notificacao["id"], {"status": FALHA, "ultimo_erro": NUCLEO_JA_RECEBEU})
                 return False
             link = ouvidoria_acionamentos.emitir_link(supabase, ciencia)
         assunto, html, texto = _montar(supabase, notificacao, manifestacao, agora, feriados, link=link)

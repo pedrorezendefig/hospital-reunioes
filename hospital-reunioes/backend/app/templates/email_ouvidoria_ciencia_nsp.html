@@ -1,0 +1,49 @@
+{% extends "email_base.html" %}
+
+{# O caso enviado ao Nucleo de Seguranca do Paciente (issue #1621, ADR 0088,
+   decisoes 5 e 6). So o aviso e o link: o relato, a justificativa tecnica e o
+   paciente ficam na tela que o link abre, porque o email passa por um
+   processador fora do Brasil. Nenhuma variavel do caso alem do protocolo e do
+   prazo entra aqui. #}
+
+{% block header_subtitle %}Ouvidoria{% endblock %}
+
+{% block title %}Ouvidoria {{ protocolo }}: caso para o Núcleo de Segurança do Paciente - Hospital São Matheus{% endblock %}
+
+{% block body %}
+  <p style="color:#475569;font-size:15px;margin:0 0 16px;">
+    Olá, <strong style="color:#1e293b;">{{ destinatario_nome }}</strong>!
+  </p>
+
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
+    A Ouvidoria enviou ao Núcleo de Segurança do Paciente um caso que pode descrever um incidente
+    relacionado à assistência. O relato e o que a Ouvidoria apurou estão na tela que o botão abre.
+  </p>
+
+  <p style="font-size:12px;color:#64748b;margin:0 0 20px;">
+    Protocolo {{ protocolo }}. Confirme o recebimento até {{ prazo }}.
+  </p>
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+    <tr>
+      <td align="center">
+        {# Cor solida na celula (bgcolor, Outlook) e no link (background-color,
+           Gmail), como os outros botoes da Ouvidoria (issue #1583). #}
+        <table cellpadding="0" cellspacing="0" role="presentation">
+          <tr>
+            <td align="center" bgcolor="#2B2E7E" style="background-color:#2B2E7E;border-radius:10px;">
+              <a href="{{ link }}"
+                 style="display:inline-block;background-color:#2B2E7E;background-image:linear-gradient(135deg,#2B2E7E,#2558A0);color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:13px 36px;border-radius:10px;">
+                Abrir o caso
+              </a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  <p style="color:#94a3b8;font-size:12px;line-height:1.6;margin:0;text-align:center;">
+    O link abre sem senha. Não encaminhe este email.
+  </p>
+{% endblock %}
