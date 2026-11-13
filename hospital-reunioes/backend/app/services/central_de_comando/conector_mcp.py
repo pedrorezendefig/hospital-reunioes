@@ -49,7 +49,8 @@ marca. O protocolo não expõe escrita nenhuma; método desconhecido é erro
 JSON-RPC "método não encontrado". A ferramenta de Pendências (#1609) mora em
 `ferramenta_pendencias.py`, sobre a mesma consulta da tela de Pendências; a de
 Reuniões (#1610), em `ferramenta_reunioes.py`, sobre as consultas das telas de
-Reuniões.
+Reuniões; a da fila da Ouvidoria (#1611), em `ferramenta_ouvidoria_prazo.py`,
+sobre a mesma leitura da fila na tela.
 """
 
 from __future__ import annotations
@@ -68,6 +69,7 @@ import jwt
 from app.config import settings
 from app.services.central_de_comando import (
     cache,
+    ferramenta_ouvidoria_prazo,
     ferramenta_pendencias,
     ferramenta_reunioes,
     provedor_google,
@@ -113,6 +115,7 @@ FERRAMENTA_INSTAGRAM = "get_instagram_analytics"
 # As de Reuniões e Ouvidoria, para a diretoria executiva (ADR 0085).
 FERRAMENTA_PENDENCIAS = ferramenta_pendencias.NOME
 FERRAMENTA_REUNIOES = ferramenta_reunioes.NOME
+FERRAMENTA_OUVIDORIA_PRAZO = "get_ouvidoria_prazo_estourado"
 
 # Os períodos que cada ferramenta de tendência aceita: o Site tem 7, 28 e 90
 # dias; o Instagram só 7 e 28 (a Graph API entrega no máximo 30 dias por
@@ -358,6 +361,7 @@ def _gates() -> dict:
         FERRAMENTA_INSTAGRAM: is_super_admin,
         FERRAMENTA_PENDENCIAS: tem_diretoria_executiva,
         FERRAMENTA_REUNIOES: tem_diretoria_executiva,
+        FERRAMENTA_OUVIDORIA_PRAZO: tem_diretoria_executiva,
     }
 
 
@@ -509,6 +513,7 @@ def ferramentas() -> list[dict]:
         },
         ferramenta_pendencias.definicao(),
         ferramenta_reunioes.definicao(),
+        ferramenta_ouvidoria_prazo.definicao(),
     ]
 
 
@@ -547,6 +552,8 @@ async def _executar_ferramenta(nome: str, argumentos: dict, participante: dict |
         return await anyio.to_thread.run_sync(_ferramenta_pendencias, argumentos, participante, supabase)
     if nome == FERRAMENTA_REUNIOES:
         return await anyio.to_thread.run_sync(_ferramenta_reunioes, argumentos, participante, supabase)
+    if nome == FERRAMENTA_OUVIDORIA_PRAZO:
+        return await anyio.to_thread.run_sync(_ferramenta_ouvidoria_prazo, argumentos, participante, supabase)
     if nome == FERRAMENTA_AO_VIVO:
         return await _ferramenta_ao_vivo()
     if nome == FERRAMENTA_SITE:
@@ -568,6 +575,14 @@ def _ferramenta_reunioes(argumentos: dict, participante: dict, supabase) -> dict
     try:
         payload = ferramenta_reunioes.executar(argumentos, participante, supabase)
     except ferramenta_reunioes.PedidoRecusadoError as exc:
+        return _resultado_de_erro(str(exc))
+    return _resultado_estruturado(payload)
+
+
+def _ferramenta_ouvidoria_prazo(argumentos: dict, participante: dict, supabase) -> dict:
+    try:
+        payload = ferramenta_ouvidoria_prazo.executar(argumentos, participante, supabase)
+    except ferramenta_ouvidoria_prazo.PedidoRecusadoError as exc:
         return _resultado_de_erro(str(exc))
     return _resultado_estruturado(payload)
 
