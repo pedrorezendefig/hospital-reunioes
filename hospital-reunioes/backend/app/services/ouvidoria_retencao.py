@@ -283,6 +283,12 @@ CAMPOS_DO_DOSSIE: dict[str, str | None] = {
     # O assunto que o agente de triagem escreveu (issue #1624, migration 143).
     # Não traz nome, mas é um resumo do relato: sai com ele.
     "assunto": None,
+    # O hash do Código de acompanhamento do anônimo (issue #1623, migration
+    # 141). É a chave de quem manifestou para a página pública, e sai junto com
+    # o contato do identificado: depois do apagamento as duas portas da página
+    # fecham juntas, e a resposta que ela mostraria já saiu com o
+    # `desfecho_descricao`.
+    "codigo_acompanhamento_hash": None,
 }
 
 # `resumo` é NOT NULL com CHECK anti-vazio desde a migration 063: não pode ir a

@@ -30,7 +30,13 @@ from slowapi.util import get_remote_address
 from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
-from app.services import ouvidoria_acuse, ouvidoria_agente_triagem, ouvidoria_avaliacoes, ouvidoria_pontos
+from app.services import (
+    ouvidoria_acompanhamento,
+    ouvidoria_acuse,
+    ouvidoria_agente_triagem,
+    ouvidoria_avaliacoes,
+    ouvidoria_pontos,
+)
 from app.services.ouvidoria_contato import email_utilizavel
 from app.services.ouvidoria_taxonomia import (
     CATEGORIA_PENDENTE,
@@ -593,6 +599,10 @@ async def registrar_manifestacao_publica(
         None if manifestacao.anonimo else ouvidoria_avaliacoes.para_ligar(supabase, manifestacao.avaliacao_id, cartaz)
     )
 
+    # O código de acompanhamento do anônimo (issue #1623, ADR 0086 decisão 7):
+    # sai nesta resposta e em nenhuma outra, e o banco guarda só o hash.
+    codigo = ouvidoria_acompanhamento.gerar_codigo() if manifestacao.anonimo else None
+
     linha = {
         "categoria": CATEGORIA_PENDENTE,
         # A área responsável é sempre do ouvidor, mesmo vindo do QR: o cartaz diz
@@ -624,6 +634,7 @@ async def registrar_manifestacao_publica(
         "paciente_nascimento": _iso(paciente_nascimento),
         "expectativa": manifestacao.expectativa,
         "anonimo": manifestacao.anonimo,
+        "codigo_acompanhamento_hash": ouvidoria_acompanhamento.hash_do_codigo(codigo) if codigo else None,
         # Anônimo não é caso incompleto: não há o que completar, é escolha de
         # quem manifestou. Identificação pela metade, sim. O telefone fecha a
         # identificação como o e-mail fecha (issue #1620).
@@ -674,7 +685,51 @@ async def registrar_manifestacao_publica(
     # O agente de triagem (issue #1624, ADR 0087) também sai depois da
     # resposta: o protocolo não espera o modelo, e a falha dele não chega aqui.
     ouvidoria_agente_triagem.agendar_caso(tarefas, supabase, row)
-    return {campo: row.get(campo) for campo in _CAMPOS_RECIBO}
+    recibo = {campo: row.get(campo) for campo in _CAMPOS_RECIBO}
+    if codigo:
+        recibo["codigo_acompanhamento"] = codigo
+    return recibo
+
+
+class ConsultaDeAcompanhamento(BaseModel):
+    """O que a página de acompanhamento manda: o protocolo e uma das duas
+    chaves, o código (anônimo) ou o telefone ou e-mail (identificado)."""
+
+    protocolo: str = Field(..., min_length=1, max_length=20)
+    codigo: str | None = Field(default=None, max_length=40)
+    contato: str | None = Field(default=None, max_length=200)
+
+
+# A mesma frase para toda recusa (ver `ouvidoria_acompanhamento`).
+NAO_ENCONTRADA = (
+    "Não encontramos uma manifestação com esses dados. Confira o protocolo e o código, "
+    "ou o telefone ou e-mail que você deixou."
+)
+
+
+@router.post("/publico/acompanhamento")
+@limiter.limit("5/minute;20/hour")
+async def acompanhar_manifestacao(
+    request: Request,
+    consulta: ConsultaDeAcompanhamento,
+    supabase=Depends(get_supabase_client),
+):
+    """Página pública de acompanhamento (issue #1623, seção 4.3 do anexo).
+
+    POST, e não GET: o código e o contato não entram na URL, que fica em log
+    de proxy e no histórico do navegador. O limite por endereço é o que segura
+    quem tenta adivinhar o código de um protocolo."""
+    try:
+        situacao = ouvidoria_acompanhamento.consultar(supabase, consulta.protocolo, consulta.codigo, consulta.contato)
+    except APIError as exc:
+        logger.error("Falha ao consultar o acompanhamento (código %s)", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível consultar agora. Tente novamente em instantes.",
+        ) from exc
+    if situacao is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=NAO_ENCONTRADA)
+    return situacao
 
 
 def _abrir_a_trilha(supabase, row: dict, canal: str) -> None:

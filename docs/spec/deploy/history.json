@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T01:50:58-03:00",
+      "sha": "76438d873569fb5b0c7f393c61d0d16d8484f605",
+      "app_version": "0.275.0",
+      "subject": "Onda hsm-qr-onda2: Código e página de acompanhamento da manifestação",
+      "raw_subject": "chore(deploy): registro da onda hsm-qr-onda2 (#1675)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1527
+      ],
+      "result": "healthy",
+      "duration_seconds": 192,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "141_ouvidoria_codigo_de_acompanhamento.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-qr-onda2: PR #1675 (issue #1623), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 19,
+          "frontend": 176
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T01:39:49-03:00",
       "sha": "ed1ecc620e5477a359ecda2a21743a19ff4c0d64",
       "app_version": "0.274.0",

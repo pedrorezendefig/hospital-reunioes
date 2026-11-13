@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T04:37+0000 -->
+<!-- last_update: 2026-11-13T04:48+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -323,6 +323,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| POST | `/ouvidoria/publico/acompanhamento` | Página pública de acompanhamento (issue #1623, seção 4.3 do anexo). | ❌ |
 | GET | `/ouvidoria/publico/locais` | A lista de "Onde" da Manifestação guiada (issue #1620): o nome público | ❌ |
 | POST | `/ouvidoria/publico/manifestacoes` | Registra a manifestação do canal aberto e devolve o protocolo ANO-NNNN. | ❌ |
 | GET | `/ouvidoria/publico/pontos/{codigo}` | De qual cartaz veio quem está com o formulário aberto. | ❌ |
@@ -544,4 +545,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 313 endpoints em 45 routers · 93% exigem auth.
+**Totais:** 314 endpoints em 45 routers · 92% exigem auth.

@@ -85,6 +85,12 @@ describe("o que o middleware NÃO pode interceptar", () => {
     expect(interceptado("/manifestacao")).toBe(false);
   });
 
+  it("não alcança a página pública de acompanhamento", () => {
+    // Issue #1623: quem acompanha o caso não tem login, e o anônimo menos ainda.
+    expect(interceptado("/acompanhar")).toBe(false);
+    expect(isProtectedPath("/acompanhar")).toBe(false);
+  });
+
   it("não alcança o endereço curto impresso no cartaz A4", () => {
     // Issue #1617: `/a/{código}` é o que o QR carrega. Interceptá-lo mandaria
     // quem escaneia para a tela de login do staff.

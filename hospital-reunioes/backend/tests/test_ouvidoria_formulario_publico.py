@@ -97,6 +97,8 @@ class _Query:
         self._filters: dict = {}
         self._pending_insert: dict | None = None
         self._colunas: tuple[str, ...] | None = None
+        self._ordem: tuple[str | None, bool] | None = None
+        self._limite: int | None = None
 
     def select(self, colunas: str = "*", *_args, **_kwargs):
         if colunas != "*":
@@ -111,7 +113,12 @@ class _Query:
         self._filters[col] = value
         return self
 
-    def order(self, *_args, **_kwargs):
+    def order(self, coluna=None, *_args, desc: bool = False, **_kwargs):
+        self._ordem = (coluna, desc)
+        return self
+
+    def limit(self, n: int):
+        self._limite = n
         return self
 
     def execute(self):
@@ -123,6 +130,9 @@ class _Query:
             return type("R", (), {"data": [linha]})()
         if self._pending_insert is not None:
             data = [self._banco.inserir(self._pending_insert)]
+        elif self._tabela == "ouvidoria_movimentos":
+            # A leitura da trilha pela página de acompanhamento (issue #1623).
+            data = [dict(m) for m in self._banco.movimentos if all(m.get(c) == v for c, v in self._filters.items())]
         elif self._tabela == "ouvidoria_pontos":
             data = [
                 dict(ponto) for ponto in self._banco.pontos if all(ponto.get(c) == v for c, v in self._filters.items())
@@ -136,6 +146,11 @@ class _Query:
             data = [dict(s) for s in self._banco.setores]
         else:
             data = [dict(r) for r in self._banco.rows if all(r.get(c) == v for c, v in self._filters.items())]
+        if self._ordem and self._ordem[0]:
+            coluna, desc = self._ordem
+            data = sorted(data, key=lambda row: str(row.get(coluna) or ""), reverse=desc)
+        if self._limite is not None:
+            data = data[: self._limite]
         if self._colunas:
             data = [{c: row.get(c) for c in self._colunas} for row in data]
         return type("R", (), {"data": data})()
