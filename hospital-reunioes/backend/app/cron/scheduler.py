@@ -194,7 +194,14 @@ def reconciliar_vinculos_tecnologia() -> None:
     igual não escreve nada, então a passagem que não encontra novidade é barata
     para o banco e silenciosa para a Conversa do diretor.
     """
-    from app.services import tecnologia_sincronizacao
+    from app.services import tecnologia_espelho, tecnologia_sincronizacao
+
+    # Primeiro, a raiz aberta da Ana que ainda nao e Demanda (issue #1714): a
+    # releitura logo abaixo ja lhe da a Etapa, as partes e o Responsavel.
+    try:
+        tecnologia_espelho.conferir_raizes_da_ana(_supabase())
+    except Exception as e:
+        logger.error(f"[Cron] Erro em conferir_raizes_da_ana: {e}", exc_info=True)
 
     try:
         tecnologia_sincronizacao.reconciliar_vinculos(_supabase())

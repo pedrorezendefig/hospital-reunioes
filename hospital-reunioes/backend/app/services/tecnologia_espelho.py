@@ -16,6 +16,10 @@ Por dentro estao as regras da issue-raiz do app:
 - **Uma Demanda por issue.** A issue que ja tem Demanda devolve "ja existe";
   a lapide do Apagar devolve "ignora", para a issue fechada nao voltar.
 
+Na Ana (issue #1714, ADR 0093, decisao 4) a regra e outra, ao lado desta: a
+raiz vira Demanda pelas labels que tiver, menos a de ferramenta (`area:os`). A
+Ana nao usa as `area:` do app, e exigi-las deixaria todo card dela de fora.
+
 Quem chama e o webhook (`issues.opened` e `issues.edited`) e a carga do
 historico. `espelhar` e a costura com o GitHub e o banco: rele a issue e so
 cria pelo que releu, nunca pelo corpo do evento.
@@ -31,6 +35,7 @@ from postgrest.exceptions import APIError
 
 from app.config import settings
 from app.services import github_client
+from app.services.github_client import PROJETO_ANA, PROJETO_HOSPITAL
 from app.services.tecnologia import ORIGEM_VITTA, TABELA_DEMANDAS, TABELA_PRODUTOS
 from app.services.tecnologia_sincronizacao import demanda_vinculada
 from app.services.tecnologia_vinculo import ETAPA_REGISTRADA, normalizar_github_login
@@ -47,6 +52,8 @@ ACOES_DO_ESPELHO = ("opened", "edited")
 # O Tipo da Demanda pela label de natureza da issue (`docs/agents/triage-labels.md`).
 TIPO_DA_LABEL: dict[str, str] = {"type:feature": "novo", "type:fix": "defeito", "type:bug": "defeito"}
 AREAS_DO_APP = frozenset({"area:backend", "area:frontend", "area:supabase"})
+# A issue de ferramenta da Ana, que nao e entrega do produto (ADR 0093, decisao 4).
+AREA_DE_FERRAMENTA_DA_ANA = "area:os"
 
 _MARCADOR_DA_DEMANDA = re.compile(r"<!--\s*demanda-vitta\b", re.IGNORECASE)
 # "## Pai\n\n#1548" do template do `/to-issues`, ou "Pai: #1548".
@@ -66,10 +73,11 @@ def _e_parte(issue: dict[str, Any]) -> bool:
     return bool(issue.get("parent_issue_url")) or bool(_SECAO_PAI.search(str(issue.get("body") or "")))
 
 
-def decidir(issue: dict[str, Any], demanda: dict[str, Any] | None) -> str:
+def decidir(issue: dict[str, Any], demanda: dict[str, Any] | None, *, projeto: str = PROJETO_HOSPITAL) -> str:
     """Se esta issue vira Demanda de Origem Vitta: `CRIA`, `IGNORA` ou `JA_EXISTE`.
 
-    `demanda` e a que ja carrega o numero da issue, lapide inclusive, ou `None`.
+    `demanda` e a que ja carrega o numero da issue no mesmo Projeto, lapide
+    inclusive, ou `None`. `projeto` e o do repositorio de onde a issue veio.
     """
     if demanda is not None:
         return IGNORA if demanda.get("apagada_em") else JA_EXISTE
@@ -80,6 +88,8 @@ def decidir(issue: dict[str, Any], demanda: dict[str, Any] | None) -> str:
     if _e_parte(issue):
         return IGNORA
     labels = _labels(issue)
+    if projeto == PROJETO_ANA:
+        return IGNORA if AREA_DE_FERRAMENTA_DA_ANA in labels else CRIA
     if not labels & TIPO_DA_LABEL.keys() or not labels & AREAS_DO_APP:
         return IGNORA
     return CRIA
@@ -121,7 +131,7 @@ def espelhar(supabase, projeto: str, numero: int) -> dict[str, Any] | None:
     existe".
     """
     issue = github_client.ler_issue(numero, projeto=projeto)
-    if decidir(issue, demanda_vinculada(supabase, projeto, numero)) != CRIA:
+    if decidir(issue, demanda_vinculada(supabase, projeto, numero), projeto=projeto) != CRIA:
         return None
     return criar(supabase, issue, projeto=projeto)
 
@@ -157,3 +167,39 @@ def criar(supabase, issue: dict[str, Any], *, projeto: str) -> dict[str, Any] | 
             return None
         raise
     return criada[0] if criada else None
+
+
+def conferir_raizes_da_ana(supabase) -> dict[str, int]:
+    """A conferencia de hora em hora da Ana (issue #1714, ADR 0093, decisao 7).
+
+    O webhook e perdivel, e a Ana ja tem raizes abertas antes de o webhook
+    dela existir: esta passagem lista as issues abertas do repositorio da Ana
+    e cria, pelo espelho, a Demanda de cada raiz que ainda nao tem. Concluida
+    antiga nao entra (decisao "os ja concluidos nao sao carregados"), nem que a
+    lista do GitHub a traga. A que ja tem Demanda, lapide inclusive, nao nasce
+    de novo.
+
+    Roda ANTES do `reconciliar_vinculos`, que da a Etapa, as partes e o
+    Responsavel a Demanda que acabou de nascer. A Ana desligada (variavel do
+    repositorio vazia) nao le nada.
+
+    A falha da listagem sobe para quem chamou; a de uma issue e so dela.
+    """
+    if not github_client.integracao_configurada(PROJETO_ANA):
+        return {"criadas": 0}
+    issues = github_client.ler_issues_abertas(projeto=PROJETO_ANA)
+    criadas = 0
+    for issue in issues:
+        if issue.get("state") != "open":
+            continue
+        numero = int(issue["number"])
+        try:
+            if decidir(issue, demanda_vinculada(supabase, PROJETO_ANA, numero), projeto=PROJETO_ANA) != CRIA:
+                continue
+            if criar(supabase, issue, projeto=PROJETO_ANA) is not None:
+                criadas += 1
+        except Exception:
+            logger.warning("[tecnologia] Falha ao espelhar a issue #%s da Ana.", numero, exc_info=True)
+    if criadas:
+        logger.info("[tecnologia] Conferência da Ana: %s Demanda(s) criada(s).", criadas)
+    return {"criadas": criadas}
