@@ -70,6 +70,7 @@ def _issue_da_ana(numero: int = 12, *, labels=("type:feature",), corpo=None, est
         if corpo is not None
         else "## Para quem decide\n\n**O que muda:** a Ana responde o preparo.\n\n---\n\n## Problema\n\nX.",
         "user": {"login": "pedrorezendefig"},
+        "author_association": "OWNER",
         "parent_issue_url": None,
     }
     dados.update(campos)
@@ -101,6 +102,27 @@ class TestOEspelhoDaAna:
 
     def test_a_ferramenta_da_ana_com_area_os_fica_de_fora(self):
         assert decidir(_issue_da_ana(labels=("type:feature", "area:os")), None, projeto=ANA) == IGNORA
+
+    @pytest.mark.parametrize("associacao", ["OWNER", "MEMBER", "COLLABORATOR"])
+    def test_a_raiz_aberta_por_quem_e_do_time_vira_demanda(self, associacao):
+        assert decidir(_issue_da_ana(author_association=associacao), None, projeto=ANA) == CRIA
+
+    @pytest.mark.parametrize("associacao", ["NONE", "CONTRIBUTOR", "FIRST_TIME_CONTRIBUTOR", "FIRST_TIMER", "", None])
+    def test_a_issue_aberta_por_quem_nao_e_do_time_fica_de_fora(self, associacao):
+        """O repositorio da Ana e publico: qualquer conta do GitHub abre issue
+        la, e sem label nenhuma. So o time (dono, membro ou colaborador) cria
+        Demanda (revisao do PR #1746)."""
+        assert decidir(_issue_da_ana(author_association=associacao), None, projeto=ANA) == IGNORA
+
+    def test_a_issue_sem_a_associacao_do_autor_fica_de_fora(self):
+        issue = _issue_da_ana()
+        del issue["author_association"]
+        assert decidir(issue, None, projeto=ANA) == IGNORA
+
+    def test_a_concluida_da_ana_fica_de_fora(self):
+        """Concluida antiga nao entra (ADR 0093): nem pelo `edited`, nem pela
+        conferencia (revisao do PR #1746)."""
+        assert decidir(_issue_da_ana(estado="closed"), None, projeto=ANA) == IGNORA
 
     def test_a_regra_do_hospital_nao_muda(self):
         """A mesma issue sem `area:` de app, no Hospital, segue de fora: a regra
@@ -139,6 +161,32 @@ class TestOWebhookDaAna:
         [demanda] = _demandas(sb)
         assert (demanda["projeto"], demanda["github_issue_numero"], demanda["origem"]) == (ANA, 12, "vitta")
         assert demanda["responsavel_id"] == "P4"
+
+    def test_o_opened_de_quem_nao_e_do_time_nao_cria_demanda(self, monkeypatch):
+        issue = _issue_da_ana(12, labels=(), author_association="NONE")
+        gh = _GithubFalso({12: issue}, sub_issues={12: []})
+        cliente, sb, _ = _montar(
+            demandas=[], participantes=[PEDRO, RIB], produtos=PRODUTOS, github=gh, monkeypatch=monkeypatch
+        )
+
+        resposta = _entregar(cliente, _corpo_do_evento_da_ana(issue))
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json() == {"ignorado": "sem_vinculo"}
+        assert _demandas(sb) == []
+
+    def test_o_edited_de_uma_concluida_antiga_nao_cria_demanda(self, monkeypatch):
+        issue = _issue_da_ana(9, estado="closed")
+        gh = _GithubFalso({9: issue}, sub_issues={9: []})
+        cliente, sb, _ = _montar(
+            demandas=[], participantes=[PEDRO, RIB], produtos=PRODUTOS, github=gh, monkeypatch=monkeypatch
+        )
+
+        resposta = _entregar(cliente, _corpo_do_evento_da_ana(issue, acao="edited"))
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json() == {"ignorado": "sem_vinculo"}
+        assert _demandas(sb) == []
 
 
 class _GithubDaAna:
@@ -193,6 +241,13 @@ class TestAConferenciaDeHoraEmHora:
         assert resultado == {"criadas": 1}
         assert _chaves(sb) == [(ANA, 11), (ANA, 12), (HOSPITAL, 12)]
         assert gh.listagens == [ANA]
+
+    def test_nao_cria_a_raiz_aberta_por_quem_nao_e_do_time(self, monkeypatch):
+        de_fora = _issue_da_ana(20, labels=(), author_association="NONE")
+        sb, _ = _conferir(monkeypatch, [de_fora, _issue_da_ana(21, author_association="COLLABORATOR")])
+
+        assert tecnologia_espelho.conferir_raizes_da_ana(sb) == {"criadas": 1}
+        assert _chaves(sb) == [(ANA, 21)]
 
     def test_a_segunda_passada_nao_duplica(self, monkeypatch):
         sb, _ = _conferir(monkeypatch, [_issue_da_ana(12), _issue_da_ana(15)])

@@ -19,6 +19,9 @@ Por dentro estao as regras da issue-raiz do app:
 Na Ana (issue #1714, ADR 0093, decisao 4) a regra e outra, ao lado desta: a
 raiz vira Demanda pelas labels que tiver, menos a de ferramenta (`area:os`). A
 Ana nao usa as `area:` do app, e exigi-las deixaria todo card dela de fora.
+Como o repositorio da Ana e publico e qualquer conta abre issue sem label, so
+entra a issue aberta por quem e do time (`author_association`), e so a aberta:
+a concluida antiga nao nasce nem por um `edited` (revisao do PR #1746).
 
 Quem chama e o webhook (`issues.opened` e `issues.edited`) e a carga do
 historico. `espelhar` e a costura com o GitHub e o banco: rele a issue e so
@@ -54,6 +57,9 @@ TIPO_DA_LABEL: dict[str, str] = {"type:feature": "novo", "type:fix": "defeito", 
 AREAS_DO_APP = frozenset({"area:backend", "area:frontend", "area:supabase"})
 # A issue de ferramenta da Ana, que nao e entrega do produto (ADR 0093, decisao 4).
 AREA_DE_FERRAMENTA_DA_ANA = "area:os"
+# O repositorio da Ana e publico: so a issue aberta por quem e do time vira
+# Demanda (revisao do PR #1746). Sem o campo, fica de fora.
+AUTORES_DO_TIME_DA_ANA = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
 
 _MARCADOR_DA_DEMANDA = re.compile(r"<!--\s*demanda-vitta\b", re.IGNORECASE)
 # "## Pai\n\n#1548" do template do `/to-issues`, ou "Pai: #1548".
@@ -89,6 +95,8 @@ def decidir(issue: dict[str, Any], demanda: dict[str, Any] | None, *, projeto: s
         return IGNORA
     labels = _labels(issue)
     if projeto == PROJETO_ANA:
+        if issue.get("state") != "open" or issue.get("author_association") not in AUTORES_DO_TIME_DA_ANA:
+            return IGNORA
         return IGNORA if AREA_DE_FERRAMENTA_DA_ANA in labels else CRIA
     if not labels & TIPO_DA_LABEL.keys() or not labels & AREAS_DO_APP:
         return IGNORA
