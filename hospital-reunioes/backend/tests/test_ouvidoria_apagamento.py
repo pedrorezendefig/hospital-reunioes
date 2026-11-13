@@ -82,6 +82,19 @@ RESPOSTA_DA_AREA = "Falamos com a paciente Joana da Silva no telefone 11 99999-0
 PACIENTE = "Maria Aparecida de Souza"
 PACIENTE_REFERENCIA = "Leito 12 da Clinica Medica, 14/08/2026"
 
+# O que a Manifestação guiada acrescentou ao caso (issue #1620, migration 138).
+DADOS_DA_MANIFESTACAO_GUIADA = {
+    "data_ocorrencia": "2026-08-13",
+    "periodo": "madrugada",
+    "hora_aprox": "03:40:00",
+    "local_informado": "Emergência adulta",
+    "quarto": "Box 7",
+    "profissionais": "Doutor Hamilton da sala amarela",
+    "paciente_nascimento": "1951-11-20",
+    "expectativa": "resposta",
+    "manifestante_telefone": "(31) 97777-1111",
+}
+
 
 @pytest.fixture(autouse=True)
 def _reset_rate_limiter():
@@ -147,6 +160,7 @@ def _caso(numero: int = 7, **overrides) -> dict:
         # acompanhante, e estes dois são o dado de terceiro que veio junto.
         "paciente_nome": PACIENTE,
         "paciente_referencia": PACIENTE_REFERENCIA,
+        **DADOS_DA_MANIFESTACAO_GUIADA,
         "anonimo": False,
         "dados_incompletos": False,
         "classificacao_ia": None,
@@ -704,6 +718,23 @@ class TestOAtoDeApagar:
         tudo = _todo_o_texto(supabase)
         assert "Maria" not in tudo
         assert "Leito 12" not in tudo
+
+    def test_o_que_a_manifestacao_guiada_acrescentou_sai_pela_porta_antecipada(self, monkeypatch):
+        """ADR 0086, decisão 9 (issue #1620): a porta da Diretoria apaga os
+        campos novos do caso junto com o relato, como o cron dos cinco anos."""
+        client, supabase = _client(monkeypatch, _caso_com_todos_os_registros())
+        for campo, valor in DADOS_DA_MANIFESTACAO_GUIADA.items():
+            assert supabase.caso()[campo] == valor
+
+        r = _apagar(client)
+
+        assert r.status_code == 200, r.text
+        caso = supabase.caso()
+        for campo in DADOS_DA_MANIFESTACAO_GUIADA:
+            assert caso[campo] is None, f"a porta antecipada não apagou {campo}"
+        tudo = _todo_o_texto(supabase)
+        assert "Hamilton" not in tudo
+        assert "97777-1111" not in tudo
 
     def test_o_carimbo_do_apagamento_vem_por_ultimo(self, monkeypatch):
         """A ordem que sobrevive a uma falha no meio: o movimento da trilha

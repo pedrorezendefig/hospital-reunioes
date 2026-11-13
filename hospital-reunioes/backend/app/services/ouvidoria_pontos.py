@@ -189,6 +189,32 @@ def por_codigo(supabase, codigo: str | None) -> dict | None:
     return dict(result.data[0]) if result.data else None
 
 
+def locais_publicos(supabase) -> list[dict]:
+    """Os lugares que a Manifestação guiada oferece em "Onde" (issue #1620):
+    o nome que o paciente vê de cada cartaz ativo, uma vez cada, com a marca de
+    ala de internação, que é o que abre o campo do quarto.
+
+    Dois cartazes no mesmo lugar público viram uma opção só; se um deles é de
+    ala de internação, a opção também é. Falha de leitura devolve a lista
+    vazia: a tela oferece "Outro lugar" e a pessoa segue.
+
+    Cartaz sem nome público fica de fora. O `nome_exibido` dele é o rótulo do
+    ponto ("Poltrona 12"), o detalhe que o anônimo não grava (issue #375, item
+    12): oferecido aqui, ele voltaria ao caso anônimo pelo `local_informado`."""
+    try:
+        result = supabase.table(TABELA).select("ponto, nome_publico, ala_internacao").eq("ativo", True).execute()
+    except Exception:
+        logger.warning("[Ouvidoria] Falha ao listar os locais públicos")
+        return []
+    ala_por_nome: dict[str, bool] = {}
+    for linha in result.data or []:
+        nome = (linha.get("nome_publico") or "").strip()
+        if not nome:
+            continue
+        ala_por_nome[nome] = ala_por_nome.get(nome, False) or bool(linha.get("ala_internacao"))
+    return [{"nome": nome, "ala_internacao": ala_por_nome[nome]} for nome in sorted(ala_por_nome, key=str.casefold)]
+
+
 def criar(supabase, campos: dict, criado_por: str | None) -> dict | None:
     """Cadastra o cartaz e devolve a linha, ou None se o código não fechou.
 

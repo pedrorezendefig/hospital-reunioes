@@ -246,6 +246,22 @@ CAMPOS_DO_DOSSIE: dict[str, str | None] = {
     # lista, não o comentário.
     "paciente_nome": None,
     "paciente_referencia": None,
+    # O que a Manifestação guiada acrescentou (issue #1620, migration 138,
+    # ADR 0086 decisão 9). Saem todas com o relato. Nascimento e telefone são
+    # dado pessoal; data, hora, local e quarto, cruzados com o registro de
+    # atendimento, reidentificam pelo mesmo mecanismo do `canal_ponto`; os
+    # profissionais são nome de gente escrito por quem manifestou. Período e
+    # expectativa são lista fechada e nenhum relatório os conta: ficar não
+    # serviria a número nenhum, então saem junto.
+    "data_ocorrencia": None,
+    "periodo": None,
+    "hora_aprox": None,
+    "local_informado": None,
+    "quarto": None,
+    "profissionais": None,
+    "paciente_nascimento": None,
+    "expectativa": None,
+    "manifestante_telefone": None,
 }
 
 # `resumo` é NOT NULL com CHECK anti-vazio desde a migration 063: não pode ir a

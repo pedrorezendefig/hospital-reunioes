@@ -39,12 +39,6 @@ export const SOBRE_QUEM: { valor: SobreQuem; rotulo: string }[] = [
 ];
 
 /**
- * O que a tela diz quando falta a única resposta obrigatória do formulário.
- * Mora aqui porque é a régua do botão desabilitado, e não decoração da página.
- */
-export const FALTA_DIZER_SOBRE_QUEM = 'Responda "Este relato é sobre quem?" para enviar.';
-
-/**
  * O aviso abaixo do nome do paciente. A segunda frase só aparece para quem
  * pediu anonimato: "Acompanhante da Maria, leito 12" às vezes entrega quem
  * falou, e a pessoa decide isso sabendo (ADR 0052, consequências).
@@ -72,6 +66,91 @@ export const RECUSA_DO_ENVIO =
   "Não foi possível registrar sua manifestação. Recarregue a página e tente de novo.";
 export const ENVIO_RECUSADO_PELA_PAGINA =
   "Não foi possível registrar sua manifestação com os dados desta página. Copie o que você escreveu, recarregue a página e envie de novo.";
+
+/**
+ * As listas fechadas da Manifestação guiada (issue #1620, seção 4.2 da
+ * especificação). Valem de novo no backend e no CHECK do banco.
+ */
+export type Periodo = "manha" | "tarde" | "noite" | "madrugada";
+
+export const PERIODOS: { valor: Periodo; rotulo: string }[] = [
+  { valor: "manha", rotulo: "Manhã" },
+  { valor: "tarde", rotulo: "Tarde" },
+  { valor: "noite", rotulo: "Noite" },
+  { valor: "madrugada", rotulo: "Madrugada" },
+];
+
+export type Expectativa = "resposta" | "providencia" | "registro";
+
+export const EXPECTATIVAS: { valor: Expectativa; rotulo: string }[] = [
+  { valor: "resposta", rotulo: "Uma resposta" },
+  { valor: "providencia", rotulo: "Uma providência" },
+  { valor: "registro", rotulo: "Só registrar" },
+];
+
+/** Um lugar da lista de "Onde": o nome público de um cartaz ativo. */
+export interface LocalPublico {
+  nome: string;
+  ala_internacao: boolean;
+}
+
+/** A opção de quem não acha o lugar na lista dos cartazes. */
+export const OUTRO_LUGAR = "Outro lugar do hospital";
+
+/**
+ * Quem se identifica pode deixar só o telefone (decisão 8 do diretor no PRD
+ * #1527), mas o acuse e o aviso de encerramento saem só por e-mail.
+ */
+export const AVISO_SO_TELEFONE =
+  "As respostas da Ouvidoria saem por e-mail. Só com o telefone, você não recebe o aviso de que a manifestação chegou nem a resposta final.";
+
+// Mesma régua do backend: oito dígitos é o menor telefone que se disca, e o
+// e-mail é o `_EMAIL` de `app/services/ouvidoria_contato.py` copiado, só que
+// ancorado (o campo inteiro tem que ser o endereço). O que passasse aqui e
+// não lá voltaria como 422. Os dois lados leem os mesmos casos em
+// `backend/tests/emails_do_passo_a_passo.json`.
+const DIGITOS_DO_MENOR_TELEFONE = 8;
+const EMAIL =
+  /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
+
+function telefoneValido(telefone: string | undefined): boolean {
+  return (telefone ?? "").replace(/\D/g, "").length >= DIGITOS_DO_MENOR_TELEFONE;
+}
+
+function emailValido(email: string): boolean {
+  return EMAIL.test(email.trim());
+}
+
+/**
+ * O passo já pode seguir? É a régua do botão Continuar (e do Enviar, no passo
+ * 5). O passo 1 é a escolha de identificação, que a tela guarda à parte.
+ */
+export function passoCompleto(passo: number, form: FormularioPublico): boolean {
+  switch (passo) {
+    case 2:
+      return form.sobre !== null;
+    case 3:
+      return Boolean(form.dataOcorrencia && form.periodo && form.local?.trim());
+    case 4:
+      return !relatoEstaVazio(form.relato) && Boolean(form.expectativa);
+    case 5: {
+      if (form.anonimo) return true;
+      const email = form.contato.trim();
+      const telefone = (form.telefone ?? "").trim();
+      if (!form.nome.trim()) return false;
+      if (email && !emailValido(email)) return false;
+      if (telefone && !telefoneValido(telefone)) return false;
+      return Boolean(email || telefone);
+    }
+    default:
+      return true;
+  }
+}
+
+/** Quem se identificou e deixou só o telefone vê o aviso do e-mail. */
+export function precisaDoAvisoDoEmail(form: FormularioPublico): boolean {
+  return !form.anonimo && !form.contato.trim() && telefoneValido(form.telefone);
+}
 
 export function avisoDoPaciente(anonimo: boolean): string {
   return anonimo
@@ -104,6 +183,23 @@ export interface FormularioPublico {
   p: string | null;
   /** A natureza que a pessoa marcou, ou nada: marcar é opcional. */
   natureza: NaturezaInformada | null;
+  /*
+   * Os campos da Manifestação guiada (issue #1620). Opcionais no tipo porque o
+   * registro de antes não os tinha; o passo a passo sempre os preenche, e é
+   * pela presença deles que o servidor sabe que o envio veio dos cinco passos.
+   * O e-mail continua em `contato`.
+   */
+  dataOcorrencia?: string;
+  periodo?: Periodo | null;
+  horaAprox?: string;
+  local?: string;
+  /** O lugar escolhido é ala de internação: só aí o quarto vale. */
+  localEhAla?: boolean;
+  quarto?: string;
+  profissionais?: string;
+  pacienteNascimento?: string;
+  expectativa?: Expectativa | null;
+  telefone?: string;
 }
 
 export interface EnvioPublico {
@@ -116,6 +212,15 @@ export interface EnvioPublico {
   sobre?: SobreQuem;
   paciente_nome?: string;
   paciente_referencia?: string;
+  data_ocorrencia?: string;
+  periodo?: Periodo;
+  hora_aprox?: string;
+  local_informado?: string;
+  quarto?: string;
+  profissionais?: string;
+  paciente_nascimento?: string;
+  expectativa?: Expectativa;
+  telefone?: string;
 }
 
 /**
@@ -161,6 +266,81 @@ export function montarEnvio(form: FormularioPublico): EnvioPublico {
     if (pacienteNome) envio.paciente_nome = pacienteNome;
     if (pacienteReferencia) envio.paciente_referencia = pacienteReferencia;
   }
+
+  // Quando, onde e o que a pessoa espera (issue #1620). Campo em branco fica
+  // de fora, como no resto do envio.
+  const texto = (valor: string | undefined) => valor?.trim() || undefined;
+  const guiados: Partial<EnvioPublico> = {
+    data_ocorrencia: texto(form.dataOcorrencia),
+    periodo: form.periodo ?? undefined,
+    hora_aprox: texto(form.horaAprox),
+    local_informado: texto(form.local),
+    // O quarto só vale em ala de internação: quem digitou e trocou de lugar
+    // não leva o quarto do lugar de antes.
+    quarto: form.localEhAla ? texto(form.quarto) : undefined,
+    profissionais: texto(form.profissionais),
+    expectativa: form.expectativa ?? undefined,
+    // O telefone é identificação: o anônimo não leva, como não leva o nome.
+    telefone: form.anonimo ? undefined : texto(form.telefone),
+    // O nascimento do paciente segue a régua do nome, com um caminho a mais:
+    // quem se identifica e fala de si É o paciente.
+    paciente_nascimento:
+      form.sobre === "outra_pessoa" || (form.sobre === "mim" && !form.anonimo)
+        ? texto(form.pacienteNascimento)
+        : undefined,
+  };
+  for (const [chave, valor] of Object.entries(guiados)) {
+    if (valor !== undefined) (envio as unknown as Record<string, unknown>)[chave] = valor;
+  }
   return envio;
+}
+
+/** O que a Manifestação guiada gravou no caso, como o Dossiê o recebe. */
+export interface CamposDoPassoAPasso {
+  data_ocorrencia?: string | null;
+  periodo?: string | null;
+  hora_aprox?: string | null;
+  local_informado?: string | null;
+  quarto?: string | null;
+  profissionais?: string | null;
+  paciente_nascimento?: string | null;
+  expectativa?: string | null;
+  manifestante_telefone?: string | null;
+}
+
+/** "2026-11-10" em "10/11/2026", sem passar pelo fuso do navegador. */
+function dataDoBrasil(iso: string): string {
+  const [ano, mes, dia] = iso.split("-");
+  return dia && mes && ano ? `${dia}/${mes}/${ano}` : iso;
+}
+
+/**
+ * As linhas que o Dossiê mostra do que a pessoa contou no passo a passo
+ * (issue #1620). O que não foi informado não vira linha, e o caso de antes do
+ * passo a passo não tem linha nenhuma.
+ */
+export function oQueOPassoAPassoContou(caso: CamposDoPassoAPasso): { rotulo: string; valor: string }[] {
+  const rotuloDe = <T extends string>(lista: { valor: T; rotulo: string }[], valor: string) =>
+    lista.find((item) => item.valor === valor)?.rotulo ?? valor;
+
+  const quando = [
+    caso.data_ocorrencia ? dataDoBrasil(caso.data_ocorrencia) : null,
+    caso.periodo ? rotuloDe(PERIODOS, caso.periodo).toLowerCase() : null,
+    caso.hora_aprox ? `por volta das ${caso.hora_aprox.slice(0, 5)}` : null,
+  ].filter(Boolean);
+  const onde = [caso.local_informado, caso.quarto ? `quarto ${caso.quarto}` : null].filter(Boolean);
+
+  const linhas: { rotulo: string; valor: string | null | undefined }[] = [
+    { rotulo: "Quando", valor: quando.join(", ") },
+    { rotulo: "Onde", valor: onde.join(", ") },
+    { rotulo: "Profissionais citados", valor: caso.profissionais },
+    {
+      rotulo: "Nascimento do paciente",
+      valor: caso.paciente_nascimento ? dataDoBrasil(caso.paciente_nascimento) : null,
+    },
+    { rotulo: "O que espera", valor: caso.expectativa ? rotuloDe(EXPECTATIVAS, caso.expectativa) : null },
+    { rotulo: "Telefone", valor: caso.manifestante_telefone },
+  ];
+  return linhas.filter((linha): linha is { rotulo: string; valor: string } => Boolean(linha.valor));
 }
 

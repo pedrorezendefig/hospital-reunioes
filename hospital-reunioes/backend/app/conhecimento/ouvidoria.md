@@ -6,7 +6,7 @@ Quem trabalha nele é o ouvidor e a diretoria executiva, cada um com o seu acess
 
 ## Por onde um caso chega
 
-- **Formulário público e QR.** A pessoa escreve sem entrar no aplicativo, se identifica ou não, e recebe o número do protocolo na tela. O QR fica em cartaz pelos setores; o setor do cartaz é só a origem do relato, nunca a área responsável.
+- **Formulário público e QR.** A pessoa registra sem entrar no aplicativo, num passo a passo de cinco passos, e recebe o número do protocolo na tela. O formulário começa pela escolha entre se identificar ou ficar anônima. Depois pergunta sobre o que é o relato, quando foi (dia e período, com a hora se ela lembrar), onde foi, o que aconteceu, os profissionais envolvidos e a data de nascimento do paciente, se ela souber, e o que espera da Ouvidoria: uma resposta, uma providência ou só registrar. O lugar sai de uma lista com os nomes que o paciente entende, e o quarto só é pedido em ala de internação. Para quem chega pelo QR, o local já vem escolhido com o nome do cartaz, e dá para trocar. Quem se identifica deixa o nome e um telefone ou e-mail, ao menos um; quem deixa só o telefone é avisado de que as respostas saem por e-mail. O QR fica em cartaz pelos setores; o setor do cartaz é só a origem do relato, nunca a área responsável, e o local que a pessoa escolhe também não decide a área.
 - **Ana.** A agente de atendimento registra o caso e informa o protocolo ao paciente na conversa.
 - **E-mail.** A caixa da ouvidoria **não está ligada ao aplicativo**. O que chega ali o ouvidor lê e digita como caso, do mesmo jeito que faz com o telefonema. Já está decidido que essa caixa vai passar por uma triagem dentro do aplicativo, onde ele decidirá se o e-mail vira manifestação, se junta a um caso que já existe ou se é descartado, mas isso ainda não foi construído.
 - **Registro do ouvidor.** Telefone, WhatsApp, presencial, e-mail, Instagram, Reclame Aqui e Google: o ouvidor lê ou atende e digita o caso à mão, com a data e a hora reais do contato, que podem não ser as de hoje. É essa data que vale para o prazo, e não a hora em que ele digitou.
@@ -44,7 +44,7 @@ Caso anônimo, ou caso cujo contato não traz um e-mail utilizável, é encerrad
 
 ## Encerramento e apagamento
 
-O relato de um caso encerrado é apagado depois de cinco anos, sozinho, de madrugada. A diretoria executiva pode apagar antes, um caso por vez, com motivo escrito. Apagar some com o relato, o nome, o contato e os anexos; o protocolo, a trilha e os números ficam, e é a trilha que explica o buraco. Não tem volta, e o caso apagado não reabre.
+O relato de um caso encerrado é apagado depois de cinco anos, sozinho, de madrugada. A diretoria executiva pode apagar antes, um caso por vez, com motivo escrito. Apagar some com o relato, o nome, o contato e o telefone, os anexos e o que o passo a passo perguntou: o dia, o período e a hora, o lugar e o quarto, os profissionais, o nome e a data de nascimento do paciente e o que a pessoa esperava. O protocolo, a trilha e os números ficam, e é a trilha que explica o buraco. Não tem volta, e o caso apagado não reabre.
 
 Arquivar é outra coisa: só tira da lista o caso que já foi encerrado, para organizar a vista, e tem volta. Caso em andamento não arquiva, porque esconder um prazo correndo é esconder atraso.
 
@@ -79,6 +79,9 @@ A nota do Google é buscada sozinha uma vez por semana, junto com o total de ava
 - O cartaz sai em PDF no tamanho A4, no modelo aprovado pela diretoria, com o QR de 9 centímetros, um endereço curto impresso para quem prefere digitar e, fora da moldura, uma linha de controle para quem instala saber qual cartaz é qual, e o cartaz pequeno em A5 continua disponível.
 - No cartaz de ala de internação o aviso manda falar com a enfermagem do posto da ala, e nos outros com a equipe do setor.
 - Os cartazes antigos continuam funcionando, porque o QR antigo leva ao mesmo endereço curto do cartaz novo, que hoje abre o formulário com a origem do ponto, ou sem origem se o ponto foi desativado.
+- O formulário público é um passo a passo de cinco passos que começa pela escolha entre se identificar ou ficar anônimo, e pede quando e onde foi e o que a pessoa espera; paciente, profissionais, hora e quarto são opcionais.
+- Quem se identifica deixa o nome e um telefone ou e-mail, e quem deixa só o telefone é avisado de que as respostas saem por e-mail.
+- No caso anônimo que vem de um cartaz, fica o local que a pessoa confirmou, e não o código do cartaz.
 - Ponto de escuta se desativa e nunca se apaga, porque os casos antigos apontam para ele.
 - O manifestante recebe dois e-mails, o acuse na abertura e o aviso no encerramento, e só quando deixou um e-mail utilizável.
 - A caixa de e-mail da ouvidoria vai passar por uma triagem dentro do aplicativo antes de virar caso, e essa triagem ainda não foi construída.

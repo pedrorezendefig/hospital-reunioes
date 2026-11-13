@@ -16,16 +16,18 @@ sigiloso (fail-closed), e quem abaixa é o ouvidor ao classificar.
 
 import datetime as dt
 import logging
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from postgrest.exceptions import APIError
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
 from app.services import ouvidoria_acuse, ouvidoria_pontos
+from app.services.ouvidoria_contato import email_utilizavel
 from app.services.ouvidoria_taxonomia import (
     CATEGORIA_PENDENTE,
     NATUREZAS_INFORMADAS,
@@ -68,6 +70,32 @@ AUTOR_CANAL_ABERTO = "Canal aberto"
 # lista de cinco do registro manual. O canal aberto alcança dois dos cinco.
 VINCULO_POR_SOBRE: dict[str, str] = {"mim": "paciente", "outra_pessoa": "acompanhante"}
 
+# As listas fechadas da Manifestação guiada (issue #1620, ADR 0086 decisão 6).
+# Vivem aqui e no CHECK da migration 138, e um teste confere que as duas batem.
+PERIODOS: tuple[str, ...] = ("manha", "tarde", "noite", "madrugada")
+EXPECTATIVAS: tuple[str, ...] = ("resposta", "providencia", "registro")
+
+# "Hoje" para a data da ocorrência é o dia no hospital, e não no servidor.
+FUSO_DO_HOSPITAL = ZoneInfo("America/Sao_Paulo")
+_DIGITOS_DO_MENOR_TELEFONE = 8
+
+# Os campos que só o passo a passo manda. A página de antes não conhece nenhum
+# deles, e é pela presença de um deles que a rota sabe de qual página o envio
+# veio (ver `ManifestacaoPublica.exigencias_do_passo_a_passo`).
+_CAMPOS_DO_PASSO_A_PASSO = frozenset(
+    {
+        "data_ocorrencia",
+        "periodo",
+        "hora_aprox",
+        "local_informado",
+        "quarto",
+        "profissionais",
+        "paciente_nascimento",
+        "expectativa",
+        "telefone",
+    }
+)
+
 
 # Vazio é ausência, não conteúdo: espaço em branco (ou travessão sozinho, que a
 # sanitização deixa em pontuação) entra como NULL, em vez de fazer o Dossiê
@@ -91,6 +119,11 @@ def _resumir(relato: str) -> str:
     if espaco > 0:
         corte = corte[:espaco]
     return f"{corte}..."
+
+
+def _iso(valor: dt.date | dt.time | None) -> str | None:
+    """Data e hora viajam ao PostgREST como texto ISO."""
+    return valor.isoformat() if valor is not None else None
 
 
 def _setor_da_taxonomia(supabase, setor: str | None) -> str | None:
@@ -177,6 +210,21 @@ class ManifestacaoPublica(BaseModel):
     # segunda via do relato.
     paciente_nome: str | None = Field(default=None, max_length=200)
     paciente_referencia: str | None = Field(default=None, max_length=200)
+    # A Manifestação guiada (issue #1620, ADR 0086 decisão 6): quando e onde
+    # foi, quem estava envolvido e o que a pessoa espera. O local é o que ela
+    # escolheu na lista de nomes públicos, e não a área responsável, que
+    # continua sendo do ouvidor. Os tetos são os do CHECK da migration 138.
+    data_ocorrencia: dt.date | None = None
+    periodo: str | None = Field(default=None, max_length=20)
+    hora_aprox: dt.time | None = None
+    local_informado: str | None = Field(default=None, max_length=80)
+    quarto: str | None = Field(default=None, max_length=40)
+    profissionais: str | None = Field(default=None, max_length=300)
+    paciente_nascimento: dt.date | None = None
+    expectativa: str | None = Field(default=None, max_length=20)
+    # O telefone ganha campo próprio; o e-mail continua em `contato`, que é o
+    # que o acuse e o aviso de encerramento leem.
+    telefone: str | None = Field(default=None, max_length=30)
     # Honeypot: campo escondido no formulário, que pessoa nenhuma preenche.
     assunto_alternativo: str | None = Field(default=None, max_length=200)
 
@@ -192,10 +240,33 @@ class ManifestacaoPublica(BaseModel):
             raise ValueError("conte o que aconteceu para registrarmos sua manifestação")
         return valor.strip()
 
-    @field_validator("nome", "contato", "paciente_nome", "paciente_referencia")
+    @field_validator(
+        "nome",
+        "contato",
+        "paciente_nome",
+        "paciente_referencia",
+        "local_informado",
+        "quarto",
+        "profissionais",
+        "telefone",
+    )
     @classmethod
     def opcional_vazio_e_ausencia(cls, valor: str | None) -> str | None:
         return _limpar(valor)
+
+    @field_validator("periodo")
+    @classmethod
+    def periodo_da_lista_fechada(cls, valor: str | None) -> str | None:
+        if valor is not None and valor not in PERIODOS:
+            raise ValueError("escolha manhã, tarde, noite ou madrugada")
+        return valor
+
+    @field_validator("expectativa")
+    @classmethod
+    def expectativa_da_lista_fechada(cls, valor: str | None) -> str | None:
+        if valor is not None and valor not in EXPECTATIVAS:
+            raise ValueError("diga o que você espera da Ouvidoria")
+        return valor
 
     @field_validator("sobre")
     @classmethod
@@ -233,6 +304,54 @@ class ManifestacaoPublica(BaseModel):
             return None
         if valor not in NATUREZAS_INFORMADAS:
             raise ValueError("escolha uma das naturezas oferecidas no formulário")
+        return valor
+
+    @field_validator("data_ocorrencia", "paciente_nascimento")
+    @classmethod
+    def data_que_ja_passou(cls, valor: dt.date | None) -> dt.date | None:
+        if valor is not None and valor > dt.datetime.now(tz=FUSO_DO_HOSPITAL).date():
+            raise ValueError("a data não pode ser depois de hoje")
+        return valor
+
+    @model_validator(mode="after")
+    def exigencias_do_passo_a_passo(self):
+        """O que os cinco passos exigem (seção 4.2 da especificação, ADR 0086
+        decisão 6), e só quando o envio veio deles.
+
+        A página de antes não manda nenhum campo do passo a passo, e passa como
+        passava, pela mesma razão que a falta do `sobre` é tolerada acima: quem
+        abriu o formulário antes do deploy fica com a página velha na aba até
+        recarregar. O envio que traz qualquer campo novo veio do passo a passo,
+        e ali o obrigatório é obrigatório."""
+        if not (self.model_fields_set & _CAMPOS_DO_PASSO_A_PASSO):
+            return self
+        faltando = [
+            campo
+            for campo in ("sobre", "data_ocorrencia", "periodo", "local_informado", "expectativa")
+            if getattr(self, campo) is None
+        ]
+        if faltando:
+            raise ValueError(f"faltou responder: {', '.join(faltando)}")
+        if self.anonimo:
+            return self
+        # M5: nome e ao menos um contato. O e-mail tem que ser e-mail, porque é
+        # dele que o acuse e o aviso de encerramento leem o endereço; um
+        # telefone digitado ali faria o caso parecer ter para onde escrever.
+        if self.nome is None:
+            raise ValueError("diga seu nome para a Ouvidoria falar com você")
+        if self.contato is not None and email_utilizavel(self.contato) is None:
+            raise ValueError("confira o e-mail")
+        if self.contato is None and self.telefone is None:
+            raise ValueError("deixe um telefone ou um e-mail para a Ouvidoria falar com você")
+        return self
+
+    @field_validator("telefone")
+    @classmethod
+    def telefone_com_numero(cls, valor: str | None) -> str | None:
+        """Oito dígitos é o menor telefone que se disca (o fixo sem DDD). Menos
+        que isso é texto no campo errado, e contaria como contato sem ser."""
+        if valor is not None and sum(c.isdigit() for c in valor) < _DIGITOS_DO_MENOR_TELEFONE:
+            raise ValueError("confira o telefone")
         return valor
 
 
@@ -293,6 +412,15 @@ async def rotulo_do_cartaz(
     return {"nome_publico": ouvidoria_pontos.nome_exibido(cartaz)}
 
 
+@router.get("/publico/locais")
+@limiter.limit("30/minute")
+async def locais_da_manifestacao(request: Request, supabase=Depends(get_supabase_client)):
+    """A lista de "Onde" da Manifestação guiada (issue #1620): o nome público
+    de cada cartaz ativo e se ele é de ala de internação. Nada do cadastro além
+    disso: nem setor, nem código, nem a descrição do local."""
+    return {"locais": ouvidoria_pontos.locais_publicos(supabase)}
+
+
 @router.post("/publico/manifestacoes", status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
 async def registrar_manifestacao_publica(
@@ -313,6 +441,7 @@ async def registrar_manifestacao_publica(
     # formulário ou de quem monte a requisição na mão.
     nome = None if manifestacao.anonimo else manifestacao.nome
     contato = None if manifestacao.anonimo else manifestacao.contato
+    telefone = None if manifestacao.anonimo else manifestacao.telefone
 
     # De quem é o relato (ADR 0052). Duas leituras que andam juntas e que é
     # fácil confundir:
@@ -329,6 +458,14 @@ async def registrar_manifestacao_publica(
     e_sobre_outra_pessoa = vinculo == VINCULO_POR_SOBRE["outra_pessoa"]
     paciente_nome = manifestacao.paciente_nome if e_sobre_outra_pessoa else None
     paciente_referencia = manifestacao.paciente_referencia if e_sobre_outra_pessoa else None
+    # A data de nascimento do paciente (issue #1620) segue a mesma régua, com
+    # um caminho a mais: quem se identifica e fala de si É o paciente, e a data
+    # dele ajuda a área a achar o atendimento. No anônimo que fala de si ela
+    # sai, porque ali o paciente é quem pediu para não ser identificado.
+    e_sobre_si_identificado = vinculo == VINCULO_POR_SOBRE["mim"] and not manifestacao.anonimo
+    paciente_nascimento = (
+        manifestacao.paciente_nascimento if (e_sobre_outra_pessoa or e_sobre_si_identificado) else None
+    )
 
     # Canal QR só quando o código resolve um Ponto de escuta ATIVO. Setor e
     # ponto saem do CADASTRO, e é isso que fecha a porta do texto arbitrário: o
@@ -346,6 +483,18 @@ async def registrar_manifestacao_publica(
     # ouvidor achar o cartaz, e isso não vale o risco de reidentificação. O
     # `canal_setor` fica: é a área inteira, não a poltrona.
     ponto = cartaz["ponto"] if (cartaz and not manifestacao.anonimo) else None
+    # O mesmo dado por outra coluna: o cartaz sem nome público se chama, para
+    # quem o lê, pelo rótulo do ponto, e é esse rótulo que chegaria aqui como o
+    # lugar escolhido. No anônimo ele sai, como o ponto acima (issue #1620).
+    local_informado = manifestacao.local_informado
+    if (
+        manifestacao.anonimo
+        and cartaz
+        and not cartaz.get("nome_publico")
+        and local_informado is not None
+        and local_informado.strip().casefold() == cartaz["ponto"].strip().casefold()
+    ):
+        local_informado = None
 
     linha = {
         "categoria": CATEGORIA_PENDENTE,
@@ -361,15 +510,27 @@ async def registrar_manifestacao_publica(
         "natureza_informada": manifestacao.natureza_informada,
         "manifestante_nome": nome,
         "manifestante_contato": contato,
+        "manifestante_telefone": telefone,
         # O vínculo derivado da resposta obrigatória: o canal QR deixa de entrar
         # com "Vínculo: Não informado" no Dossiê (issue #666).
         "manifestante_vinculo": vinculo,
         "paciente_nome": paciente_nome,
         "paciente_referencia": paciente_referencia,
+        # Quando e onde, da Manifestação guiada (issue #1620). Nulos no envio
+        # da página de antes, que não os conhece.
+        "data_ocorrencia": _iso(manifestacao.data_ocorrencia),
+        "periodo": manifestacao.periodo,
+        "hora_aprox": _iso(manifestacao.hora_aprox),
+        "local_informado": local_informado,
+        "quarto": manifestacao.quarto,
+        "profissionais": manifestacao.profissionais,
+        "paciente_nascimento": _iso(paciente_nascimento),
+        "expectativa": manifestacao.expectativa,
         "anonimo": manifestacao.anonimo,
         # Anônimo não é caso incompleto: não há o que completar, é escolha de
-        # quem manifestou. Identificação pela metade, sim.
-        "dados_incompletos": not (manifestacao.anonimo or (nome and contato)),
+        # quem manifestou. Identificação pela metade, sim. O telefone fecha a
+        # identificação como o e-mail fecha (issue #1620).
+        "dados_incompletos": not (manifestacao.anonimo or (nome and (contato or telefone))),
         # Fail-closed (ADR 0034, decisão 1). O canal aberto entra SEM TIPO, e o
         # índice de quem está fora da Ouvidoria mostra o `resumo`, que é o
         # começo do relato: uma denúncia escrita no QR viraria texto visível na
