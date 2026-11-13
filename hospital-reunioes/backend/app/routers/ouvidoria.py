@@ -23,6 +23,7 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Query,
     Request,
     Response,
     UploadFile,
@@ -48,6 +49,7 @@ from app.services import (
     ouvidoria_acionamentos,
     ouvidoria_acuse,
     ouvidoria_agente_triagem,
+    ouvidoria_avaliacoes,
     ouvidoria_convite_google,
     ouvidoria_encerramento,
     ouvidoria_escalonamento,
@@ -3055,7 +3057,122 @@ async def baixar_cartaz_do_ponto(
     )
 
 
-_CAMPOS_RESPONSAVEL_TUPLA = ("id", "setor", "papel", "nome", "email", "vigencia_inicio", "vigencia_fim")
+# A aba Avaliações (issue #1626, ADR 0086 decisões 4 e 8): só o Perfil da
+# Ouvidoria, como o Dossiê. O comentário não é classificado e pode trazer coisa
+# séria, e o Super admin fica de fora.
+PeriodoDaAba = Literal["7d", "30d", "90d", "365d", "tudo"]
+
+_FALHA_NA_AVALIACAO = "Não foi possível concluir agora. Tente de novo em instantes."
+
+
+def hoje_no_hospital() -> dt.date:
+    return agora_utc().astimezone(FUSO_HOSPITAL).date()
+
+
+@router.get("/avaliacoes/numeros")
+@limiter.limit("60/minute")
+async def numeros_das_avaliacoes(
+    request: Request,
+    periodo: PeriodoDaAba = ouvidoria_avaliacoes.PERIODO_PADRAO,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Os indicadores e os gráficos da aba sobre o período (padrão: últimos 30
+    dias): nota média, % de 4 e 5, volume, % que pediu retorno, e a nota média
+    por ponto, turno, dia da semana e semana."""
+    return ouvidoria_avaliacoes.ler_numeros(supabase, periodo, hoje_no_hospital(), FUSO_HOSPITAL)
+
+
+@router.get("/avaliacoes")
+@limiter.limit("60/minute")
+async def listar_avaliacoes(
+    request: Request,
+    periodo: PeriodoDaAba = ouvidoria_avaliacoes.PERIODO_PADRAO,
+    ponto_id: str | None = Query(default=None, max_length=40),
+    nota: int | None = Query(default=None, ge=1, le=5),
+    com_comentario: bool = False,
+    para_revisar: bool = False,
+    pagina: int = Query(default=1, ge=1, le=10_000),
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """A lista da aba, a mais nova primeiro, com os filtros de ponto, nota,
+    período, só com comentário e Para revisar."""
+    return ouvidoria_avaliacoes.listar(
+        supabase,
+        periodo=periodo,
+        hoje=hoje_no_hospital(),
+        fuso=FUSO_HOSPITAL,
+        ponto_id=ponto_id,
+        nota=nota,
+        com_comentario=com_comentario,
+        so_para_revisar=para_revisar,
+        pagina=pagina,
+    )
+
+
+@router.post("/avaliacoes/{avaliacao_id}/conversao", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
+async def converter_avaliacao(
+    request: Request,
+    avaliacao_id: str,
+    tarefas: BackgroundTasks,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Converte a avaliação em caso (ADR 0086, decisão 4): canal `qr`, o
+    cartaz, a ligação, o comentário como relato, tipo vazio e T0 da avaliação.
+    O agente de triagem lê o caso novo como lê qualquer chegada (ADR 0087)."""
+    try:
+        caso = ouvidoria_avaliacoes.converter(supabase, avaliacao_id, me, agora_utc(), FUSO_HOSPITAL)
+    except ouvidoria_avaliacoes.AvaliacaoNaoEncontradaError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Avaliação não encontrada") from None
+    except ouvidoria_avaliacoes.AvaliacaoRecusadaError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
+    except APIError as exc:
+        logger.error("Falha ao converter a avaliação %s em caso (código %s)", avaliacao_id, exc.code)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_FALHA_NA_AVALIACAO) from exc
+    ouvidoria_agente_triagem.agendar_caso(tarefas, supabase, caso)
+    return {"id": caso["id"], "protocolo": caso.get("protocolo")}
+
+
+class ArquivoDaRevisao(BaseModel):
+    """O motivo curto de arquivar a revisão (seção 4.5 da especificação)."""
+
+    motivo: str = Field(max_length=200)
+
+    @field_validator("motivo")
+    @classmethod
+    def _motivo_com_conteudo(cls, valor: str) -> str:
+        valor = re.sub(r"\s+", " ", sanitizar_travessao(valor)).strip()
+        if not re.search(r"\w", valor):
+            raise ValueError("escreva o motivo de arquivar a revisão")
+        return valor
+
+
+@router.post("/avaliacoes/{avaliacao_id}/arquivamento")
+@limiter.limit("30/minute")
+async def arquivar_revisao_da_avaliacao(
+    request: Request,
+    avaliacao_id: str,
+    pedido: ArquivoDaRevisao,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Arquiva a revisão: tira a marca Para revisar com o motivo, sem abrir
+    caso."""
+    try:
+        return ouvidoria_avaliacoes.arquivar_revisao(supabase, avaliacao_id, pedido.motivo, me, agora_utc())
+    except ouvidoria_avaliacoes.AvaliacaoNaoEncontradaError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Avaliação não encontrada") from None
+    except ouvidoria_avaliacoes.AvaliacaoRecusadaError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
+    except APIError as exc:
+        logger.error("Falha ao arquivar a revisão da avaliação %s (código %s)", avaliacao_id, exc.code)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_FALHA_NA_AVALIACAO) from exc
+
+
+_CAMPOS_RESPONSAVEL_TUPLA =("id", "setor", "papel", "nome", "email", "vigencia_inicio", "vigencia_fim")
 _CAMPOS_RESPONSAVEL = ", ".join(_CAMPOS_RESPONSAVEL_TUPLA)
 
 
