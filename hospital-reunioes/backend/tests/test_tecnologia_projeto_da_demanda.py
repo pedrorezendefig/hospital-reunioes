@@ -120,7 +120,16 @@ class TestAsDuasDemandas50ExistemJuntas:
         from app.services import tecnologia_espelho
 
         gh = _GithubDosDoisProjetos(
-            {(ANA, 50): {**_issue(50, labels=("type:feature", "area:backend")), "user": {"login": "alguem"}}}
+            {
+                (ANA, 50): {
+                    **_issue(50, labels=("type:feature", "area:backend")),
+                    "user": {"login": "alguem"},
+                    # Aberta (o `_issue` ja vem `open`) e por quem e do time,
+                    # como o GitHub manda: a raiz que o espelho da Ana aceita
+                    # (revisao do PR #1746).
+                    "author_association": "COLLABORATOR",
+                }
+            }
         )
         hospital = _demanda("DH", projeto=HOSPITAL, github_issue_numero=50)
         _, sb = _montar_dois(monkeypatch, [hospital], gh)
