@@ -3080,7 +3080,11 @@ async def numeros_das_avaliacoes(
     """Os indicadores e os gráficos da aba sobre o período (padrão: últimos 30
     dias): nota média, % de 4 e 5, volume, % que pediu retorno, e a nota média
     por ponto, turno, dia da semana e semana."""
-    return ouvidoria_avaliacoes.ler_numeros(supabase, periodo, hoje_no_hospital(), FUSO_HOSPITAL)
+    try:
+        return ouvidoria_avaliacoes.ler_numeros(supabase, periodo, hoje_no_hospital(), FUSO_HOSPITAL)
+    except APIError as exc:
+        logger.error("Falha ao ler os números da aba Avaliações (código %s)", exc.code)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_FALHA_NA_AVALIACAO) from exc
 
 
 @router.get("/avaliacoes")
@@ -3098,17 +3102,21 @@ async def listar_avaliacoes(
 ):
     """A lista da aba, a mais nova primeiro, com os filtros de ponto, nota,
     período, só com comentário e Para revisar."""
-    return ouvidoria_avaliacoes.listar(
-        supabase,
-        periodo=periodo,
-        hoje=hoje_no_hospital(),
-        fuso=FUSO_HOSPITAL,
-        ponto_id=ponto_id,
-        nota=nota,
-        com_comentario=com_comentario,
-        so_para_revisar=para_revisar,
-        pagina=pagina,
-    )
+    try:
+        return ouvidoria_avaliacoes.listar(
+            supabase,
+            periodo=periodo,
+            hoje=hoje_no_hospital(),
+            fuso=FUSO_HOSPITAL,
+            ponto_id=ponto_id,
+            nota=nota,
+            com_comentario=com_comentario,
+            so_para_revisar=para_revisar,
+            pagina=pagina,
+        )
+    except APIError as exc:
+        logger.error("Falha ao listar as avaliações (código %s)", exc.code)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_FALHA_NA_AVALIACAO) from exc
 
 
 @router.post("/avaliacoes/{avaliacao_id}/conversao", status_code=status.HTTP_201_CREATED)
