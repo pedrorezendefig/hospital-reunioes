@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T01:31:07-03:00",
+      "sha": "204f959a7f14b09f5bef08cf7163fe105111ec3c",
+      "app_version": "0.273.0",
+      "subject": "Onda hsm-qr-onda2: Envio ao Núcleo de Segurança do Paciente",
+      "raw_subject": "chore(deploy): registro da onda hsm-qr-onda2 (#1677)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1527
+      ],
+      "result": "healthy",
+      "duration_seconds": 801,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "139_ouvidoria_envio_ao_nucleo.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta hsm-qr-onda2: PR #1677 (issue #1621), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 17,
+          "frontend": 170
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T00:30:15-03:00",
       "sha": "bd1410f3f6e1830321b6cdfd9dc43c75dfc641eb",
       "app_version": "0.272.0",
