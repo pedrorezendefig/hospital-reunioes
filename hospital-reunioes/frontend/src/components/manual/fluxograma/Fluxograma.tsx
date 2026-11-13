@@ -372,15 +372,16 @@ function DesenhoDaLigacao({
 /** O mesmo fluxo, em lista numerada, para o leitor de tela. */
 function ListaParaLeitor({ fluxo, ordem }: { fluxo: Fluxo; ordem: Passo[] }) {
   const porId = new Map(fluxo.passos.map((p) => [p.id, p]));
+  const comPonto = (texto: string) => (/[.?!]$/.test(texto) ? texto : `${texto}.`);
   const frase = (p: Passo) => {
     const saidas = fluxo.ligacoes.filter((l) => l.de === p.id);
     const nome = { inicio: "Início: ", fim: "Fim: ", decisao: "Decisão: ", passo: "" }[p.forma];
-    const partes = [`${nome}${p.rotulo}${/[.?!]$/.test(p.rotulo) ? "" : "."}`];
-    if (p.detalhe) partes.push(p.detalhe);
+    const partes = [comPonto(`${nome}${p.rotulo}`)];
+    if (p.detalhe) partes.push(comPonto(p.detalhe));
     const comRotulo = saidas.filter((l) => l.rotulo);
     const semRotulo = saidas.filter((l) => !l.rotulo);
-    for (const l of comRotulo) partes.push(`Se ${l.rotulo}: ${porId.get(l.para)!.rotulo}.`);
-    if (semRotulo.length) partes.push(`Depois: ${semRotulo.map((l) => porId.get(l.para)!.rotulo).join(" ou ")}.`);
+    for (const l of comRotulo) partes.push(comPonto(`Se ${l.rotulo}: ${porId.get(l.para)!.rotulo}`));
+    if (semRotulo.length) partes.push(comPonto(`Depois: ${semRotulo.map((l) => porId.get(l.para)!.rotulo).join(" ou ")}`));
     return partes.join(" ");
   };
   return (

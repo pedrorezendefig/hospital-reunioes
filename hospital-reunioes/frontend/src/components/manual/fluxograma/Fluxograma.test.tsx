@@ -10,7 +10,7 @@
  * da página: o `react-markdown` com o `PreDoManual` no lugar do `<pre>`.
  */
 
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import ReactMarkdown from "react-markdown";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -155,5 +155,96 @@ describe("a entrada do fluxograma", () => {
     const y = (id: string) => Number(container.querySelector(`[data-passo="${id}"]`)!.getAttribute("data-y"));
     expect(y("ata")).toBeGreaterThan(y("quorum"));
     expect(y("remarcar")).toBeGreaterThan(y("ata"));
+  });
+});
+
+describe("o hover e o Percorrer", () => {
+  const estado = (container: HTMLElement, atributo: string) =>
+    Object.fromEntries(
+      [...container.querySelectorAll(`[${atributo}]`)].map((el) => [
+        el.getAttribute(atributo === "data-passo" ? "data-passo" : "data-ligacao"),
+        el.getAttribute(atributo === "data-passo" ? "data-realcado" : "data-realcada"),
+      ]),
+    );
+
+  it("passar o mouse num passo destaca o caminho que passa por ele e mostra o detalhe", () => {
+    const { container } = desenhar(REUNIAO);
+    expect(container.querySelector("[data-detalhe]")).toBeNull();
+
+    fireEvent.mouseEnter(container.querySelector('[data-passo="ata"]')!);
+    expect(estado(container, "data-passo")).toEqual({
+      abrir: "sim",
+      pauta: "sim",
+      quorum: "sim",
+      ata: "sim",
+      remarcar: "nao",
+    });
+    expect(estado(container, "data-ligacao")).toEqual({
+      "abrir->pauta": "sim",
+      "pauta->quorum": "sim",
+      "quorum->ata": "sim",
+      "quorum->remarcar": "nao",
+    });
+    expect(container.querySelector("[data-detalhe]")!.textContent).toContain("Ata assinada");
+
+    fireEvent.mouseLeave(container.querySelector('[data-passo="ata"]')!);
+    expect(container.querySelector("[data-detalhe]")).toBeNull();
+
+    // No celular, tocar faz o mesmo: o detalhe do passo aparece.
+    fireEvent.click(container.querySelector('[data-passo="pauta"]')!);
+    expect(container.querySelector("[data-detalhe]")!.textContent).toContain(
+      "O Secretário escolhe os itens da semana.",
+    );
+    expect(estado(container, "data-passo").remarcar).toBe("sim");
+  });
+
+  it("Percorrer acende um passo de cada vez, com Anterior e Próximo", () => {
+    const { container } = desenhar(REUNIAO);
+    const atual = () =>
+      [...container.querySelectorAll('[data-atual="sim"]')].map((el) => el.getAttribute("data-passo"));
+    expect(atual()).toEqual([]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Percorrer" }));
+    expect(atual()).toEqual(["abrir"]);
+    expect(screen.getByRole("button", { name: "Anterior" })).toHaveProperty("disabled", true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Próximo" }));
+    expect(atual()).toEqual(["pauta"]);
+    expect(within(container).getByText("Passo 2 de 5")).toBeTruthy();
+    expect(container.querySelector("[data-detalhe]")!.textContent).toContain("Montar a pauta");
+
+    fireEvent.click(screen.getByRole("button", { name: "Próximo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Próximo" }));
+    expect(atual()).toEqual(["ata"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Anterior" }));
+    expect(atual()).toEqual(["quorum"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Próximo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Próximo" }));
+    expect(atual()).toEqual(["remarcar"]);
+    expect(screen.getByRole("button", { name: "Próximo" })).toHaveProperty("disabled", true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Encerrar" }));
+    expect(atual()).toEqual([]);
+  });
+});
+
+describe("o leitor de tela", () => {
+  it("recebe o mesmo fluxo como lista numerada, com as decisões e os caminhos escritos", () => {
+    const { container } = desenhar(REUNIAO);
+    expect(container.querySelector("svg")!.getAttribute("aria-hidden")).toBe("true");
+
+    const lista = container.querySelector("figure ol")!;
+    const itens = within(lista as HTMLElement)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent);
+    expect(itens).toEqual([
+      "Início: Abrir a reunião. Depois: Montar a pauta.",
+      "Montar a pauta. O Secretário escolhe os itens da semana. Depois: Tem quórum?",
+      "Decisão: Tem quórum? Se sim: Ata assinada. Se não: Remarcar a reunião.",
+      "Fim: Ata assinada.",
+      "Remarcar a reunião.",
+    ]);
   });
 });
