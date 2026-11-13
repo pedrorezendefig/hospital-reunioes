@@ -128,14 +128,23 @@ function Escolhas<T extends string>({
   );
 }
 
-function FormularioPublico({ codigoDoCartaz }: { codigoDoCartaz: string | null }) {
+interface Origem {
+  codigoDoCartaz: string | null;
+  /** A nota de onde a pessoa seguiu (issue #1622): o caso vai ligado a ela,
+   * menos no anonimato, e quem decide isso é o `montarEnvio`. */
+  avaliacaoId?: string | null;
+  /** O elogio da nota 4 ou 5 chega já escolhido no passo 2. */
+  naturezaInicial?: NaturezaInformada | null;
+}
+
+function FormularioPublico({ codigoDoCartaz, avaliacaoId = null, naturezaInicial = null }: Origem) {
   const [passo, setPasso] = useState(1);
 
   // M1: escolhida primeiro, e por isso guardada à parte do formulário: até a
   // pessoa escolher, ela não é nem identificada nem anônima.
   const [identificacao, setIdentificacao] = useState<"identificado" | "anonimo" | null>(null);
   // M2
-  const [natureza, setNatureza] = useState<NaturezaInformada | null>(null);
+  const [natureza, setNatureza] = useState<NaturezaInformada | null>(naturezaInicial);
   const [sobre, setSobre] = useState<SobreQuem | null>(null);
   // M3
   const [dataOcorrencia, setDataOcorrencia] = useState(hoje);
@@ -236,6 +245,7 @@ function FormularioPublico({ codigoDoCartaz }: { codigoDoCartaz: string | null }
     contato: email,
     anonimo,
     p: codigoDoCartaz,
+    avaliacaoId,
     natureza,
     sobre,
     pacienteNome,
@@ -735,7 +745,7 @@ function FormularioPublico({ codigoDoCartaz }: { codigoDoCartaz: string | null }
   );
 }
 
-export function ManifestacaoPublica({ codigoDoCartaz }: { codigoDoCartaz: string | null }) {
+export function ManifestacaoPublica({ codigoDoCartaz, avaliacaoId = null, naturezaInicial = null }: Origem) {
   return (
     <main className="min-h-screen bg-bg">
       <div className="max-w-lg mx-auto px-4 py-8 space-y-5">
@@ -749,7 +759,11 @@ export function ManifestacaoPublica({ codigoDoCartaz }: { codigoDoCartaz: string
             protocolo na hora.
           </p>
         </div>
-        <FormularioPublico codigoDoCartaz={codigoDoCartaz} />
+        <FormularioPublico
+          codigoDoCartaz={codigoDoCartaz}
+          avaliacaoId={avaliacaoId}
+          naturezaInicial={naturezaInicial}
+        />
       </div>
     </main>
   );

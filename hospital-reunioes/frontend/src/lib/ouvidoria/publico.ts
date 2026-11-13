@@ -181,6 +181,12 @@ export interface FormularioPublico {
    * escolheu.
    */
   p: string | null;
+  /**
+   * A nota do cartaz de onde a pessoa seguiu para cá (issue #1622). Só viaja
+   * quando ela se identifica: o anônimo não carrega a ligação (ADR 0086,
+   * decisão 3).
+   */
+  avaliacaoId?: string | null;
   /** A natureza que a pessoa marcou, ou nada: marcar é opcional. */
   natureza: NaturezaInformada | null;
   /*
@@ -208,6 +214,7 @@ export interface EnvioPublico {
   nome?: string;
   contato?: string;
   p?: string;
+  avaliacao_id?: string;
   natureza_informada?: NaturezaInformada;
   sobre?: SobreQuem;
   paciente_nome?: string;
@@ -250,6 +257,7 @@ export function montarEnvio(form: FormularioPublico): EnvioPublico {
   }
   const codigo = form.p?.trim();
   if (codigo) envio.p = codigo;
+  if (!form.anonimo && form.avaliacaoId) envio.avaliacao_id = form.avaliacaoId;
   // Quem não escolheu natureza não manda campo nenhum: o caso entra sem
   // sugestão, que é o normal.
   if (form.natureza) envio.natureza_informada = form.natureza;

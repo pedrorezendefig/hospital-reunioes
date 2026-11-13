@@ -15,18 +15,22 @@ sigiloso (fail-closed), e quem abaixa é o ouvidor ao classificar.
 """
 
 import datetime as dt
+import hashlib
+import hmac
 import logging
+import secrets
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from postgrest.exceptions import APIError
 from pydantic import BaseModel, Field, field_validator, model_validator
+from slowapi.util import get_remote_address
 
 from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
-from app.services import ouvidoria_acuse, ouvidoria_pontos
+from app.services import ouvidoria_acuse, ouvidoria_avaliacoes, ouvidoria_pontos
 from app.services.ouvidoria_contato import email_utilizavel
 from app.services.ouvidoria_taxonomia import (
     CATEGORIA_PENDENTE,
@@ -225,6 +229,10 @@ class ManifestacaoPublica(BaseModel):
     # O telefone ganha campo próprio; o e-mail continua em `contato`, que é o
     # que o acuse e o aviso de encerramento leem.
     telefone: str | None = Field(default=None, max_length=30)
+    # A nota que a pessoa acabou de dar no cartaz, quando ela seguiu da tela de
+    # nota para cá (issue #1622, ADR 0086 decisão 3). O caso só a carrega se
+    # ela for do mesmo cartaz e a pessoa não pediu anonimato.
+    avaliacao_id: str | None = Field(default=None, max_length=40)
     # Honeypot: campo escondido no formulário, que pessoa nenhuma preenche.
     assunto_alternativo: str | None = Field(default=None, max_length=200)
 
@@ -408,8 +416,87 @@ async def rotulo_do_cartaz(
     if not cartaz:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cartaz não encontrado")
     # Só o nome que o paciente vê. O setor é nome interno da casa e não sai por
-    # esta porta (ADR 0086, decisão 10).
-    return {"nome_publico": ouvidoria_pontos.nome_exibido(cartaz)}
+    # esta porta (ADR 0086, decisão 10). O título é o do cartaz, que a tela de
+    # nota repete (issue #1622).
+    return {
+        "nome_publico": ouvidoria_pontos.nome_exibido(cartaz),
+        "titulo_cartaz": cartaz.get("titulo_cartaz") or "atendimento_hoje",
+    }
+
+
+class AvaliacaoPublica(BaseModel):
+    """A nota do cartaz (telas N1 e N2, ADR 0086 decisão 1). Nada aqui
+    identifica quem avaliou, e campo que não está neste modelo não chega ao
+    banco."""
+
+    nota: int = Field(strict=True, ge=1, le=5)
+    motivos: list[str] = Field(default_factory=list, max_length=len(ouvidoria_avaliacoes.MOTIVOS))
+    comentario: str | None = Field(default=None, max_length=ouvidoria_avaliacoes.TAMANHO_DO_COMENTARIO)
+
+    @field_validator("motivos")
+    @classmethod
+    def motivos_da_lista_fechada(cls, valor: list[str]) -> list[str]:
+        fora = [motivo for motivo in valor if motivo not in ouvidoria_avaliacoes.MOTIVOS]
+        if fora:
+            raise ValueError("escolha os motivos oferecidos na tela")
+        # Tocar duas vezes no mesmo motivo é um motivo só.
+        return list(dict.fromkeys(valor))
+
+    @field_validator("comentario")
+    @classmethod
+    def comentario_vazio_e_ausencia(cls, valor: str | None) -> str | None:
+        return _limpar(valor)
+
+
+# O sal da chave do limite da avaliação. Nasce com o processo e morre com ele:
+# o limitador conta por endereço e cartaz, mas o que ele guarda (e o que o
+# slowapi escreve no log quando estoura) é um resumo que não volta ao IP. O
+# limite é contado só na memória e nunca gravado (ADR 0086, decisão 2).
+_SAL_DO_LIMITE_DA_AVALIACAO = secrets.token_bytes(32)
+
+
+def _chave_da_avaliacao(request: Request) -> str:
+    """Endereço e cartaz, juntos e resumidos. Avaliar dois cartazes diferentes
+    do mesmo celular são duas contas; o mesmo cartaz, uma só."""
+    codigo = ouvidoria_pontos.normalizar_codigo(request.path_params.get("codigo")) or ""
+    bruto = f"{get_remote_address(request)}|{codigo}".encode()
+    return "avaliacao:" + hmac.new(_SAL_DO_LIMITE_DA_AVALIACAO, bruto, hashlib.sha256).hexdigest()
+
+
+@router.post("/publico/pontos/{codigo}/avaliacoes", status_code=status.HTTP_201_CREATED)
+@limiter.limit("3 per 10 minutes", key_func=_chave_da_avaliacao)
+async def avaliar_pelo_cartaz(
+    request: Request,
+    codigo: str,
+    avaliacao: AvaliacaoPublica,
+    supabase=Depends(get_supabase_client),
+):
+    """Grava a nota de um cartaz (issue #1622). Não abre caso nem protocolo: a
+    avaliação é dado de gestão, e quem quer retorno segue para a Manifestação
+    guiada, que é outra rota.
+
+    Cartaz aposentado ou desconhecido devolve 404, e a página abre a
+    Manifestação guiada sem origem (ADR 0086, decisão 5): a nota é sempre de um
+    cartaz ativo."""
+    # Só a grafia do cartaz. O limitador conta pelo caminho da URL, e aceitar
+    # `ab2cd3` daria a cada grafia do mesmo código um balde novo. A página
+    # manda o código em maiúscula.
+    cartaz = (
+        ouvidoria_pontos.por_codigo(supabase, codigo) if codigo == ouvidoria_pontos.normalizar_codigo(codigo) else None
+    )
+    if not cartaz:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cartaz não encontrado")
+    try:
+        linha = ouvidoria_avaliacoes.gravar(supabase, cartaz, avaliacao.nota, avaliacao.motivos, avaliacao.comentario)
+    except APIError as exc:
+        logger.error("Falha ao gravar a avaliação do cartaz (código %s)", exc.code)
+        linha = None
+    if not linha:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível registrar sua avaliação agora. Tente novamente em instantes.",
+        )
+    return {"id": linha["id"], "nota": linha["nota"]}
 
 
 @router.get("/publico/locais")
@@ -495,6 +582,12 @@ async def registrar_manifestacao_publica(
         and local_informado.strip().casefold() == cartaz["ponto"].strip().casefold()
     ):
         local_informado = None
+    # A ligação com a nota (issue #1622). O anônimo não a carrega, nem é
+    # consultado: a ligação reidentificaria o caso pela hora da nota, como o
+    # ponto acima (ADR 0086, decisão 3).
+    avaliacao = (
+        None if manifestacao.anonimo else ouvidoria_avaliacoes.para_ligar(supabase, manifestacao.avaliacao_id, cartaz)
+    )
 
     linha = {
         "categoria": CATEGORIA_PENDENTE,
@@ -543,6 +636,11 @@ async def registrar_manifestacao_publica(
         "canal_setor": origem,
         "canal_ponto": ponto,
     }
+    # A coluna só entra quando há ligação: o caso que veio direto (quase todos)
+    # não depende da migration 140, e o canal aberto não cai se o deploy
+    # chegar antes do SQL no Studio.
+    if avaliacao:
+        linha["avaliacao_id"] = avaliacao["id"]
     try:
         result = supabase.table("ouvidoria_protocolos").insert(linha).execute()
     except APIError as exc:
@@ -554,6 +652,8 @@ async def registrar_manifestacao_publica(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=_DETALHE_FALHA)
     row = result.data[0]
     _abrir_a_trilha(supabase, row, linha["canal"])
+    if avaliacao:
+        ouvidoria_avaliacoes.marcar_retorno(supabase, avaliacao)
     # O aviso de que a manifestação chegou, com o protocolo (issue #493, ADR
     # 0042). Depois do insert e depois da trilha, e sem `try`: `acusar_recebimento`
     # não levanta, justamente porque o protocolo abaixo já é devido a quem está

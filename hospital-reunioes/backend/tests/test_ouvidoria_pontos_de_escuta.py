@@ -743,7 +743,7 @@ class TestOQrResolveOCodigo:
         r = client.get("/api/ouvidoria/publico/pontos/AB2CD3")
 
         assert r.status_code == 200
-        assert r.json() == {"nome_publico": "Emergência adulta"}
+        assert r.json() == {"nome_publico": "Emergência adulta", "titulo_cartaz": "atendimento_hoje"}
         assert "Recepção" not in r.text
 
     def test_sem_nome_publico_a_rota_devolve_o_rotulo_do_ponto(self):
@@ -752,7 +752,7 @@ class TestOQrResolveOCodigo:
         r = client.get("/api/ouvidoria/publico/pontos/AB2CD3")
 
         assert r.status_code == 200
-        assert r.json() == {"nome_publico": "Poltrona 12"}
+        assert r.json() == {"nome_publico": "Poltrona 12", "titulo_cartaz": "atendimento_hoje"}
         assert "Recepção" not in r.text
 
     def test_ponto_desativado_nao_devolve_rotulo(self):

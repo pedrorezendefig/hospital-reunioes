@@ -37,6 +37,11 @@ aparece em lugar nenhum, e o silêncio lê igual a "preservar de propósito" e a
     propósito (migration 080, RN-40, ADR 0034 decisão 8). Apagá-la destruiria
     o histórico de prestação de contas da Ouvidoria sem devolver privacidade a
     ninguém.
+  - `ouvidoria_avaliacoes` (issue #1622, ADR 0086 decisão 9): o **comentário
+    sai** cinco anos depois de criado, pelo relógio da própria nota, e não do
+    caso (`apagar_comentarios_de_avaliacao`); a nota, os motivos, o cartaz e as
+    datas ficam, porque são os números da aba Avaliações e não dizem nada de
+    quem avaliou (a linha nunca guardou IP, aparelho nem contato).
 
 **Duas portas, uma política.** O cron dos cinco anos (`anonimizar_encerradas
 _antigas`) e o ato da Diretoria (`apagar_caso`, chamado pela rota de
@@ -270,6 +275,11 @@ CAMPOS_DO_DOSSIE: dict[str, str | None] = {
     "nsp_justificativa_simples": None,
     "nsp_justificativa_tecnica": None,
     "nsp_decisao_motivo": None,
+    # A ligação com a nota do cartaz (issue #1622, migration 140). O
+    # comentário da nota é texto de quem manifestou e só sai pelo relógio
+    # dela, cinco anos depois de criada: o caso apagado antes disso (pela
+    # Diretoria) não pode continuar apontando para ele.
+    "avaliacao_id": None,
 }
 
 # `resumo` é NOT NULL com CHECK anti-vazio desde a migration 063: não pode ir a
@@ -472,6 +482,30 @@ def anonimizar_encerradas_antigas(supabase, agora: dt.datetime) -> int:
         if apagar_caso(supabase, caso, agora, apagamento):
             anonimizadas += 1
     return anonimizadas
+
+
+def apagar_comentarios_de_avaliacao(supabase, agora: dt.datetime) -> int:
+    """Apaga o comentário das avaliações do QR criadas há mais de cinco anos
+    (issue #1622, ADR 0086 decisão 9). A nota e os motivos ficam: são os
+    números da aba Avaliações e não dizem nada de quem avaliou.
+
+    O relógio é o da nota, que não tem encerramento. Um update só, idempotente:
+    o comentário já nulo não entra de novo. Devolve quantos saíram nesta rodada;
+    com o freio puxado (`OUVIDORIA_RETENCAO_ATIVA=false`), 0 sem tocar em nada."""
+    if not settings.ouvidoria_retencao_ativa:
+        return 0
+    try:
+        result = (
+            supabase.table("ouvidoria_avaliacoes")
+            .update({"comentario": None})
+            .lte("criada_em", data_de_corte(agora).isoformat())
+            .not_.is_("comentario", "null")
+            .execute()
+        )
+    except Exception:
+        logger.error("[Ouvidoria] Falha ao apagar os comentários antigos das avaliações")
+        return 0
+    return len(result.data or [])
 
 
 def concluir_apagamentos_pendentes(supabase, agora: dt.datetime) -> int:
