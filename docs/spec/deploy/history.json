@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-13T16:22:31-03:00",
+      "sha": "e74b7d72944cbad1eed4ba87b6d1c8089580e8d0",
+      "app_version": "0.292.0",
+      "subject": "Onda manual-onda5: A página de Tecnologia",
+      "raw_subject": "chore(deploy): registro da onda manual-onda5 (#1754)",
+      "scope": [
+        "frontend"
+      ],
+      "prds": [
+        1711
+      ],
+      "result": "healthy",
+      "duration_seconds": 246,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta manual-onda5: PR #1754 (issue #1727), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "frontend": 227
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-13T15:30:27-03:00",
       "sha": "ac8d4db7b2f5a7dcc82aab7074cfe0824eabe5ef",
       "app_version": "0.291.0",
