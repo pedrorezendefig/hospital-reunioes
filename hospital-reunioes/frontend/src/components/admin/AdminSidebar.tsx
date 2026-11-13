@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
-import { isSuperAdmin } from "@/lib/auth";
+import { isSuperAdmin, type AuthUser } from "@/lib/auth";
 import { BotaoRecolherMenu } from "@/components/layout/BotaoRecolherMenu";
 import { ItemManual } from "@/components/layout/ItemManual";
 import { useMenuRecolhido } from "@/hooks/useMenuRecolhido";
@@ -97,6 +97,15 @@ const SECTIONS: Section[] = [
   },
 ];
 
+/**
+ * As seções do menu do Admin que a pessoa vê: o corte de acesso do menu, que o
+ * manual também lê (issue #1718, ADR 0094, decisão 2).
+ */
+export function secoesDoMenuAdmin(participante: AuthUser | null): Section[] {
+  const superAdmin = isSuperAdmin(participante);
+  return SECTIONS.filter((s) => superAdmin || !s.somenteSuperAdmin);
+}
+
 interface AdminSidebarProps {
   variant?: "desktop" | "drawer";
   onNavigate?: () => void;
@@ -108,8 +117,7 @@ export function AdminSidebar({
 }: AdminSidebarProps) {
   const pathname = usePathname();
   const { participante } = useCurrentParticipante();
-  const superAdmin = isSuperAdmin(participante);
-  const sections = SECTIONS.filter((s) => superAdmin || !s.somenteSuperAdmin);
+  const sections = secoesDoMenuAdmin(participante);
   // A mesma preferência da barra do app (issue #1550); a gaveta do celular
   // ignora e segue sempre aberta.
   const [preferenciaRecolhido, alternarRecolhido] = useMenuRecolhido();
