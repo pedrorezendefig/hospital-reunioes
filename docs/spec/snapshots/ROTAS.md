@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T05:28+0000 -->
+<!-- last_update: 2026-11-13T07:11+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -268,6 +268,10 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| GET | `/ouvidoria/avaliacoes` | A lista da aba, a mais nova primeiro, com os filtros de ponto, nota, | ✅ |
+| GET | `/ouvidoria/avaliacoes/numeros` | Os indicadores e os gráficos da aba sobre o período (padrão: últimos 30 | ✅ |
+| POST | `/ouvidoria/avaliacoes/{avaliacao_id}/arquivamento` | Arquiva a revisão: tira a marca Para revisar com o motivo, sem abrir | ✅ |
+| POST | `/ouvidoria/avaliacoes/{avaliacao_id}/conversao` | Converte a avaliação em caso (ADR 0086, decisão 4): canal `qr`, o | ✅ |
 | PUT | `/ouvidoria/convite-google` | A chave geral do teste do convite ao Google (issue #1625, ADR 0089 | ✅ |
 | GET | `/ouvidoria/feriados` | Os dias que saem do calendário útil (RN-22). | ✅ |
 | POST | `/ouvidoria/feriados` | Cadastra um feriado. A partir daqui o motor deixa de contar esse dia. | ✅ |
@@ -548,4 +552,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 317 endpoints em 45 routers · 92% exigem auth.
+**Totais:** 321 endpoints em 45 routers · 92% exigem auth.

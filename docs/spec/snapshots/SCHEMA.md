@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T06:08+0000 -->
+<!-- last_update: 2026-11-13T07:11+0000 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -989,7 +989,7 @@ erDiagram
         TEXT comentario
         TIMESTAMPTZ criada_em
         BOOLEAN convite_google_exibido
-        _ mais_colunas "+8"
+        _ mais_colunas "+9"
     }
     ouvidoria_convite_google_auditoria {
         UUID id PK
@@ -1163,6 +1163,8 @@ erDiagram
 | `ouvidoria_avaliacoes` | `idx_ouvidoria_avaliacoes_ponto` | `ponto_id, criada_em` | `140_ouvidoria_avaliacao_do_qr.sql` |
 | `ouvidoria_avaliacoes` | `idx_ouvidoria_avaliacoes_comentario` | `criada_em` | `140_ouvidoria_avaliacao_do_qr.sql` |
 | `ouvidoria_avaliacoes` | `idx_ouvidoria_avaliacoes_convite_google` | `criada_em, ponto_id` | `142_ouvidoria_convite_google_no_qr.sql` |
+| `ouvidoria_avaliacoes` | `idx_ouvidoria_avaliacoes_para_revisar` | `criada_em` | `144_ouvidoria_motivo_do_arquivo_da_revisao.sql` |
+| `ouvidoria_avaliacoes` | `idx_ouvidoria_avaliacoes_criada_em` | `criada_em, id` | `144_ouvidoria_motivo_do_arquivo_da_revisao.sql` |
 | `ouvidoria_convite_google_auditoria` | `idx_ouvidoria_convite_google_auditoria_em` | `alterado_em DESC` | `142_ouvidoria_convite_google_no_qr.sql` |
 
 ---

@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T06:08+0000 -->
+<!-- last_update: 2026-11-13T07:11+0000 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -1835,7 +1835,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## ouvidoria_avaliacoes
 
-> Origem: `140_ouvidoria_avaliacao_do_qr.sql`
+> Origem: `140_ouvidoria_avaliacao_do_qr.sql` (alterada em: 144_ouvidoria_motivo_do_arquivo_da_revisao.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -1855,11 +1855,14 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `revisada_por` | `VARCHAR(10)` | — | — | `participantes.id` |
 | `revisada_em` | `TIMESTAMPTZ` | — | — | — |
 | `e` | `um` | — | — | — |
+| `revisao_motivo` | `TEXT` | — | — | — |
 
 **Indexes:**
 - `idx_ouvidoria_avaliacoes_ponto` em `(ponto_id, criada_em)` (de `140_ouvidoria_avaliacao_do_qr.sql`)
 - `idx_ouvidoria_avaliacoes_comentario` em `(criada_em)` (de `140_ouvidoria_avaliacao_do_qr.sql`)
 - `idx_ouvidoria_avaliacoes_convite_google` em `(criada_em, ponto_id)` (de `142_ouvidoria_convite_google_no_qr.sql`)
+- `idx_ouvidoria_avaliacoes_para_revisar` em `(criada_em)` (de `144_ouvidoria_motivo_do_arquivo_da_revisao.sql`)
+- `idx_ouvidoria_avaliacoes_criada_em` em `(criada_em, id)` (de `144_ouvidoria_motivo_do_arquivo_da_revisao.sql`)
 
 ## ouvidoria_convite_google_auditoria
 
