@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T07:11+0000 -->
+<!-- last_update: 2026-11-13T16:47+0000 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -519,7 +519,7 @@ erDiagram
         TEXT estado
         VARCHAR responsavel_id FK
         VARCHAR autor_id FK
-        _ mais_colunas "+29"
+        _ mais_colunas "+30"
     }
     tecnologia_conversas {
         UUID id PK
@@ -1108,6 +1108,7 @@ erDiagram
 | `tecnologia_demandas` | `idx_tecnologia_demandas_responsavel` | `responsavel_id` | `102_tecnologia_fundacao.sql` |
 | `tecnologia_demandas` | `idx_tecnologia_demandas_produto` | `produto_id` | `102_tecnologia_fundacao.sql` |
 | `tecnologia_demandas` | `tecnologia_demandas_github_issue_numero_idx` | `github_issue_numero` | `103_tecnologia_vinculo.sql` |
+| `tecnologia_demandas` | `tecnologia_demandas_projeto_github_issue_numero_idx` | `projeto, github_issue_numero` | `145_tecnologia_projeto_da_demanda.sql` |
 | `tecnologia_conversas` | `idx_tecnologia_conversas_demanda` | `demanda_id, criado_em` | `102_tecnologia_fundacao.sql` |
 | `tecnologia_anexos` | `idx_tecnologia_anexos_conversa` | `conversa_id` | `115_tecnologia_anexos_e_em_producao.sql` |
 | `cm_operadora_plano` | `idx_cm_operadora_plano_nome_mv` | `(lower(nome_mv` | `116_contas_medicas_fundacao.sql` |

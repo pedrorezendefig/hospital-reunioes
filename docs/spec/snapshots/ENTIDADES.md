@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T07:11+0000 -->
+<!-- last_update: 2026-11-13T16:47+0000 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -831,7 +831,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## tecnologia_demandas
 
-> Origem: `102_tecnologia_fundacao.sql` (alterada em: 103_tecnologia_vinculo.sql, 115_tecnologia_anexos_e_em_producao.sql, 128_tecnologia_envio_falhou.sql, 130_tecnologia_adr_0084.sql, 133_tecnologia_demonstracao.sql, 134_tecnologia_numero_da_demanda.sql)
+> Origem: `102_tecnologia_fundacao.sql` (alterada em: 103_tecnologia_vinculo.sql, 115_tecnologia_anexos_e_em_producao.sql, 128_tecnologia_envio_falhou.sql, 130_tecnologia_adr_0084.sql, 133_tecnologia_demonstracao.sql, 134_tecnologia_numero_da_demanda.sql, 145_tecnologia_projeto_da_demanda.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -872,12 +872,14 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `demonstracao_url` | `TEXT` | — | — | — |
 | `demonstracao_em` | `TIMESTAMPTZ` | — | — | — |
 | `numero` | `BIGINT` | — | — | — |
+| `projeto` | `TEXT` | NOT NULL | `'hospital'` | — |
 
 **Indexes:**
 - `idx_tecnologia_demandas_estado` em `(estado)` (de `102_tecnologia_fundacao.sql`)
 - `idx_tecnologia_demandas_responsavel` em `(responsavel_id)` (de `102_tecnologia_fundacao.sql`)
 - `idx_tecnologia_demandas_produto` em `(produto_id)` (de `102_tecnologia_fundacao.sql`)
 - `tecnologia_demandas_github_issue_numero_idx` em `(github_issue_numero)` (de `103_tecnologia_vinculo.sql`)
+- `tecnologia_demandas_projeto_github_issue_numero_idx` em `(projeto, github_issue_numero)` (de `145_tecnologia_projeto_da_demanda.sql`)
 
 ## tecnologia_conversas
 

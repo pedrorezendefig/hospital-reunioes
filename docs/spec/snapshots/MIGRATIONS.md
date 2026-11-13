@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-11-13T07:11+0000 -->
+<!-- last_update: 2026-11-13T16:47+0000 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -144,6 +144,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 142 | `142_ouvidoria_convite_google_no_qr.sql` | o teste do convite ao Google no QR | 1 | 3 | 2 | 0 |
 | 143 | `143_ouvidoria_agente_de_triagem.sql` | o agente de triagem da Ouvidoria | 1 | 1 | 0 | 0 |
 | 144 | `144_ouvidoria_motivo_do_arquivo_da_revisao.sql` | o motivo de arquivar a revisao da Avaliacao | 0 | 1 | 2 | 0 |
+| 145 | `145_tecnologia_projeto_da_demanda.sql` | o Projeto na Demanda | 0 | 1 | 1 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 138 migrations.
+**Total:** 139 migrations.
