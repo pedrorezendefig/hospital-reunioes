@@ -11,6 +11,7 @@
  */
 
 import { cleanup, render, screen, within } from "@testing-library/react";
+import { cloneElement, type ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { NotaNoGoogle, type NotaNoGooglePayload } from "./NotaNoGoogle";
@@ -26,6 +27,20 @@ vi.mock("next/link", () => ({
     </a>
   ),
 }));
+
+// O jsdom não mede layout: o `ResponsiveContainer` vira um de largura fixa, a
+// de um celular de 375 px, e o resto do `recharts` roda de verdade (molde do
+// teste de Visitantes por dia).
+const LARGURA_DO_CELULAR = 375;
+
+vi.mock("recharts", async (importOriginal) => {
+  const real = await importOriginal<typeof import("recharts")>();
+  return {
+    ...real,
+    ResponsiveContainer: ({ children }: { children: ReactElement<{ width?: number; height?: number }> }) =>
+      cloneElement(children, { width: LARGURA_DO_CELULAR, height: 220 }),
+  };
+});
 
 const pedidos: string[] = [];
 
@@ -58,6 +73,15 @@ function medida(parcial: Partial<NotaNoGooglePayload["reputacao"]> = {}): NotaNo
       avaliacoes_do_mes: 12,
       nota_mes_anterior: 2.4,
       tendencia: "melhorou",
+      leituras_do_mes: [
+        { lida_em: "2026-11-02T09:45:00+00:00", nota: 2.5, total: 1629 },
+        { lida_em: "2026-11-09T09:45:00+00:00", nota: 2.5, total: 1635 },
+        { lida_em: "2026-11-16T09:45:00+00:00", nota: 2.6, total: 1641 },
+      ],
+      leituras_mes_anterior: [
+        { lida_em: "2026-10-05T09:45:00+00:00", nota: 2.3, total: 1590 },
+        { lida_em: "2026-10-26T09:45:00+00:00", nota: 2.4, total: 1620 },
+      ],
       ...parcial,
     },
   };
@@ -88,7 +112,7 @@ describe("a lente da nota no Google", () => {
     expect(screen.getByText("12")).toBeTruthy();
     expect(screen.getByText(/diferença do total de avaliações entre a primeira e a última leitura do mês/i)).toBeTruthy();
     expect(screen.getByText("Melhorou")).toBeTruthy();
-    expect(screen.getByText(/2,4 de 5 no fim do mês anterior/)).toBeTruthy();
+    expect(screen.getByText("2,4 de 5 no fim do mês anterior")).toBeTruthy();
   });
 
   it("nota abaixo da do mês anterior diz que piorou", async () => {
@@ -122,6 +146,8 @@ describe("a lente da nota no Google", () => {
         avaliacoes_do_mes: null,
         nota_mes_anterior: null,
         tendencia: null,
+        leituras_do_mes: [],
+        leituras_mes_anterior: [],
       },
     });
 
@@ -129,6 +155,84 @@ describe("a lente da nota no Google", () => {
 
     expect(await screen.findByText(/a nota do google não está sendo medida/i)).toBeTruthy();
     expect(screen.queryByText(/de 5/)).toBeNull();
+    expect(screen.getByText(/Quando for, a nota e o gráfico do mês aparecem aqui/)).toBeTruthy();
+    expect(screen.queryByRole("img")).toBeNull();
+  });
+});
+
+describe("o gráfico do mês (issue #1699)", () => {
+  const curvas = (grafico: HTMLElement) => [...grafico.querySelectorAll("path.recharts-line-curve")];
+
+  it("mostra um gráfico da nota e um das avaliações acumuladas, com as leituras do mês", async () => {
+    servidor(medida());
+
+    render(<NotaNoGoogle />);
+
+    const nota = await screen.findByRole("img", { name: /^Nota no Google em cada leitura do mês/ });
+    const acumuladas = screen.getByRole("img", { name: /^Avaliações acumuladas em cada leitura do mês/ });
+    // Uma bolinha por leitura do mês, na linha cheia.
+    expect(nota.querySelectorAll(".recharts-line-dots")[1].querySelectorAll("circle")).toHaveLength(3);
+    expect(acumuladas.querySelectorAll(".recharts-line-dots")[1].querySelectorAll("circle")).toHaveLength(3);
+    const rotulosDoTotal = [...acumuladas.querySelectorAll(".recharts-yAxis .recharts-cartesian-axis-tick-value")];
+    expect(rotulosDoTotal.map((r) => r.textContent).some((t) => /mil/.test(t ?? ""))).toBe(true);
+  });
+
+  it("põe o mês anterior tracejado atrás e diz se a nota melhorou frente a ele", async () => {
+    servidor(medida());
+
+    render(<NotaNoGoogle />);
+
+    const nota = await screen.findByRole("img", { name: /^Nota no Google em cada leitura do mês/ });
+    const [anterior, doMes] = curvas(nota);
+    expect(anterior.getAttribute("stroke-dasharray")).toBeTruthy();
+    expect(doMes.getAttribute("stroke-dasharray")).toBeNull();
+    expect(screen.getAllByText("Mês anterior").length).toBeGreaterThan(0);
+    expect(nota.getAttribute("aria-label")).toMatch(/A nota melhorou: 2,6 de 5 contra 2,4 de 5 no fim do mês anterior\./);
+    expect(screen.getByText("A nota melhorou: 2,6 de 5 contra 2,4 de 5 no fim do mês anterior.")).toBeTruthy();
+  });
+
+  it("nota abaixo da do fim do mês anterior, o gráfico diz que piorou", async () => {
+    servidor(medida({ nota: 2.3, tendencia: "piorou" }));
+
+    render(<NotaNoGoogle />);
+
+    expect(await screen.findByText("A nota piorou: 2,3 de 5 contra 2,4 de 5 no fim do mês anterior.")).toBeTruthy();
+  });
+
+  it("sem leitura no mês, diz por que o gráfico está vazio", async () => {
+    servidor(
+      medida({ nota: 2.4, leituras_do_mes: [], avaliacoes_do_mes: null, tendencia: null, nota_mes_anterior: 2.4 }),
+    );
+
+    render(<NotaNoGoogle />);
+
+    expect(
+      await screen.findByText(
+        "O gráfico está vazio porque ainda não houve leitura neste mês. A nota é lida uma vez por semana, e o gráfico começa na primeira leitura do mês.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("img")).toBeNull();
+  });
+
+  it("a 375 px, os dois gráficos ocupam a largura e todo rótulo do eixo cabe dentro deles", async () => {
+    servidor(medida());
+
+    render(<NotaNoGoogle />);
+
+    await screen.findByRole("img", { name: /^Nota no Google/ });
+    const graficos = screen.getAllByRole("img");
+    expect(graficos).toHaveLength(2);
+    for (const grafico of graficos) {
+      const largura = Number(grafico.querySelector("svg.recharts-surface")!.getAttribute("width"));
+      expect(largura).toBe(LARGURA_DO_CELULAR);
+      // 12px de fonte e uns 0,6em por letra: metade do rótulo de cada lado do ponto.
+      for (const rotulo of grafico.querySelectorAll(".recharts-xAxis .recharts-cartesian-axis-tick-value")) {
+        const metade = ((rotulo.textContent ?? "").length * 12 * 0.6) / 2;
+        const x = Number(rotulo.getAttribute("x"));
+        expect(x - metade).toBeGreaterThanOrEqual(0);
+        expect(largura - x).toBeGreaterThanOrEqual(metade);
+      }
+    }
   });
 });
 
