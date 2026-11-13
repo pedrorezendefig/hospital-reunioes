@@ -160,7 +160,7 @@ class TestOIdentificadoEntraPeloContato:
         assert r.status_code == 200, r.text
         assert r.json()["protocolo"] == protocolo
 
-    @pytest.mark.parametrize("contato", ["outra@exemplo.com", "21988887777", "99990000", ""])
+    @pytest.mark.parametrize("contato", ["outra@exemplo.com", "joão@exemplo.com", "21988887777", "99990000", ""])
     def test_contato_que_nao_confere_e_a_mesma_recusa(self, contato):
         client, banco = _make_app()
         protocolo = _caso_identificado(client, banco)
@@ -180,6 +180,17 @@ class TestOIdentificadoEntraPeloContato:
         r = client.post(ROTA_ACOMPANHAR, json={"protocolo": protocolo, "contato": "21977771111"})
 
         assert r.status_code == 200, r.text
+
+    def test_o_dono_com_acento_no_email_entra_e_o_estranho_com_acento_e_recusado(self):
+        client, banco = _make_app()
+        protocolo = _caso_identificado(client, banco, manifestante_contato="joão@exemplo.com")
+
+        dono = client.post(ROTA_ACOMPANHAR, json={"protocolo": protocolo, "contato": "JOÃO@exemplo.com"})
+        estranho = client.post(ROTA_ACOMPANHAR, json={"protocolo": protocolo, "contato": "joana@exemplo.com"})
+        inexistente = client.post(ROTA_ACOMPANHAR, json={"protocolo": "2026-9999", "contato": "joana@exemplo.com"})
+
+        assert dono.status_code == 200, dono.text
+        assert (estranho.status_code, estranho.json()) == (inexistente.status_code, inexistente.json())
 
     def test_codigo_qualquer_nao_abre_o_caso_identificado(self):
         client, banco = _make_app()

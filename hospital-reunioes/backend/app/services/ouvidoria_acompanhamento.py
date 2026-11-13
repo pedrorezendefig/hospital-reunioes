@@ -115,7 +115,10 @@ def contato_confere(informado: str, caso: dict) -> bool:
         return False
     if "@" in informado:
         email = (caso.get("manifestante_contato") or "").strip()
-        return bool(email) and hmac.compare_digest(email.casefold(), informado.casefold())
+        # Em bytes: o compare_digest recusa str com acento (TypeError, 500).
+        return bool(email) and hmac.compare_digest(
+            email.casefold().encode("utf-8"), informado.casefold().encode("utf-8")
+        )
     digitos = _digitos(informado)
     if len(digitos) < _DIGITOS_DO_MENOR_TELEFONE:
         return False
