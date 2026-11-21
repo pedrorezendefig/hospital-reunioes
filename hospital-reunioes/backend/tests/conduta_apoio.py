@@ -53,7 +53,9 @@ class _Consulta:
         self._filtros.append(lambda linha: linha.get(coluna) is esperado)
         return self
 
-    def ilike(self, *_a):
+    def ilike(self, coluna, padrao):
+        trecho = padrao.strip("%").lower()
+        self._filtros.append(lambda linha: trecho in str(linha.get(coluna) or "").lower())
         return self
 
     def order(self, coluna, desc=False):
@@ -98,6 +100,7 @@ UNICAS = {
     "conduta_prazos_vencidos": ("caso_id", "prazo_em"),
     "conduta_contestacoes": ("caso_id",),
     "conduta_contestacao_votos": ("contestacao_id", "participante_id"),
+    "conduta_participacao_votos": ("contestacao_id", "participante_id"),
 }
 
 

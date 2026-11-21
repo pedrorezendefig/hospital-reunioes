@@ -9,6 +9,7 @@ As listas levam só metadados: nenhum nome e nenhum trecho de relato.
 """
 
 from typing import Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
@@ -61,6 +62,19 @@ class Impedimento(BaseModel):
     motivo: str = Field(default="", max_length=40)
 
 
+class ContestacaoDeParticipacao(Impedimento):
+    contestado_id: str = Field(max_length=10)
+
+
+class Citado(BaseModel):
+    participante_id: str | None = Field(default=None, max_length=10)
+    nome: str | None = Field(default=None, max_length=400)
+
+
+class DecisaoDeParticipacao(BaseModel):
+    escolha: Literal["confirmar", "manter"]
+
+
 def _indisponivel(erro: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=INDISPONIVEL)
 
@@ -100,6 +114,9 @@ async def abrir_caso(aberto: CasoAberto = Depends(portao_do_caso), supabase: Cli
         contestacao = triagem.contestacao_para_a_tela(supabase, caso["id"])
         prorrogacao = cifra.decifrar_texto(caso["prorrogacao_cifrada"]) if caso.get("prorrogacao_cifrada") else None
         orientacao = cifra.decifrar_texto(caso["orientacao_cifrada"]) if caso.get("orientacao_cifrada") else None
+        impedimentos = impedimento.para_a_tela(
+            supabase, caso["id"], aberto.autor_id, impedimento.membros_do_caso(supabase, caso)
+        )
     except cifra.CifraIndisponivelError as erro:
         raise _indisponivel(erro) from erro
     vencidos = triagem.registrar_vencidos(supabase, [caso], hoje_em_sao_paulo())
@@ -107,6 +124,7 @@ async def abrir_caso(aberto: CasoAberto = Depends(portao_do_caso), supabase: Cli
     if orientacao is None and caso.get("rito") == "encaminhamento" and caso.get("destino"):
         orientacao = orientacao_do_encaminhamento(caso["destino"])
     return {
+        **impedimentos,
         **_metadados(caso),
         "relato": relato,
         "situacao": situacao(caso),
@@ -124,14 +142,17 @@ async def abrir_caso(aberto: CasoAberto = Depends(portao_do_caso), supabase: Cli
     }
 
 
-def _agir(funcao, supabase, aberto: CasoAberto, **argumentos) -> dict:
+def _executar(funcao, supabase, aberto: CasoAberto, **argumentos):
     try:
-        caso = funcao(supabase, aberto, **argumentos)
+        return funcao(supabase, aberto, **argumentos)
     except triagem.AcaoRecusadaError as recusa:
         raise HTTPException(status_code=recusa.status, detail=recusa.mensagem) from recusa
     except cifra.CifraIndisponivelError as erro:
         raise _indisponivel(erro) from erro
-    return {"caso": _metadados(caso)}
+
+
+def _agir(funcao, supabase, aberto: CasoAberto, **argumentos) -> dict:
+    return {"caso": _metadados(_executar(funcao, supabase, aberto, **argumentos))}
 
 
 @router.post("/casos/{caso_id}/triagem")
@@ -181,6 +202,50 @@ async def declarar_impedimento(
     corpo: Impedimento, aberto: CasoAberto = Depends(portao_da_acao), supabase: Client = Depends(get_supabase_client)
 ) -> dict:
     return _agir(impedimento.declarar_impedimento, supabase, aberto, motivo=corpo.motivo)
+
+
+@router.get("/casos/{caso_id}/cadastro")
+async def buscar_no_cadastro(
+    busca: str = Query("", max_length=80),
+    aberto: CasoAberto = Depends(portao_da_acao),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """Para ligar o Citado ao cadastro: só id e nome."""
+    return {"pessoas": impedimento.buscar_no_cadastro(supabase, busca)}
+
+
+@router.post("/casos/{caso_id}/citados")
+async def marcar_citado(
+    corpo: Citado, aberto: CasoAberto = Depends(portao_da_acao), supabase: Client = Depends(get_supabase_client)
+) -> dict:
+    return _agir(impedimento.marcar_citado, supabase, aberto, **corpo.model_dump())
+
+
+def _contestacao(linha: dict) -> dict:
+    return {"contestacao": {"id": linha["id"], "resultado": linha.get("resultado")}}
+
+
+@router.post("/casos/{caso_id}/contestacoes-de-participacao")
+async def contestar_participacao(
+    corpo: ContestacaoDeParticipacao,
+    aberto: CasoAberto = Depends(portao_da_acao),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    linha = _executar(impedimento.contestar_participacao, supabase, aberto, **corpo.model_dump())
+    return _contestacao(linha)
+
+
+@router.post("/casos/{caso_id}/contestacoes-de-participacao/{contestacao_id}/decisao")
+async def decidir_participacao(
+    contestacao_id: UUID,
+    corpo: DecisaoDeParticipacao,
+    aberto: CasoAberto = Depends(portao_da_acao),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    linha = _executar(
+        impedimento.decidir_participacao, supabase, aberto, contestacao_id=str(contestacao_id), escolha=corpo.escolha
+    )
+    return _contestacao(linha)
 
 
 class NovaVersao(BaseModel):

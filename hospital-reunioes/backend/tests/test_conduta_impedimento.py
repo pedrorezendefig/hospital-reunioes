@@ -158,6 +158,133 @@ class TestDeclararImpedimento:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 2. A contestação é decidida pelos demais membros, sem o contestado
+# ═══════════════════════════════════════════════════════════════════════════
+
+CONTESTACOES = "contestacoes-de-participacao"
+
+
+class TestContestarParticipacao:
+    def _contestar(self, comite, caso, autor=COORDENACAO, contestado=MEMBRO) -> str:
+        return comite.ok(autor, caso, CONTESTACOES, {"contestado_id": contestado, "motivo": "interesse"})[
+            "contestacao"
+        ]["id"]
+
+    def test_o_contestado_nao_decide(self, comite):
+        caso = comite.caso()
+        contestacao = self._contestar(comite, caso)
+
+        resposta = comite.agir(MEMBRO, caso, f"{CONTESTACOES}/{contestacao}/decisao", {"escolha": "manter"})
+
+        assert resposta.status_code == 403
+        assert comite.abrir(MEMBRO, caso).status_code == 200
+
+    def test_os_demais_confirmam_e_o_contestado_fica_impedido(self, comite):
+        caso = comite.caso()
+        contestacao = self._contestar(comite, caso)
+        assert comite.abrir(MEMBRO, caso).status_code == 200
+
+        comite.ok(SEGUNDO_LEITOR, caso, f"{CONTESTACOES}/{contestacao}/decisao", {"escolha": "confirmar"})
+
+        assert _recusado(comite.abrir(MEMBRO, caso))
+        assert [c["id"] for c in comite.lista(SUPLENTE).json()["casos"]] == [caso]
+
+    def test_os_demais_mantem_e_o_contestado_segue_no_caso(self, comite):
+        caso = comite.caso()
+        contestacao = self._contestar(comite, caso)
+
+        comite.ok(SEGUNDO_LEITOR, caso, f"{CONTESTACOES}/{contestacao}/decisao", {"escolha": "manter"})
+
+        assert comite.abrir(MEMBRO, caso).status_code == 200
+        tela = comite.abrir(COORDENACAO, caso).json()
+        assert [c["resultado"] for c in tela["contestacoes_de_participacao"]] == ["rejeitada"]
+
+    def test_ninguem_contesta_a_si_mesmo_nem_quem_nao_esta_no_caso(self, comite):
+        caso = comite.caso()
+
+        corpo = {"contestado_id": COORDENACAO, "motivo": "interesse"}
+        assert comite.agir(COORDENACAO, caso, CONTESTACOES, corpo).status_code == 422
+        corpo = {"contestado_id": SUPLENTE, "motivo": "interesse"}
+        assert comite.agir(COORDENACAO, caso, CONTESTACOES, corpo).status_code == 422
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5 e 6. Qualquer membro marca um Citado em qualquer etapa; o Citado ligado ao
+# cadastro recebe 403 em qualquer perfil, e o membro Citado fica impedido
+# ═══════════════════════════════════════════════════════════════════════════
+
+FORA_DP = {"escopo": "fora", "categoria": "F", "rito": "encaminhamento", "destino": "dp"}
+
+
+class TestCitado:
+    def test_qualquer_membro_marca_um_citado_na_triagem_e_depois_de_encerrado(self, comite):
+        caso = comite.caso()
+        comite.ok(MEMBRO, caso, "citados", {"nome": "Carlos da Portaria"})
+
+        comite.ok(COORDENACAO, caso, "triagem", FORA_DP)
+        comite.ok(SEGUNDO_LEITOR, caso, "conferencia")
+        comite.ok(COORDENACAO, caso, "encaminhamento")
+        comite.ok(SEGUNDO_LEITOR, caso, "citados", {"nome": "Bia do Raio X"})
+
+        tela = comite.abrir(MEMBRO, caso).json()
+        assert tela["situacao"] == "encerrado"
+        assert [(c["nome"], c["ligado"]) for c in tela["citados"]] == [
+            ("Carlos da Portaria", False),
+            ("Bia do Raio X", False),
+        ]
+        assert not any("Carlos" in linha["detalhe"] for linha in comite.banco.tabelas["conduta_trilha"])
+        assert all(c["nome_cifrado"].startswith("v1:") for c in comite.banco.tabelas["conduta_citados"])
+
+    def test_sem_nome_e_sem_cadastro_nao_marca(self, comite):
+        caso = comite.caso()
+        assert comite.agir(MEMBRO, caso, "citados", {"nome": "  "}).status_code == 422
+
+    def test_a_busca_no_cadastro_acha_a_pessoa_e_a_marcacao_se_liga_a_ela(self, comite):
+        caso = comite.caso()
+
+        achados = comite.cliente(MEMBRO).get(f"{BASE}/casos/{caso}/cadastro", params={"busca": "almox"}).json()
+        assert achados == {"pessoas": [{"id": DE_FORA, "nome": "Joana Almoxarifado Silva"}]}
+
+        comite.ok(MEMBRO, caso, "citados", {"participante_id": DE_FORA})
+        (citado,) = comite.abrir(MEMBRO, caso).json()["citados"]
+        assert (citado["nome"], citado["ligado"]) == ("Joana Almoxarifado Silva", True)
+
+    def test_citado_ligado_ao_cadastro_recebe_403_naquele_caso_mesmo_designado(self, comite):
+        caso = comite.caso()
+        outro = comite.caso()
+        for caso_id in (caso, outro):
+            comite.banco.tabelas.setdefault("conduta_atribuicoes", []).append(
+                {
+                    "caso_id": caso_id,
+                    "participante_id": DE_FORA,
+                    "motivo": "apurador",
+                    "termo_assinado_em": "2026-11-01T10:00:00+00:00",
+                    "impedido_em": None,
+                    "revogada_em": None,
+                }
+            )
+        assert comite.abrir(DE_FORA, caso).status_code == 200
+
+        comite.ok(MEMBRO, caso, "citados", {"participante_id": DE_FORA})
+
+        assert _recusado(comite.abrir(DE_FORA, caso))
+        assert comite.abrir(DE_FORA, outro).status_code == 200
+
+    def test_membro_citado_fica_impedido_sem_ato_de_ninguem(self, comite):
+        caso = comite.caso()
+
+        comite.ok(COORDENACAO, caso, "citados", {"participante_id": MEMBRO})
+
+        assert _recusado(comite.abrir(MEMBRO, caso))
+        (impedimento,) = [
+            a for a in comite.banco.tabelas["conduta_atribuicoes"] if a["participante_id"] == MEMBRO
+        ]
+        assert impedimento["impedido_em"] and impedimento["impedimento_motivo"] == "citado"
+        assert (None, "impedimento") in [(autor, acao) for autor, acao, _ in comite.trilha(caso)]
+        assert [c["id"] for c in comite.lista(SUPLENTE).json()["casos"]] == [caso]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 3 e 4. O suplente convocado abre só o caso da convocação; sem convocação,
 # nenhum caso
 # ═══════════════════════════════════════════════════════════════════════════
