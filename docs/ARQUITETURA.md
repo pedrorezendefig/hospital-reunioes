@@ -68,7 +68,7 @@ sequenceDiagram
 ## 3. Rotas (API) (auto)
 
 <!-- AUTO:rotas:start -->
-**421 endpoints** em 28 áreas:
+**427 endpoints** em 29 áreas:
 
 | Área | Endpoints |
 |---|---|
@@ -77,12 +77,13 @@ sequenceDiagram
 | `ana` | 5 |
 | `auth` | 1 |
 | `automacao` | 7 |
-| `canal-de-conduta` | 14 |
-| `canal-de-conduta-publico` | 1 |
+| `canal-de-conduta` | 16 |
+| `canal-de-conduta-publico` | 2 |
 | `comentarios` | 4 |
 | `conector-mcp` | 2 |
 | `configuracoes` | 2 |
 | `contas-medicas` | 71 |
+| `definicoes-processo` | 2 |
 | `health` | 1 |
 | `inicio` | 2 |
 | `notificacoes` | 4 |
@@ -97,7 +98,7 @@ sequenceDiagram
 | `pops` | 24 |
 | `reunioes` | 32 |
 | `rotinas` | 4 |
-| `seguranca-do-paciente` | 53 |
+| `seguranca-do-paciente` | 54 |
 | `transcricao` | 1 |
 | `webhooks` | 4 |
 
@@ -107,7 +108,7 @@ _Lista completa: `docs/spec/snapshots/ROTAS.md`._
 ## 4. Dados (auto)
 
 <!-- AUTO:dados:start -->
-**126 tabelas:** `participantes` · `reunioes` · `reuniao_participantes` · `pendencias` · `agendamentos_email` · `tokens_validacao` · `comentarios_pendencias` · `notificacoes` · `user_preferences` · `audit_log` · `bulk_jobs` · `cargos` · `tipos_reuniao` · `pops_setores` · `pops_setores_participantes` · `pops` · `pops_versoes` · `pops_devolucoes` · `pops_materiais_referencia` · `reuniao_aceites` · `reuniao_aceite_tokens` · `consultas_particulares` · `exames` · `cirurgias_estimativas` · `ouvidoria_movimentos` · `ouvidoria_acessos` · `ouvidoria_prazos` · `ouvidoria_prazos_historico` · `ouvidoria_feriados` · `ouvidoria_anexos` · `ouvidoria_setor_responsaveis` · `ouvidoria_notificacoes` · `ouvidoria_setor_tokens` · `ouvidoria_prorrogacoes` · `ouvidoria_tentativas_contato` · `ouvidoria_relatorios` · `ouvidoria_nota_externa` · `ouvidoria_pontos` · `tecnologia_produtos` · `tecnologia_demandas` · `tecnologia_conversas` · `ouvidoria_emails_recebidos_anexos` · `migracoes_aplicadas` · `tecnologia_anexos` · `cm_perfil_permissao` · `cm_operadora` · `cm_operadora_plano` · `cm_memoria_versao` · `cm_regra` · `cm_tabela_preco` · `cm_tabela_preco_item` · `cm_operadora_tabela` · `cm_setor` · `cm_item_dicionario` · `cm_envio` · `cm_atendimento` · `cm_arquivo` · `cm_eventos` · `cm_prescricao` · `cm_prescricao_item` · `cm_cirurgia` · `cm_glicemia_dia` · `cm_conta` · `cm_conta_item` · `cm_guia_linha` · `cm_observacao` · `cm_chamada_ia` · `cm_linha_formulario` · `cm_registro` · `cm_regra_historico` · `cm_validacao_tema` · `cm_validacao_tema_linha` · `cm_cenario` · `cm_cenario_item` · `cm_lembrete` · `cm_lembrete_item` · `cm_contrato` · `cm_aviso` · `tecnologia_planejamentos` · `tecnologia_chamadas_ia` · `cm_conversa` · `cm_conversa_mensagem` · `cm_lote` · `cm_lote_item` · `cm_prova` · `cm_faltou_isto` · `tecnologia_conversa_da_demanda` · `ouvidoria_acionamentos` · `ouvidoria_config` · `ouvidoria_avaliacoes` · `ouvidoria_convite_google_auditoria` · `ouvidoria_agente_cota` · `colegiados` · `participacoes` · `nsp_documentos` · `nsp_agenda_regulatoria` · `nsp_agenda_ocorrencias` · `participacoes_trilha` · `nsp_termos_envios` · `nsp_pautas` · `nsp_convocados` · `reuniao_presencas` · `nsp_reunioes_rapidas` · `nsp_temas_minimos` · `nsp_capacitacoes` · `nsp_capacitacao_participantes` · `nsp_avisos` · `nsp_documentos_envios` · `nsp_documentos_signatarios` · `tecnologia_envios_aos_desenvolvedores` · `registro_de_acesso` · `pendencia_historico` · `pendencia_anexos` · `nsp_protocolos` · `nsp_notificacoes` · `nsp_notificacoes_trilha` · `conduta_casos` · `conduta_atribuicoes` · `conduta_citados` · `conduta_trilha` · `rotinas` · `nsp_notificacao_anexos` · `conduta_registro` · `conduta_contestacoes` · `conduta_contestacao_votos` · `conduta_prazos_vencidos`
+**132 tabelas:** `participantes` · `reunioes` · `reuniao_participantes` · `pendencias` · `agendamentos_email` · `tokens_validacao` · `comentarios_pendencias` · `notificacoes` · `user_preferences` · `audit_log` · `bulk_jobs` · `cargos` · `tipos_reuniao` · `pops_setores` · `pops_setores_participantes` · `pops` · `pops_versoes` · `pops_devolucoes` · `pops_materiais_referencia` · `reuniao_aceites` · `reuniao_aceite_tokens` · `consultas_particulares` · `exames` · `cirurgias_estimativas` · `ouvidoria_movimentos` · `ouvidoria_acessos` · `ouvidoria_prazos` · `ouvidoria_prazos_historico` · `ouvidoria_feriados` · `ouvidoria_anexos` · `ouvidoria_setor_responsaveis` · `ouvidoria_notificacoes` · `ouvidoria_setor_tokens` · `ouvidoria_prorrogacoes` · `ouvidoria_tentativas_contato` · `ouvidoria_relatorios` · `ouvidoria_nota_externa` · `ouvidoria_pontos` · `tecnologia_produtos` · `tecnologia_demandas` · `tecnologia_conversas` · `ouvidoria_emails_recebidos_anexos` · `migracoes_aplicadas` · `tecnologia_anexos` · `cm_perfil_permissao` · `cm_operadora` · `cm_operadora_plano` · `cm_memoria_versao` · `cm_regra` · `cm_tabela_preco` · `cm_tabela_preco_item` · `cm_operadora_tabela` · `cm_setor` · `cm_item_dicionario` · `cm_envio` · `cm_atendimento` · `cm_arquivo` · `cm_eventos` · `cm_prescricao` · `cm_prescricao_item` · `cm_cirurgia` · `cm_glicemia_dia` · `cm_conta` · `cm_conta_item` · `cm_guia_linha` · `cm_observacao` · `cm_chamada_ia` · `cm_linha_formulario` · `cm_registro` · `cm_regra_historico` · `cm_validacao_tema` · `cm_validacao_tema_linha` · `cm_cenario` · `cm_cenario_item` · `cm_lembrete` · `cm_lembrete_item` · `cm_contrato` · `cm_aviso` · `tecnologia_planejamentos` · `tecnologia_chamadas_ia` · `cm_conversa` · `cm_conversa_mensagem` · `cm_lote` · `cm_lote_item` · `cm_prova` · `cm_faltou_isto` · `tecnologia_conversa_da_demanda` · `ouvidoria_acionamentos` · `ouvidoria_config` · `ouvidoria_avaliacoes` · `ouvidoria_convite_google_auditoria` · `ouvidoria_agente_cota` · `colegiados` · `participacoes` · `nsp_documentos` · `nsp_agenda_regulatoria` · `nsp_agenda_ocorrencias` · `participacoes_trilha` · `nsp_termos_envios` · `nsp_pautas` · `nsp_convocados` · `reuniao_presencas` · `nsp_reunioes_rapidas` · `nsp_temas_minimos` · `nsp_capacitacoes` · `nsp_capacitacao_participantes` · `nsp_avisos` · `nsp_documentos_envios` · `nsp_documentos_signatarios` · `tecnologia_envios_aos_desenvolvedores` · `registro_de_acesso` · `pendencia_historico` · `pendencia_anexos` · `nsp_protocolos` · `nsp_notificacoes` · `nsp_notificacoes_trilha` · `conduta_casos` · `conduta_atribuicoes` · `conduta_citados` · `conduta_trilha` · `rotinas` · `definicoes_processo` · `nsp_notificacao_anexos` · `conduta_registro` · `conduta_contestacoes` · `conduta_contestacao_votos` · `conduta_prazos_vencidos` · `conduta_configuracoes` · `nsp_categorias` · `nsp_eventos_que_nunca_deveriam_ocorrer` · `nsp_triagens` · `nsp_agente_cota`
 
 _Colunas, FKs e diagrama ER: `docs/spec/snapshots/ENTIDADES.md` e `SCHEMA.md`._
 <!-- AUTO:dados:end -->

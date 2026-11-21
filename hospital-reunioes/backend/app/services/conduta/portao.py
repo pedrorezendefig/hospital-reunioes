@@ -1,8 +1,9 @@
 """O portão único do lado do Comitê do Canal de Conduta (ADR 0097, decisão 4).
 
-Toda rota do Comitê depende de `portao_da_lista`, de `portao_do_caso` ou de
-`portao_da_acao`, e `tests/test_conduta_varredura.py` reprova a rota do módulo
-que não dependa. A tela Membros, que não mostra caso, tem os dois portões dela:
+Toda rota do Comitê depende de `portao_da_lista`, de `portao_do_caso`, de
+`portao_da_acao` ou, nas configurações do módulo, de `portao_da_coordenacao`,
+e `tests/test_conduta_varredura.py` reprova a rota do módulo que não dependa.
+A tela Membros, que não mostra caso, tem os dois portões dela:
 `portao_dos_membros` (ler) e `portao_do_cadastro` (incluir e encerrar).
 
 Na ordem: a chave de cifra (sem ela, 503 e nada é lido nem gravado), a pessoa
@@ -67,14 +68,31 @@ def _indisponivel() -> HTTPException:
     return HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=INDISPONIVEL)
 
 
-async def _pessoa(current_user: dict, supabase) -> tuple[dict, PessoaNoComite]:
-    if not cifra.chave_configurada():
-        raise _indisponivel()
+async def _logado(current_user: dict, supabase) -> tuple[dict, PessoaNoComite]:
     me = await get_participante_for_user(current_user, supabase)
     barrar_desligado(me)
     if not me:
         raise _recusar()
     return me, pessoa_no_comite(supabase, me["id"])
+
+
+async def _pessoa(current_user: dict, supabase) -> tuple[dict, PessoaNoComite]:
+    if not cifra.chave_configurada():
+        raise _indisponivel()
+    return await _logado(current_user, supabase)
+
+
+async def portao_da_coordenacao(
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """A pessoa logada, se ela é a coordenação vigente do Comitê (issue #1826).
+    As configurações não levam conteúdo de caso, então a chave de cifra não
+    entra aqui. O super admin não passa por cima."""
+    me, pessoa = await _logado(current_user, supabase)
+    if pessoa.papel != "coordenacao":
+        raise _recusar()
+    return me
 
 
 async def portao_da_lista(

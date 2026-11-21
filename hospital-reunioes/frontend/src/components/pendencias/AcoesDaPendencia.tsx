@@ -8,7 +8,9 @@ import type { ComandoPendencia, EventoPendencia, HistoricoPendencia, Pendencia }
 /**
  * As ações e o histórico da Pendência (issue #1862, ADR 0098, decisão 5).
  *
- * Toda ação pede uma anotação; repactuar e reabrir pedem também o prazo novo.
+ * Toda ação pede uma anotação; repactuar e reabrir pedem também o prazo novo,
+ * e ajustar uma contestação aceita o prazo novo e o responsável novo, sem
+ * exigir nenhum dos dois (issue #1870).
  * Os botões são os que o backend devolve em `acoes_permitidas`: quem age sai do
  * vínculo com a Pendência, e a regra mora no servidor.
  */
@@ -20,6 +22,9 @@ const ROTULO_DO_BOTAO: Record<ComandoPendencia, string> = {
   repactuar: "Repactuar",
   cancelar: "Cancelar pendência",
   reabrir: "Reabrir",
+  contestar: "Contestar",
+  ajustar: "Ajustar",
+  recusar: "Recusar contestação",
 };
 
 const ROTULO_DO_EVENTO: Record<EventoPendencia["comando"], string> = {
@@ -30,10 +35,23 @@ const ROTULO_DO_EVENTO: Record<EventoPendencia["comando"], string> = {
   repactuar: "Repactuou",
   cancelar: "Cancelou",
   reabrir: "Reabriu",
+  contestar: "Contestou",
+  ajustar: "Ajustou a contestação",
+  recusar: "Recusou a contestação",
   migracao: "Ajuste da migração",
 };
 
 const PEDE_PRAZO: ComandoPendencia[] = ["repactuar", "reabrir"];
+// O ajuste da contestação pode trocar o prazo, ou não (o erro era outro).
+const PRAZO_OPCIONAL: ComandoPendencia[] = ["ajustar"];
+// Só o ajuste troca o responsável errado da ata (issue #1870).
+const TROCA_RESPONSAVEL: ComandoPendencia[] = ["ajustar"];
+
+interface Pessoa {
+  id: string;
+  nome_completo: string;
+  cargo?: string | null;
+}
 
 // O anexo da conclusão (issue #1865): o mesmo teto e os mesmos tipos do
 // backend (`app/services/pendencia_anexo.py`), que confere de novo.
@@ -82,6 +100,10 @@ export function AcoesDaPendencia({ idAcao, token, acaoInicial, onAtualizada }: P
   const [anexo, setAnexo] = useState<File | null>(null);
   const [erroDoAnexo, setErroDoAnexo] = useState<string | null>(null);
   const [erroDoLink, setErroDoLink] = useState<string | null>(null);
+  const [busca, setBusca] = useState("");
+  const [encontradas, setEncontradas] = useState<Pessoa[]>([]);
+  const [responsavel, setResponsavel] = useState<Pessoa | null>(null);
+  const ultimaBusca = useRef("");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -119,7 +141,33 @@ export function AcoesDaPendencia({ idAcao, token, acaoInicial, onAtualizada }: P
     setPrazo("");
     setAnexo(null);
     setErroDoAnexo(null);
+    setBusca("");
+    setEncontradas([]);
+    setResponsavel(null);
     setErro(null);
+  }
+
+  async function buscarPessoa(texto: string) {
+    setBusca(texto);
+    setResponsavel(null);
+    ultimaBusca.current = texto;
+    if (texto.trim().length < 2) return setEncontradas([]);
+    try {
+      const res = await fetch(`/api/participantes?nome=${encodeURIComponent(texto.trim())}&limit=8`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const dados = res.ok ? await res.json() : [];
+      // A resposta de uma busca antiga não cobre a da última letra digitada.
+      if (ultimaBusca.current === texto) setEncontradas(Array.isArray(dados) ? dados : []);
+    } catch {
+      if (ultimaBusca.current === texto) setEncontradas([]);
+    }
+  }
+
+  function escolher(pessoa: Pessoa) {
+    setResponsavel(pessoa);
+    setBusca(pessoa.nome_completo);
+    setEncontradas([]);
   }
 
   function escolherAnexo(arquivo: File | null) {
@@ -128,6 +176,8 @@ export function AcoesDaPendencia({ idAcao, token, acaoInicial, onAtualizada }: P
   }
 
   const pedePrazo = acao !== null && PEDE_PRAZO.includes(acao);
+  const aceitaPrazo = pedePrazo || (acao !== null && PRAZO_OPCIONAL.includes(acao));
+  const trocaResponsavel = acao !== null && TROCA_RESPONSAVEL.includes(acao);
   const aceitaAnexo = acao === "concluir";
   const pronto = anotacao.trim().length > 0 && (!pedePrazo || prazo !== "") && !erroDoAnexo;
 
@@ -141,7 +191,8 @@ export function AcoesDaPendencia({ idAcao, token, acaoInicial, onAtualizada }: P
       return fetch(`/api/pendencias/${idAcao}/conclusao`, { method: "POST", headers: autorizacao, body: corpo });
     }
     const corpo: Record<string, string> = { comando, anotacao: anotacao.trim() };
-    if (pedePrazo) corpo.prazo = prazo;
+    if (aceitaPrazo && prazo !== "") corpo.prazo = prazo;
+    if (trocaResponsavel && responsavel) corpo.responsavel_id = responsavel.id;
     return fetch(`/api/pendencias/${idAcao}/acoes`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...autorizacao },
@@ -190,6 +241,8 @@ export function AcoesDaPendencia({ idAcao, token, acaoInicial, onAtualizada }: P
       setAnotacao("");
       setPrazo("");
       setAnexo(null);
+      setBusca("");
+      setResponsavel(null);
       await carregar();
     } catch {
       setErro("Sem conexão. Tente de novo.");
@@ -238,9 +291,11 @@ export function AcoesDaPendencia({ idAcao, token, acaoInicial, onAtualizada }: P
               className="mt-1 w-full min-h-[80px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
             />
           </label>
-          {pedePrazo && (
+          {aceitaPrazo && (
             <label className="block">
-              <span className="text-xs font-semibold text-slate-600">Prazo novo</span>
+              <span className="text-xs font-semibold text-slate-600">
+                {pedePrazo ? "Prazo novo" : "Prazo novo (opcional)"}
+              </span>
               <input
                 type="date"
                 value={prazo}
@@ -269,6 +324,36 @@ export function AcoesDaPendencia({ idAcao, token, acaoInicial, onAtualizada }: P
                 </span>
               )}
             </label>
+          )}
+          {trocaResponsavel && (
+            <div>
+              <label className="block">
+                <span className="text-xs font-semibold text-slate-600">Responsável novo (opcional)</span>
+                <input
+                  type="text"
+                  value={busca}
+                  onChange={(e) => buscarPessoa(e.target.value)}
+                  placeholder="Digite o nome da pessoa certa"
+                  className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary"
+                />
+              </label>
+              {encontradas.length > 0 && (
+                <ul className="mt-1 rounded-lg border border-slate-200 bg-white divide-y divide-slate-100">
+                  {encontradas.map((pessoa) => (
+                    <li key={pessoa.id}>
+                      <button
+                        type="button"
+                        onClick={() => escolher(pessoa)}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                      >
+                        {pessoa.nome_completo}
+                        {pessoa.cargo ? <span className="text-slate-400">, {pessoa.cargo}</span> : null}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
           {erro && <p className="text-sm text-red-600">{erro}</p>}
           <div className="flex gap-2">
@@ -311,6 +396,12 @@ export function AcoesDaPendencia({ idAcao, token, acaoInicial, onAtualizada }: P
                 </div>
                 {evento.prazo_depois && evento.prazo_depois !== evento.prazo_antes && (
                   <p className="text-xs text-slate-500 mt-1">Prazo novo: {dataBr(evento.prazo_depois)}</p>
+                )}
+                {evento.responsavel_depois && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    Responsável novo: {evento.responsavel_depois}
+                    {evento.responsavel_antes ? ` (era ${evento.responsavel_antes})` : ""}
+                  </p>
                 )}
                 {evento.conta_atraso && <p className="text-xs text-red-600 mt-1">Depois do vencimento</p>}
                 <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap break-words">{evento.anotacao}</p>

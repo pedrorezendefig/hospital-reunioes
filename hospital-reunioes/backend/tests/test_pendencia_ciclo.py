@@ -32,7 +32,7 @@ ADMIN = {Papel.SUPER_ADMIN}
 OUTRO: set = set()
 
 
-def _decidir(comando, papeis, status="PENDENTE", prazo=AMANHA, prazo_novo=None, anotacao="feito o combinado"):
+def _decidir(comando, papeis, status="PENDENTE", prazo=AMANHA, prazo_novo=None, anotacao="feito o combinado", **ctx):
     return decidir(
         comando,
         papeis,
@@ -41,26 +41,31 @@ def _decidir(comando, papeis, status="PENDENTE", prazo=AMANHA, prazo_novo=None, 
         hoje=HOJE,
         anotacao=anotacao,
         prazo_novo=prazo_novo,
+        **ctx,
     )
 
 
 # ── Permissão: cada comando por papel (o que a issue lista) ─────────────────
 
-# (comando, status de partida, prazo_novo) que é uma transição válida.
+# (comando, status de partida, prazo_novo, momento) que é uma transição válida.
+# A Contestação e a resposta a ela (issue #1870) pedem o momento certo.
 CENARIO = {
-    Comando.INICIAR: ("PENDENTE", None),
-    Comando.ANOTAR: ("EM_PROGRESSO", None),
-    Comando.CONCLUIR: ("EM_PROGRESSO", None),
-    Comando.REPACTUAR: ("PENDENTE", DAQUI_A_UMA_SEMANA),
-    Comando.CANCELAR: ("PENDENTE", None),
-    Comando.REABRIR: ("CONCLUIDO", DAQUI_A_UMA_SEMANA),
+    Comando.INICIAR: ("PENDENTE", None, {}),
+    Comando.ANOTAR: ("EM_PROGRESSO", None, {}),
+    Comando.CONCLUIR: ("EM_PROGRESSO", None, {}),
+    Comando.REPACTUAR: ("PENDENTE", DAQUI_A_UMA_SEMANA, {}),
+    Comando.CANCELAR: ("PENDENTE", None, {}),
+    Comando.REABRIR: ("CONCLUIDO", DAQUI_A_UMA_SEMANA, {}),
+    Comando.CONTESTAR: ("PENDENTE", None, {"ata_em_assinatura": True}),
+    Comando.AJUSTAR: ("PENDENTE", DAQUI_A_UMA_SEMANA, {"contestada": True}),
+    Comando.RECUSAR: ("PENDENTE", None, {"contestada": True}),
 }
 
 PODE = {
-    "responsavel": {Comando.INICIAR, Comando.ANOTAR, Comando.CONCLUIR, Comando.REPACTUAR},
+    "responsavel": {Comando.INICIAR, Comando.ANOTAR, Comando.CONCLUIR, Comando.REPACTUAR, Comando.CONTESTAR},
     "co_responsavel": {Comando.INICIAR, Comando.ANOTAR, Comando.CONCLUIR, Comando.REPACTUAR},
-    "facilitador": {Comando.REPACTUAR, Comando.CANCELAR, Comando.REABRIR},
-    "super_admin": set(Comando),
+    "facilitador": {Comando.REPACTUAR, Comando.CANCELAR, Comando.REABRIR, Comando.AJUSTAR, Comando.RECUSAR},
+    "super_admin": set(Comando) - {Comando.CONTESTAR},
     "outro": set(),
 }
 PAPEIS = {"responsavel": RESP, "co_responsavel": CORESP, "facilitador": FACIL, "super_admin": ADMIN, "outro": OUTRO}
@@ -69,13 +74,13 @@ PAPEIS = {"responsavel": RESP, "co_responsavel": CORESP, "facilitador": FACIL, "
 @pytest.mark.parametrize("nome_papel", list(PAPEIS))
 @pytest.mark.parametrize("comando", list(Comando))
 def test_cada_comando_respeita_o_papel_de_quem_age(nome_papel, comando):
-    status, prazo_novo = CENARIO[comando]
+    status, prazo_novo, momento = CENARIO[comando]
     if comando in PODE[nome_papel]:
-        mudanca = _decidir(comando, PAPEIS[nome_papel], status=status, prazo_novo=prazo_novo)
+        mudanca = _decidir(comando, PAPEIS[nome_papel], status=status, prazo_novo=prazo_novo, **momento)
         assert mudanca is not None
     else:
         with pytest.raises(AcaoRecusada) as erro:
-            _decidir(comando, PAPEIS[nome_papel], status=status, prazo_novo=prazo_novo)
+            _decidir(comando, PAPEIS[nome_papel], status=status, prazo_novo=prazo_novo, **momento)
         assert erro.value.tipo == "permissao"
 
 
@@ -166,7 +171,7 @@ def test_repactuar_e_reabrir_pedem_prazo_novo_de_hoje_em_diante(comando, status)
     assert _decidir(comando, ADMIN, status=status, prazo_novo=HOJE).prazo == HOJE
 
 
-def test_prazo_novo_fora_de_repactuar_e_reabrir_e_recusado():
+def test_prazo_novo_fora_de_repactuar_reabrir_e_ajustar_e_recusado():
     with pytest.raises(AcaoRecusada) as erro:
         _decidir(Comando.CONCLUIR, RESP, prazo_novo=DAQUI_A_UMA_SEMANA)
     assert erro.value.tipo == "dados"

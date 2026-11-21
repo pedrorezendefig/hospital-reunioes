@@ -84,6 +84,9 @@ class _Consulta:
     def order(self, *_a, **_kw):
         return self
 
+    def range(self, *_a, **_kw):
+        return self
+
     def update(self, campos):
         self._campos = campos
         return self
@@ -127,6 +130,8 @@ class _Banco:
     # Contas médicas (#1940) também lê o banco para o Super admin; vazia aqui.
     cm_conta: list = field(default_factory=list)
     cm_atendimento: list = field(default_factory=list)
+    # A fonte das Contestações (#1870) lê o histórico; vazio aqui.
+    pendencia_historico: list = field(default_factory=list)
 
     def table(self, nome):
         return _Consulta(getattr(self, nome))

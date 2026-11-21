@@ -44,7 +44,7 @@ import {
   temAcessoSegurancaDoPaciente,
   temPerfilPop,
 } from "@/lib/auth";
-import { Home, CalendarPlus } from "lucide-react";
+import { Home, CalendarPlus, ScrollText } from "lucide-react";
 import { DistintivoDeNovidades } from "@/components/layout/DistintivoDeNovidades";
 import { BotaoRecolherMenu } from "@/components/layout/BotaoRecolherMenu";
 import { ItemManual } from "@/components/layout/ItemManual";
@@ -457,6 +457,8 @@ export function itensDoMenu(participante: CurrentParticipante | null): NavItem[]
     subItems: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/reunioes/calendario", label: "Calendário", icon: CalendarDays },
+      // As Definições de processo do setor (issue #1875, ADR 0098, decisão 9).
+      { href: "/reunioes/processos", label: "Definições de processo", icon: ScrollText },
       {
         href: "/pendencias",
         label: "Pendências",

@@ -19,6 +19,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+from app.services.paginacao import ler_tudo
 from app.services.pendencias_recorte import RecorteDasPendencias
 
 FUSO = ZoneInfo("America/Sao_Paulo")
@@ -69,6 +70,41 @@ def ids_repactuados(supabase, ids: list[str] | None) -> set[str]:
             break
         inicio += 1000
     return achados if ids is None else achados & set(ids)
+
+
+# A Contestação (issue #1870) fica aberta até o Facilitador ajustar ou recusar.
+_DA_CONTESTACAO = ["contestar", "ajustar", "recusar"]
+
+
+def contestacoes_abertas(supabase, ids: list[str] | None) -> dict[str, dict]:
+    """As pendências (de `ids`, ou todas com `None`) com Contestação aberta,
+    cada uma com o evento da Contestação: no histórico, o último evento da
+    Contestação dela é `contestar`. Contestação é rara, então a leitura sem
+    `ids` lê todos esses eventos, em páginas."""
+    if ids is not None and not ids:
+        return {}
+    em_lote = ids is not None and len(ids) <= _LOTE_DO_IN
+
+    def _consulta():
+        q = (
+            supabase.table("pendencia_historico")
+            .select("id, id_acao, comando, anotacao, autor_nome, criado_em")
+            .in_("comando", _DA_CONTESTACAO)
+        )
+        return q.in_("id_acao", ids) if em_lote else q
+
+    if em_lote:
+        eventos = _consulta().execute().data or []
+    else:
+        eventos = ler_tudo(lambda: _consulta().order("id"), rotulo="contestações")
+    ultimo: dict[str, dict] = {}
+    for evento in sorted(eventos, key=lambda e: (e.get("criado_em") or "", e.get("id") or 0)):
+        ultimo[evento["id_acao"]] = evento
+    abertas = {id_acao: e for id_acao, e in ultimo.items() if e["comando"] == "contestar"}
+    if ids is None:
+        return abertas
+    pedidos = set(ids)
+    return {id_acao: e for id_acao, e in abertas.items() if id_acao in pedidos}
 
 
 def filtrar_por_status(query, supabase, status: str):

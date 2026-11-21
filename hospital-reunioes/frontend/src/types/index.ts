@@ -239,7 +239,17 @@ export type StatusPendencia = "PENDENTE" | "EM_PROGRESSO" | "CONCLUIDO" | "CANCE
 export type SituacaoPendencia = StatusPendencia | "ATRASADO" | "REPACTUADA";
 
 // Os comandos da rota de ações (`POST /pendencias/{id}/acoes`), sempre com anotação.
-export type ComandoPendencia = "iniciar" | "anotar" | "concluir" | "repactuar" | "cancelar" | "reabrir";
+// Contestar, ajustar e recusar são a Contestação do item da Ata (issue #1870).
+export type ComandoPendencia =
+  | "iniciar"
+  | "anotar"
+  | "concluir"
+  | "repactuar"
+  | "cancelar"
+  | "reabrir"
+  | "contestar"
+  | "ajustar"
+  | "recusar";
 
 export interface EventoPendencia {
   id: number;
@@ -250,6 +260,9 @@ export interface EventoPendencia {
   status_depois?: string | null;
   prazo_antes?: string | null;
   prazo_depois?: string | null;
+  // Só no ajuste que trocou o responsável (issue #1870).
+  responsavel_antes?: string | null;
+  responsavel_depois?: string | null;
   conta_atraso: boolean;
   criado_em: string;
   // Foto ou PDF anexado na conclusão (issue #1865).

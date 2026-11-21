@@ -36,6 +36,7 @@ from app.services.pendencia_service import e_lembrete_do_nucleo
 from app.services.pendencias_consulta import (
     as_data,
     consultar_pendencias,
+    contestacoes_abertas,
     filtrar_por_status,
     hoje_em_brasilia,
     ids_repactuados,
@@ -388,16 +389,24 @@ def _enrich_ciclo(supabase, rows: list[dict]) -> list[dict]:
     return rows
 
 
-async def _pendencia_e_papeis(id_acao: str, current_user: dict, supabase) -> tuple[dict, dict | None, set[Papel]]:
-    """A Pendência que quem pede enxerga e os papéis dele nela. Mesmo portão
-    do GET: secretária 403, Núcleo oculto 403, fora do recorte 404."""
+async def _pendencia_e_papeis(
+    id_acao: str, current_user: dict, supabase
+) -> tuple[dict, dict | None, set[Papel], dict[str, bool]]:
+    """A Pendência que quem pede enxerga, os papéis dele nela e o momento dela
+    (a Ata em assinatura e a Contestação aberta, issue #1870). Mesmo portão do
+    GET: secretária 403, Núcleo oculto 403, fora do recorte 404."""
     pendencia, me, recorte = await _pendencia_sem_recorte(id_acao, current_user, supabase)
 
     # O recorte pelo vínculo (issue #1863), como no GET: responsável,
     # co-responsável, Facilitador da reunião ou Super admin. Fora dele, 404.
     if not recorte.ve(pendencia):
         raise HTTPException(status_code=404, detail="Pendência não encontrada")
-    return pendencia, me, _papeis(pendencia, me, supabase)
+    reuniao = _reuniao_da(pendencia, supabase)
+    momento = {
+        "ata_em_assinatura": reuniao.get("status_ata") == "AGUARDANDO_ASSINATURA",
+        "contestada": id_acao in contestacoes_abertas(supabase, [id_acao]),
+    }
+    return pendencia, me, _papeis(pendencia, me, supabase, reuniao), momento
 
 
 async def _pendencia_sem_recorte(id_acao: str, current_user: dict, supabase):
@@ -419,7 +428,19 @@ async def _pendencia_sem_recorte(id_acao: str, current_user: dict, supabase):
     return pendencia, me, recorte
 
 
-def _papeis(pendencia: dict, me: dict | None, supabase) -> set[Papel]:
+def _reuniao_da(pendencia: dict, supabase) -> dict:
+    """O Facilitador e o estado da Ata da Reunião da Pendência."""
+    return (
+        supabase.table("reunioes")
+        .select("facilitador_id, status_ata")
+        .eq("id_reuniao", pendencia["id_reuniao"])
+        .execute()
+        .data
+        or [{}]
+    )[0]
+
+
+def _papeis(pendencia: dict, me: dict | None, supabase, reuniao: dict | None = None) -> set[Papel]:
     """Os papéis de quem pede na Pendência, pelo vínculo."""
     my_id = me.get("id") if me else None
     papeis: set[Papel] = set()
@@ -430,10 +451,7 @@ def _papeis(pendencia: dict, me: dict | None, supabase) -> set[Papel]:
             papeis.add(Papel.RESPONSAVEL)
         if pendencia.get("co_responsavel_id") == my_id:
             papeis.add(Papel.CO_RESPONSAVEL)
-        reuniao = (
-            supabase.table("reunioes").select("facilitador_id").eq("id_reuniao", pendencia["id_reuniao"]).execute()
-        )
-        if reuniao.data and reuniao.data[0].get("facilitador_id") == my_id:
+        if (reuniao if reuniao is not None else _reuniao_da(pendencia, supabase)).get("facilitador_id") == my_id:
             papeis.add(Papel.FACILITADOR)
     return papeis
 
@@ -445,8 +463,9 @@ async def agir_na_pendencia(
     current_user: dict = Depends(get_current_user),
     supabase=Depends(get_supabase_client),
 ):
-    """Iniciar, anotar, concluir, repactuar, cancelar ou reabrir, com anotação."""
-    pendencia, me, papeis = await _pendencia_e_papeis(id_acao, current_user, supabase)
+    """Iniciar, anotar, concluir, repactuar, cancelar, reabrir, contestar,
+    ajustar ou recusar, sempre com anotação."""
+    pendencia, me, papeis, momento = await _pendencia_e_papeis(id_acao, current_user, supabase)
     try:
         mudanca = agir(
             supabase,
@@ -458,6 +477,8 @@ async def agir_na_pendencia(
             autor_nome=(me or {}).get("nome_completo") or current_user.get("email") or "Sem nome",
             hoje=hoje_em_brasilia(),
             prazo_novo=body.prazo,
+            responsavel_novo=body.responsavel_id,
+            **momento,
         )
     except AcaoRecusada as recusa:
         raise HTTPException(status_code=_HTTP_DA_RECUSA[recusa.tipo], detail=recusa.motivo) from recusa
@@ -534,7 +555,7 @@ async def concluir_a_pendencia(
 ):
     """Concluir com anotação e, se quiser, uma foto ou um PDF."""
     anotacao = anotacao.strip()
-    pendencia, me, papeis = await _pendencia_e_papeis(id_acao, current_user, supabase)
+    pendencia, me, papeis, _momento = await _pendencia_e_papeis(id_acao, current_user, supabase)
     mudanca = _decidir(Comando.CONCLUIR, papeis, pendencia, anotacao)
     params = _parametros(id_acao, anotacao, me, current_user, pendencia, mudanca)
 
@@ -602,7 +623,7 @@ async def historico_da_pendencia(
     supabase=Depends(get_supabase_client),
 ):
     """O histórico em ordem e as ações que quem olha pode fazer agora."""
-    pendencia, _me, papeis = await _pendencia_e_papeis(id_acao, current_user, supabase)
+    pendencia, _me, papeis, momento = await _pendencia_e_papeis(id_acao, current_user, supabase)
     eventos = (
         supabase.table("pendencia_historico").select("*").eq("id_acao", id_acao).order("criado_em").execute().data or []
     )
@@ -620,6 +641,6 @@ async def historico_da_pendencia(
             }
     return {
         "eventos": eventos,
-        "acoes_permitidas": [c.value for c in acoes_disponiveis(papeis, pendencia["status"])],
+        "acoes_permitidas": [c.value for c in acoes_disponiveis(papeis, pendencia["status"], **momento)],
         "pode_abrir_anexos": pendencia_anexo.pode_abrir(papeis),
     }

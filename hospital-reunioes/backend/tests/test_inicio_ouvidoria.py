@@ -109,6 +109,8 @@ class _Banco:
     reuniao_aceites: list = field(default_factory=list)
     # A fonte do Núcleo (#1939) também lê o banco; sem o Núcleo aqui.
     colegiados: list = field(default_factory=list)
+    # A fonte das Contestações (#1870) lê o histórico; vazio aqui.
+    pendencia_historico: list = field(default_factory=list)
 
     def table(self, nome):
         return _Consulta(getattr(self, nome))

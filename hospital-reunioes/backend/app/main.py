@@ -36,6 +36,7 @@ from app.routers import (
     contas_medicas_operadoras,
     contas_medicas_painel,
     contas_medicas_validacao,
+    definicoes_processo,
     health,
     inicio,
     notificacoes,
@@ -140,6 +141,8 @@ app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(participantes.router, prefix=settings.api_prefix)
 app.include_router(reunioes.router, prefix=settings.api_prefix)
 app.include_router(transcricao.router, prefix=settings.api_prefix)
+# As Definições de processo do setor (ADR 0098, decisão 9).
+app.include_router(definicoes_processo.router, prefix=settings.api_prefix)
 app.include_router(pendencias.router, prefix=settings.api_prefix)
 # A Rotina e a Verificação por ciclo de calendário (ADR 0098, decisão 9).
 app.include_router(rotinas.router, prefix=settings.api_prefix)

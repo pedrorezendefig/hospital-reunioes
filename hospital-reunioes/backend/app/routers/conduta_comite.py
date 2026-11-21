@@ -1,8 +1,9 @@
 """Canal de Conduta, o lado do Comitê (issues #1820 e #1824, PRD #1786, ADR 0097).
 
 MINHA VEZ, a lista dos casos, a tela do caso e as ações da triagem e dos
-ritos. A área logada fica em `/comite-de-conduta`, fora de `/conduta`, que é a
-rota pública. Toda rota daqui passa pelo portão (`app.services.conduta.portao`).
+ritos. E as configurações do módulo, só da coordenação (issue #1826). A área
+logada fica em `/comite-de-conduta`, fora de `/conduta`, que é a rota pública.
+Toda rota daqui passa pelo portão (`app.services.conduta.portao`).
 
 As listas levam só metadados: nenhum nome e nenhum trecho de relato.
 """
@@ -10,17 +11,18 @@ As listas levam só metadados: nenhum nome e nenhum trecho de relato.
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from supabase import Client
 
 from app.dependencies import get_supabase_client
-from app.services.conduta import cifra, depoimentos, triagem
+from app.services.conduta import cifra, configuracoes, depoimentos, triagem
 from app.services.conduta.acesso import CAMPOS_DA_LISTA, hoje_em_sao_paulo
 from app.services.conduta.portao import (
     INDISPONIVEL,
     CasoAberto,
     NoComite,
     portao_da_acao,
+    portao_da_coordenacao,
     portao_da_lista,
     portao_do_caso,
 )
@@ -164,3 +166,36 @@ async def enviar_orientacao(
     aberto: CasoAberto = Depends(portao_da_acao), supabase: Client = Depends(get_supabase_client)
 ) -> dict:
     return _agir(triagem.enviar_orientacao, supabase, aberto, hoje=hoje_em_sao_paulo())
+
+
+class NovaVersao(BaseModel):
+    texto: str = Field(min_length=1, max_length=5000)
+
+    @field_validator("texto")
+    @classmethod
+    def _nao_em_branco(cls, texto: str) -> str:
+        # Só espaço cairia no CHECK da migration 186 (500); quebra de linha
+        # passaria por ele e viraria versão vigente em branco na tela pública.
+        if not texto.strip():
+            raise ValueError("O texto não pode ficar em branco")
+        return texto
+
+
+@router.get("/configuracoes")
+async def listar_configuracoes(
+    _me: dict = Depends(portao_da_coordenacao),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    return {"itens": configuracoes.itens_com_historico(supabase)}
+
+
+@router.post("/configuracoes/{chave}", status_code=status.HTTP_201_CREATED)
+async def salvar_configuracao(
+    chave: str,
+    corpo: NovaVersao,
+    me: dict = Depends(portao_da_coordenacao),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    if chave not in configuracoes.POR_CHAVE:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item de configuração inexistente")
+    return configuracoes.salvar(supabase, chave, corpo.texto, me["id"])

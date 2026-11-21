@@ -2,6 +2,297 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-11-21T13:21:41-03:00",
+      "sha": "ba1b2a0c74afc7fcb460b431174fe4c9a496a331",
+      "app_version": "0.344.0",
+      "subject": "Onda ok-sesta-1786-onda2: Configurações e textos com versão do Canal de Conduta",
+      "raw_subject": "chore(deploy): registro da onda ok-sesta-1786-onda2 (#2076)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1786
+      ],
+      "result": "healthy",
+      "duration_seconds": 2343,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "186_conduta_configuracoes_com_versao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta ok-sesta-1786-onda2: PR #2076 (issue #1826), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 4,
+        "build_s": {
+          "backend": 19,
+          "frontend": 244
+        },
+        "health_s": 1
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
+      "at": "2026-11-21T13:13:57-03:00",
+      "sha": "f3223cd4a71452e78052f30a291f1a2e6cada97e",
+      "app_version": "0.343.0",
+      "subject": "Onda sesta-1757-onda7: Lista de definições de processo do setor",
+      "raw_subject": "chore(deploy): registro da onda sesta-1757-onda7 (#2072)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1757
+      ],
+      "result": "healthy",
+      "duration_seconds": 411,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "178_definicoes_de_processo_do_setor.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta sesta-1757-onda7: PR #2072 (issue #1875), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 4,
+        "build_s": {
+          "backend": 21,
+          "frontend": 216
+        },
+        "health_s": 1
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
+      "at": "2026-11-21T13:07:11-03:00",
+      "sha": "7199a46df41c9741d5dd90d7136a811071ecc138",
+      "app_version": "0.342.0",
+      "subject": "Onda nsp2-onda4: Agente de triagem do Núcleo e teste de aceite dos 144 casos; Registro rápido da Presidência e dos membros em Notificações",
+      "raw_subject": "chore(deploy): registro da onda nsp2-onda4 (#2077 #2074)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1979
+      ],
+      "result": "healthy",
+      "duration_seconds": 1638,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "188_nsp_agente_de_triagem.sql",
+        "188_nsp_agente_de_triagem.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta nsp2-onda4: PR #2077 (issue #1990), PR #2074 (issue #1998), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 6,
+        "build_s": {
+          "backend": 17,
+          "frontend": 215
+        },
+        "health_s": 1
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
+      "at": "2026-11-21T12:53:18-03:00",
+      "sha": "130363335e4d2993c13dac215d200b1ecd737651",
+      "app_version": "0.341.0",
+      "subject": "Onda sesta-1757-onda6: Contestação do item da Ata na assinatura, com Ajustar e Recusar",
+      "raw_subject": "chore(deploy): registro da onda sesta-1757-onda6 (#2067)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1757
+      ],
+      "result": "healthy",
+      "duration_seconds": 2184,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "187_contestacao_do_item_da_ata.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta sesta-1757-onda6: PR #2067 (issue #1870), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 4,
+        "build_s": {
+          "backend": 20,
+          "frontend": 224
+        },
+        "health_s": 1
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
+      "at": "2026-11-21T12:45:39-03:00",
+      "sha": "a7ed5ac25b297859b718d8872b049fcbf12d1ac5",
+      "app_version": "0.340.2",
+      "subject": "Onda nsp2-onda6: Ouvidoria diz que o caso mandado ao Núcleo vira notificação",
+      "raw_subject": "chore(deploy): registro da onda nsp2-onda6 (#2087)",
+      "scope": [
+        "frontend"
+      ],
+      "prds": [
+        1979
+      ],
+      "result": "healthy",
+      "duration_seconds": 793,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta nsp2-onda6: PR #2087 (issue #2004), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "frontend": 197
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
+      "at": "2026-11-21T12:39:30-03:00",
+      "sha": "7c30fa243123efa71d6475bd907399c021264f93",
+      "app_version": "0.340.1",
+      "subject": "Onda sesta-1933-onda6: Contas médicas com a Esteira, a busca, o arquivar e as Legendas",
+      "raw_subject": "chore(deploy): registro da onda sesta-1933-onda6 (#2086)",
+      "scope": [
+        "frontend"
+      ],
+      "prds": [
+        1933
+      ],
+      "result": "healthy",
+      "duration_seconds": 1089,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta sesta-1933-onda6: PR #2086 (issue #1959), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "frontend": 195
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-11-21T12:33:33-03:00",
       "sha": "d89bd0ae222b8c66082a1090c23dd05b473145c9",
       "app_version": "0.340.0",

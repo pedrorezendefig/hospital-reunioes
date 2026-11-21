@@ -74,8 +74,17 @@ class _Consulta:
         self._filtros.append(lambda linha: (linha.get(coluna) or "").lower() == alvo)
         return self
 
+    def order(self, *_a, **_kw):
+        return self
+
+    def range(self, inicio, fim):
+        self._recorte = (inicio, fim + 1)
+        return self
+
     def execute(self):
-        return _Result([dict(linha) for linha in self._linhas if all(f(linha) for f in self._filtros)])
+        linhas = [dict(linha) for linha in self._linhas if all(f(linha) for f in self._filtros)]
+        recorte = getattr(self, "_recorte", None)
+        return _Result(linhas[recorte[0] : recorte[1]] if recorte else linhas)
 
 
 @dataclass
@@ -90,6 +99,8 @@ class _Banco:
     ouvidoria_prorrogacoes: list = field(default_factory=list)
     # A fonte das Rotinas (#1874) também lê o banco; vazia aqui.
     rotinas: list = field(default_factory=list)
+    # A fonte das Contestações (#1870) lê o histórico; vazio aqui.
+    pendencia_historico: list = field(default_factory=list)
 
     def table(self, nome):
         return _Consulta(getattr(self, nome))

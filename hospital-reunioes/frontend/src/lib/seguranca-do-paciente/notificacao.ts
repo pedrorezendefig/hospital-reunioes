@@ -97,3 +97,14 @@ export function montarEnvio(form: FormularioDeNotificacao, porta: Porta): Record
   }
   return envio;
 }
+
+/** De onde o Núcleo achou o incidente, no registro rápido (issue #1998). */
+export type OrigemDoRegistroRapido = "busca_ativa" | "ronda" | "reuniao_rapida" | "auditoria" | "outra";
+
+export const ORIGENS_DO_REGISTRO_RAPIDO: { valor: OrigemDoRegistroRapido; rotulo: string }[] = [
+  { valor: "busca_ativa", rotulo: "Busca ativa" },
+  { valor: "ronda", rotulo: "Ronda" },
+  { valor: "reuniao_rapida", rotulo: "Reunião rápida" },
+  { valor: "auditoria", rotulo: "Auditoria" },
+  { valor: "outra", rotulo: "Outra" },
+];

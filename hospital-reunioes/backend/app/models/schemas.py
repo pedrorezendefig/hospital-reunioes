@@ -255,11 +255,16 @@ class PendenciaResponse(PendenciaBase):
 
 class AcaoPendenciaRequest(BaseModel):
     """Uma ação na Pendência (ADR 0098, decisão 5). A anotação é obrigatória;
-    o prazo só vale em repactuar e reabrir."""
+    o prazo só vale em repactuar, reabrir e ajustar. Contestar, ajustar e
+    recusar são a Contestação do item da Ata (issue #1870); só ajustar troca
+    o responsável (`responsavel_id`, uma pessoa ativa do cadastro)."""
 
-    comando: Literal["iniciar", "anotar", "concluir", "repactuar", "cancelar", "reabrir"]
+    comando: Literal[
+        "iniciar", "anotar", "concluir", "repactuar", "cancelar", "reabrir", "contestar", "ajustar", "recusar"
+    ]
     anotacao: str = Field(..., max_length=5000)
     prazo: date | None = None
+    responsavel_id: str | None = Field(None, max_length=10)
 
     @field_validator("anotacao")
     @classmethod
@@ -289,6 +294,10 @@ class EventoHistoricoPendencia(BaseModel):
     status_depois: str | None = None
     prazo_antes: date | None = None
     prazo_depois: date | None = None
+    # Nome de quem era e de quem passou a ser o responsável, só no ajuste que
+    # trocou o responsável (issue #1870).
+    responsavel_antes: str | None = None
+    responsavel_depois: str | None = None
     conta_atraso: bool = False
     criado_em: datetime
     anexo: AnexoDoEvento | None = None

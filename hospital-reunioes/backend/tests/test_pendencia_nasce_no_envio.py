@@ -130,6 +130,9 @@ class _SupabaseMock:
     reuniao_participantes: list = field(default_factory=list)
     reunioes: list = field(default_factory=list)
     pendencias: list = field(default_factory=list)
+    # A linha de Processo entra na lista do setor no mesmo envio (issue #1875).
+    definicoes_processo: list = field(default_factory=list)
+    setores: list = field(default_factory=list)
     reuniao_aceites: list = field(default_factory=list)
     reuniao_aceite_tokens: list = field(default_factory=list)
     audit_log: list = field(default_factory=list)

@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     # avaliação com comentário na chegada. Variável própria para trocar o
     # modelo sem mexer no resto da IA de texto.
     ouvidoria_agente_modelo: str = "claude-sonnet-5-5"
+    # O agente de triagem do Núcleo (issue #1990, ADR 0095 e 0107). Nasce
+    # desligado: o Anexo F proíbe publicar antes de o teste de aceite dos 144
+    # casos bater as metas (`scripts/nsp_teste_de_aceite.py`). Desligado, toda
+    # notificação entra marcada "classificar manualmente".
+    nsp_agente_ligado: bool = False
+    nsp_agente_modelo: str = "claude-sonnet-5-5"
     # Transcrição de voz (issue #35): endpoint /audio/transcriptions do
     # OpenRouter, que fica só com isso: a API da Anthropic não transcreve
     # áudio. Prefixo `openai/` é a convenção do OpenRouter para o provedor.

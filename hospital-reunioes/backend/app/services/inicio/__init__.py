@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from app.services.inicio import (
     fonte_contas_medicas,
+    fonte_contestacoes,
     fonte_nucleo,
     fonte_ouvidoria,
     fonte_pendencias,
@@ -53,6 +54,7 @@ class Fonte:
 
 FONTES: tuple[Fonte, ...] = (
     Fonte("pendencias", fonte_pendencias.ROTULO, fonte_pendencias.itens),
+    Fonte("contestacoes", fonte_contestacoes.ROTULO, fonte_contestacoes.itens),
     Fonte("atas", fonte_reunioes.ROTULO, fonte_reunioes.itens),
     Fonte("rotinas", fonte_rotinas.ROTULO, fonte_rotinas.itens),
     Fonte("ouvidoria", fonte_ouvidoria.ROTULO, fonte_ouvidoria.itens),

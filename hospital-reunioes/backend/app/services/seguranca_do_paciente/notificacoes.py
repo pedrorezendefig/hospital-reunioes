@@ -72,8 +72,8 @@ def registrar(
 ) -> dict[str, Any]:
     """Grava a notificação e devolve o recibo: o id, o protocolo e, na
     anônima, o código de acompanhamento, que não fica guardado em lugar
-    nenhum. O id é para ligar os anexos e registrar os avisos da chegada;
-    quem notificou não o recebe."""
+    nenhum. O id é para ligar os anexos, registrar os avisos da chegada e
+    agendar a triagem do agente; quem notificou não o recebe."""
     if origem not in ORIGENS:
         raise ValueError(f"Origem desconhecida: {origem!r}")
     linha: dict[str, Any] = {campo: relato.get(campo) for campo in _CAMPOS_DO_RELATO}

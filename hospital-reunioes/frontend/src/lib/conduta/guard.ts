@@ -48,3 +48,14 @@ export async function requireComiteDeCondutaAccess() {
 export async function requireMembrosDoComiteAccess() {
   return perguntarAoPortao("/comite-de-conduta/membros");
 }
+
+/**
+ * Gate server-side da tela Configurações do Canal de Conduta (issue #1826).
+ *
+ * A pergunta vai à própria rota da tela, que só abre para a coordenação
+ * vigente do Comitê. Quem ela recusa, o super admin inclusive, volta ao início
+ * sem receber a página.
+ */
+export async function requireConfiguracoesDoCanalAccess() {
+  return perguntarAoPortao("/comite-de-conduta/configuracoes");
+}

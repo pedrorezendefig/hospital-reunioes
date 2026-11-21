@@ -119,6 +119,21 @@ describe("a página de Ouvidoria do manual", () => {
     expect(secao?.texto).toMatch(/responsável.*login.*acha o caso.*app/);
   });
 
+  it("a tarefa Encaminhar ao setor diz que o caso mandado ao Núcleo vira notificação do Núcleo e que o link pede login (issue #2004)", () => {
+    const secao = secoes(OUVIDORIA!.corpo).find((s) => s.titulo === "Encaminhar ao setor");
+    const linha = (secao?.texto ?? "").split("\n").find((l) => /Enviar ao NSP/.test(l)) ?? "";
+    expect(linha).toMatch(/Confirmar envio ao NSP/);
+    expect(linha).toMatch(/vira uma notificação do Núcleo/);
+    expect(linha).toMatch(/link do e-mail ao Núcleo pede login/);
+    // O agente de triagem do Núcleo (#1990) entra desligado: a linha não
+    // promete triagem automática.
+    expect(linha).not.toMatch(/triagem/i);
+  });
+
+  it("a página não tem travessão nem meia-risca (issue #2004)", () => {
+    expect(OUVIDORIA!.corpo).not.toMatch(/[–—]/);
+  });
+
   it("a tarefa de responder pelo app avisa que o link do e-mail deixa de valer (issue #1888)", () => {
     const secao = secoes(OUVIDORIA!.corpo).find((s) => s.titulo === "Responder um caso do seu setor pelo app");
     expect(secao?.texto).toMatch(/link do e-mail.*deixa de valer/);

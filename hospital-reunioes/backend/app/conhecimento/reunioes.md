@@ -28,9 +28,9 @@ Toda mudança pede uma anotação, escrita por quem faz. As ações são iniciar
 
 Quem pode o quê:
 
-- O responsável e o co-responsável iniciam, anotam, concluem e repactuam.
-- O facilitador da reunião repactua, cancela e reabre.
-- Quem administra o aplicativo faz tudo, menos nas reuniões do Núcleo de Segurança do Paciente, que seguem a regra do Núcleo.
+- O responsável e o co-responsável iniciam, anotam, concluem e repactuam. Só o responsável contesta.
+- O facilitador da reunião repactua, cancela e reabre, e responde à contestação, ajustando ou recusando.
+- Quem administra o aplicativo faz tudo, menos contestar, e menos nas reuniões do Núcleo de Segurança do Paciente, que seguem a regra do Núcleo.
 - Quem só participou da reunião não age na pendência dos outros.
 
 Concluir já termina, sem validação de ninguém, e o aplicativo guarda o dia em que o responsável marcou. Repactuar antes do prazo vencer não conta como atraso; depois de vencer, conta, e a repactuação fica marcada para o ranking. A reabertura feita com o prazo já vencido também fica marcada. A pendência que já teve o prazo trocado aparece como repactuada enquanto estiver aberta e no prazo.
@@ -54,6 +54,19 @@ A cada ciclo o responsável marca se fez ou não. Realizada é um clique; Não r
 Quem marca é o responsável, no aplicativo. Para quem não entra no aplicativo, o facilitador da reunião marca por ele. O facilitador também pode encerrar a rotina a qualquer momento, com uma anotação: o ciclo em curso e os seguintes deixam de ser cobrados, e os que já tinham terminado sem marcação continuam lá para marcar. Quem administra o aplicativo faz o mesmo que o facilitador, menos nas reuniões do Núcleo de Segurança do Paciente, que seguem a regra do Núcleo.
 
 A tela Rotinas, no menu de Reuniões, mostra as rotinas no nome da pessoa e as das reuniões que ela conduz, com os ciclos em aberto e as marcações feitas. A verificação do ciclo em aberto também aparece no Início do responsável, com o prazo no último dia do ciclo e o botão Realizada, que marca ali mesmo; o ciclo que fechou sem marcação aparece como prazo vencido.
+
+## Contestar um item da ata
+
+Quando um item da ata está errado (o prazo, o responsável ou o que foi combinado), o responsável por ele pode contestar. Só o responsável pelo item contesta, e só enquanto a ata está em assinatura. Na tela da pendência aparece o botão Contestar, que pede uma anotação explicando o que está errado. A contestação vale para aquele item: a pessoa contesta o item e assina a ata mesmo assim, porque a assinatura registra que ela leu o resto da ata.
+
+Contestar não é jeito de adiar. O item contestado continua sendo cobrado, com o mesmo prazo, e conta atraso se o prazo vencer, até o facilitador responder.
+
+A contestação aparece na hora no Início do facilitador da reunião, no grupo do que vence em até 48 horas, sem esperar a segunda-feira. Se ele não responde até o fim do dia seguinte, ela passa para o grupo do que já venceu. O facilitador, ou quem administra o aplicativo, abre a pendência e escolhe ajustar ou recusar, sempre com uma anotação:
+
+- **Ajustar** aceita a contestação, e a anotação diz o que foi corrigido. Se o erro era o prazo, ele informa também o prazo novo, que vale na hora e não conta como repactuação. Se o erro era o responsável, ele escolhe a pessoa certa no cadastro: a pendência passa para o nome dela na hora, sai da lista de quem estava errado, e o histórico mostra quem era e quem passou a ser.
+- **Recusar** mantém a pendência como está, e a anotação explica por quê.
+
+O ajuste fica na pendência e no histórico, e a ata não volta para assinatura. Respondida a contestação, ela sai do Início do facilitador, e o responsável pode contestar de novo enquanto a ata estiver em assinatura.
 
 ## Assinar ou finalizar sem assinar
 
@@ -81,6 +94,14 @@ Cada pessoa vê as pendências de que é responsável ou divide a responsabilida
 Toda reunião marcada tem setor. Quem agenda, a Secretária inclusive, escolhe o setor numa lista com os setores ativos do hospital, e o aplicativo não deixa marcar a reunião sem ele. A reunião repetida pela recorrência leva o setor da reunião de origem.
 
 As reuniões antigas, marcadas antes dessa regra, continuam valendo mesmo sem setor. Quem administra o aplicativo tem no Admin a tela Acertos de setor, que lista as reuniões e os responsáveis por pendência que estão sem setor e deixa escolher o setor de cada um. Preenchido o setor, o item sai da lista.
+
+## As definições de processo do setor
+
+No envio da ata, cada linha do tipo Processo entra na lista de definições de processo do setor da reunião, com o trecho da ata copiado: quem consulta lê a regra combinada sem abrir a ata, e a lista não muda se a ata for corrigida depois. A lista fica nas Reuniões, e não nos POPs, até o rascunho de POP chegar. Ela não tem responsável, prazo nem lembrete: o processo não vira tarefa cobrada, e o facilitador consulta a lista quando quiser, na tela Definições de processo, no menu de Reuniões.
+
+Enquanto o organograma não chega, cuidam da lista os facilitadores das reuniões do setor: quem conduz alguma reunião de um setor vê a lista inteira daquele setor, e os outros setores não aparecem para ele. A reunião antiga, ainda sem setor, mostra os itens dela só para o próprio facilitador. Quem administra o aplicativo vê as listas de todos os setores, menos as das reuniões do Núcleo de Segurança do Paciente, que seguem a regra do Núcleo. A Secretária não vê a lista.
+
+Um item repetido, ou que deixou de valer, sai da lista pelo botão Tirar da lista, que pede uma anotação dizendo por quê. Só tiram o facilitador da reunião de onde o item saiu e quem administra o aplicativo. O item retirado não aparece mais na lista, mas não se apaga: fica registrado com o dia, quem tirou e a anotação.
 
 ## As reuniões do Núcleo de Segurança do Paciente
 
@@ -145,6 +166,7 @@ Na tela da reunião, o botão Excluir, que apagava a reunião em qualquer status
 - No calendário, as reuniões de cada dia seguem a hora de início, da mais cedo para a mais tarde.
 - Nada apaga pendência: reunião que já teve pendência, mesmo toda cancelada, não se exclui.
 - Toda reunião nova tem setor, e quem administra o aplicativo preenche o setor que falta nas reuniões antigas e nos responsáveis.
+- A linha de Processo entra, no envio, na lista de definições de processo do setor da reunião, com o trecho da ata copiado; cuidam dela os facilitadores das reuniões do setor, quem administra o aplicativo vê todas, a Secretária não vê, e tirar um item pede anotação e cabe ao facilitador da reunião de origem e a quem administra o aplicativo.
 - Cada linha da ata é Ação, Rotina ou Processo, e só a Ação vira pendência; a linha sem tipo vale como Ação, e toda Rotina precisa de responsável e frequência antes do envio.
 - A rotina segue o calendário (semana, quinzena de 1 a 15 e de 16 ao fim do mês, ou mês), começa no primeiro ciclo inteiro depois do envio, e cada ciclo é marcado como Realizada, com um clique, ou Não realizada, com anotação; o facilitador marca por quem não entra no aplicativo e encerra a rotina com anotação.
 

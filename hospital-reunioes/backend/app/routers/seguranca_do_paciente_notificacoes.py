@@ -44,7 +44,7 @@ from app.dependencies import (
 from app.limiter import limiter
 from app.services import limite_sem_ip, ouvidoria_nucleo
 from app.services.ouvidoria_anexos import AnexoGrandeDemaisError, AnexoRecusadoError, TipoNaoPermitidoError
-from app.services.seguranca_do_paciente import anexos, caso_grave, notificacoes
+from app.services.seguranca_do_paciente import agente_de_triagem, anexos, caso_grave, notificacoes
 from app.services.seguranca_do_paciente.permissao import hoje_em_sao_paulo
 
 logger = logging.getLogger(__name__)
@@ -187,7 +187,7 @@ def _avisar_a_chegada(supabase, tarefas: BackgroundTasks, notificacao_id: str) -
 def _gravar_notificacao(
     supabase,
     tarefas: BackgroundTasks,
-    envio: RelatoDoIncidente,
+    envio: RelatoDoIncidente | RegistroRapido,
     arquivos: list[anexos.ArquivoRecebido],
     **identificacao,
 ) -> dict:
@@ -218,6 +218,7 @@ def _gravar_notificacao(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=FALHA_AO_REGISTRAR) from erro
     notificacao_id = recibo.pop("id")
     _avisar_a_chegada(supabase, tarefas, notificacao_id)
+    agente_de_triagem.agendar_triagem_do_nucleo(tarefas, supabase, notificacao_id)
     if caminhos:
         try:
             anexos.ligar_a_notificacao(supabase, notificacao_id, aceitos, caminhos)
@@ -287,6 +288,66 @@ async def notificar_pelo_modulo(
         envio,
         arquivos,
         origem=notificacoes.ORIGEM_MODULO,
+        nome=me.get("nome_completo"),
+        contato=me.get("email"),
+        notificante_id=me["id"],
+    )
+
+
+class RegistroRapido(BaseModel):
+    """O registro rápido (issue #1998): o incidente que o próprio Núcleo achou,
+    numa tela só. A origem é a de onde o Núcleo o achou, e não uma porta."""
+
+    relato: str = Field(..., min_length=1, max_length=10000)
+    setor_id: UUID
+    data_ocorrencia: date
+    origem: Literal["busca_ativa", "ronda", "reuniao_rapida", "auditoria", "outra"]
+    # Quem registra é o autor: o registro rápido nunca é anônimo.
+    anonimo: Literal[False] = False
+
+    @field_validator("relato")
+    @classmethod
+    def _relato_com_texto(cls, valor: str) -> str:
+        if not valor.strip():
+            raise ValueError("Conte o que aconteceu.")
+        return valor.strip()
+
+    @field_validator("data_ocorrencia")
+    @classmethod
+    def _data_ate_hoje(cls, valor: date) -> date:
+        if valor > hoje_em_sao_paulo():
+            raise ValueError("A data do incidente não pode ser depois de hoje.")
+        return valor
+
+
+_quem_abre_os_casos = require_recurso_nsp("casos")
+
+
+async def _quem_registra(request: Request, me: dict = Depends(_quem_abre_os_casos)) -> dict:
+    """A Presidência e o membro com Termo (o recurso de casos). O limitador
+    conta por esta pessoa, como no botão do módulo."""
+    request.state.nsp_notificante_id = str(me["id"])
+    return me
+
+
+@router.post("/notificacoes/registro-rapido", status_code=status.HTTP_201_CREATED)
+@limite_sem_ip.limitar(LIMITE_DA_REDE)
+@limiter.limit(LIMITE_POR_PESSOA, key_func=_chave_da_pessoa)
+async def registro_rapido_do_nucleo(
+    request: Request,
+    envio: RegistroRapido,
+    tarefas: BackgroundTasks,
+    me: dict = Depends(_quem_registra),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """Relato, setor, data e origem. Quem registrou é o autor, pela sessão, e
+    a notificação segue a mesma gravação de todas as portas."""
+    return _gravar_notificacao(
+        supabase,
+        tarefas,
+        envio,
+        [],
+        origem=envio.origem,
         nome=me.get("nome_completo"),
         contato=me.get("email"),
         notificante_id=me["id"],

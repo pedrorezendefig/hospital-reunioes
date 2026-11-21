@@ -227,6 +227,12 @@ def liberar_pendencias(
         return 0
     posicoes_ocupadas = {r["quadro_pos"] for r in existentes}
 
+    # 2b. A linha de Processo entra na lista do setor na mesma porta (ADR 0098,
+    # decisão 9; #1875). Idempotente pela posição no quadro.
+    from app.services.definicao_processo_service import nascer_definicoes
+
+    nascer_definicoes(supabase, id_reuniao, quadro)
+
     # 3. Resolver responsáveis pela Resolução canônica (ADR 0008): roster da
     # Reunião primeiro, só ativos, ambiguidade/desconhecido fica sem vínculo.
     # Vínculo pré-gravado no item (validação/Ata Guiada) é honrado; id forjado

@@ -64,6 +64,8 @@ Todo caso novo fica no grupo **Em classificação** até a Ouvidoria conferir e 
 
 Se o responsável do setor tem login, ele também acha o caso no app, em **A responder**, e pode responder por lá ou pelo link do e-mail.
 
+Se o caso fala de um incidente com o paciente, como uma queda ou um erro de medicação, clique no número do protocolo, depois em **Enviar ao NSP** e em **Confirmar envio ao NSP**: o caso vira uma notificação do Núcleo de Segurança do Paciente, com o relato e sem o nome de quem manifestou, e o link do e-mail ao Núcleo pede login.
+
 ## Responder um caso do seu setor pelo app
 
 Esta tarefa é de quem responde por um setor: o titular, o substituto ou o gestor que a Ouvidoria cadastrou com o seu e-mail. Com o login no app, você acha os casos do seu setor sem depender do e-mail.

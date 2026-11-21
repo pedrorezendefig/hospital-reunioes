@@ -15,7 +15,8 @@ A base do sigilo e a tela Membros do Comitê:
 - o protocolo do caso é sorteado, sem ordem e sem contagem, para não revelar quantos casos existem. A numeração da Ouvidoria continua a mesma;
 - o código de acompanhamento é mostrado uma vez só a quem relatou, e o aplicativo guarda apenas uma marca dele, que não permite recuperar o código;
 - a lista dos casos e a abertura de um caso, para quem está designado. Cada abertura fica registrada com quem abriu, quando e o quê;
-- o canal está fechado: a página pública responde como se não existisse, até a abertura.
+- o canal está fechado: a página pública responde como se não existisse, até a abertura;
+- a tela Configurações, só da coordenação do Comitê, com os contatos e os textos que o canal mostra (veja abaixo).
 
 As telas do Comitê, em Comitê de Conduta:
 
@@ -51,6 +52,23 @@ Na etapa Apuração, o botão "ADICIONAR PESSOA A OUVIR" cria um cartão para ca
 - O depoimento concluído não muda mais.
 
 A etapa Apuração só avança com todos os depoimentos concluídos. Com algum em aberto, a tela diz quantos faltam.
+
+## As configurações e os textos
+
+A coordenação do Comitê edita, na tela Configurações:
+
+- o contato do DP, mostrado a quem procura o canal por salário, contracheque ou escala;
+- a orientação do NSP, mostrada quando o assunto é segurança do paciente;
+- os três avisos do primeiro passo do relato;
+- os textos da página "Como este canal protege você", bloco a bloco;
+- o texto de consentimento lido no início de cada depoimento gravado;
+- o local padrão de guarda dos envelopes com os originais em papel.
+
+Cada vez que alguém salva um item, nasce uma versão nova, com quem salvou e quando. A anterior continua lá e pode ser consultada na mesma tela. Nenhum perfil apaga ou troca uma versão, e a própria base de dados recusa essa alteração. As páginas públicas mostram sempre a versão mais recente e sabem dizer qual versão mostraram, para ficar guardado o texto que cada pessoa leu ao relatar.
+
+Quem não é da coordenação do Comitê, o super admin inclusive, não abre a tela. Item que ninguém salvou ainda aparece como "Ainda não preenchido".
+
+Não existe e-mail do DP nas configurações: o encaminhamento ao DP não sai por e-mail, e a página só mostra o contato dele.
 
 ## A tela Membros
 
@@ -90,7 +108,7 @@ Quem não tem acesso recebe a mesma recusa, exista o caso ou não.
 
 ## O que ele ainda não faz
 
-O formulário público de relato, a página de acompanhamento, a sugestão do agente na triagem, a Rota Especial, as perguntas ao relator, o roteiro de perguntas e o termo de declaração redigidos pelo agente, o voto, a ata, o dossiê e o Termo de Confidencialidade e Posse do membro chegam nas próximas entregas. Por enquanto, o termo de declaração é redigido fora do aplicativo e só a cópia assinada entra no cartão. O item Comitê de Conduta do menu lateral abre a tela Membros; MINHA VEZ e Casos abrem pelo endereço do Comitê de Conduta. Por enquanto ninguém relata pelo Canal: os relatos continuam chegando pela Ouvidoria.
+O formulário público de relato, as páginas públicas que vão mostrar os textos das configurações, a página de acompanhamento, a sugestão do agente na triagem, a Rota Especial, as perguntas ao relator, o roteiro de perguntas e o termo de declaração redigidos pelo agente, o voto, a ata, o dossiê e o Termo de Confidencialidade e Posse do membro chegam nas próximas entregas. Por enquanto, o termo de declaração é redigido fora do aplicativo e só a cópia assinada entra no cartão. O item Comitê de Conduta do menu lateral abre a tela Membros; MINHA VEZ, Casos e Configurações abrem pelo endereço do Comitê de Conduta. Por enquanto ninguém relata pelo Canal: os relatos continuam chegando pela Ouvidoria.
 
 ## O que já foi decidido
 
@@ -116,3 +134,5 @@ O formulário público de relato, a página de acompanhamento, a sugestão do ag
 - Pedido para desmarcar uma declaração da lista ou reabrir um depoimento concluído: não existe; a declaração e o depoimento concluído ficam como estão.
 - Áudio que não sobe: o botão aceita MP3, M4A ou OGG de até 300 MB.
 - A Apuração que não avança: há depoimento em aberto.
+- Pedido para apagar ou corrigir uma versão antiga de um texto: não existe; salva-se uma versão nova, e a antiga fica.
+- Pedido de um item novo nas configurações: entra por Demanda, porque a lista de itens é fixa.
