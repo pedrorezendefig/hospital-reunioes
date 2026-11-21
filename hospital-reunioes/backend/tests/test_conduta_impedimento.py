@@ -126,7 +126,7 @@ class Comite:
         return [
             (linha["autor_id"], linha["acao"], linha["detalhe"])
             for linha in self.banco.tabelas["conduta_trilha"]
-            if linha["caso_id"] == caso_id and linha["acao"] != "leitura"
+            if linha["caso_id"] == caso_id and linha["acao"] not in ("leitura", "recebimento")
         ]
 
 
@@ -276,12 +276,74 @@ class TestCitado:
         comite.ok(COORDENACAO, caso, "citados", {"participante_id": MEMBRO})
 
         assert _recusado(comite.abrir(MEMBRO, caso))
-        (impedimento,) = [
-            a for a in comite.banco.tabelas["conduta_atribuicoes"] if a["participante_id"] == MEMBRO
-        ]
+        (impedimento,) = [a for a in comite.banco.tabelas["conduta_atribuicoes"] if a["participante_id"] == MEMBRO]
         assert impedimento["impedido_em"] and impedimento["impedimento_motivo"] == "citado"
         assert (None, "impedimento") in [(autor, acao) for autor, acao, _ in comite.trilha(caso)]
         assert [c["id"] for c in comite.lista(SUPLENTE).json()["casos"]] == [caso]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. Cada declaração, decisão e convocação entra na trilha
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestTrilha:
+    def test_declaracao_e_convocacao_entram_na_trilha(self, comite):
+        caso = comite.caso()
+
+        comite.ok(MEMBRO, caso, "impedimento", {"motivo": "parentesco"})
+
+        assert comite.trilha(caso) == [
+            (MEMBRO, "impedimento", "declarou impedimento: parentesco"),
+            (None, "convocacao", "convocou um suplente no lugar de quem ficou impedido"),
+        ]
+
+    def test_contestacao_votos_e_decisao_entram_na_trilha(self, comite):
+        caso = comite.caso()
+        contestacao = comite.ok(COORDENACAO, caso, CONTESTACOES, {"contestado_id": MEMBRO, "motivo": "interesse"})
+        caminho = f"{CONTESTACOES}/{contestacao['contestacao']['id']}/decisao"
+
+        comite.ok(SEGUNDO_LEITOR, caso, caminho, {"escolha": "confirmar"})
+
+        assert comite.trilha(caso) == [
+            (
+                COORDENACAO,
+                "contestacao_de_participacao",
+                "contestou a participação de outro membro: interesse no resultado",
+            ),
+            (SEGUNDO_LEITOR, "decisao_de_participacao", "decidiu a contestação da participação"),
+            (None, "participacao_decidida", "contestação da participação confirmada pelos demais"),
+            (None, "convocacao", "convocou um suplente no lugar de quem ficou impedido"),
+        ]
+
+    def test_sem_a_linha_na_trilha_o_impedimento_nao_acontece(self, comite):
+        caso = comite.caso()
+        comite.banco.falhas_da_trilha = 10
+
+        with pytest.raises(Exception):  # noqa: B017 (o dublê levanta o erro do banco)
+            comite.agir(MEMBRO, caso, "impedimento", {"motivo": "parentesco"})
+
+        comite.banco.falhas_da_trilha = 0
+        assert comite.abrir(MEMBRO, caso).status_code == 200
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 8. O kit de conhecimento diz o comportamento novo
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def test_o_kit_do_canal_diz_impedimento_suplente_e_citado():
+    from pathlib import Path
+
+    kit = (Path(__file__).resolve().parents[1] / "app" / "conhecimento" / "canal-de-conduta.md").read_text(
+        encoding="utf-8"
+    )
+    assert "## Impedimento, suplente e Citado" in kit
+    assert "Declarar impedimento" in kit
+    assert "Os demais membros decidem, sem o contestado" in kit
+    assert "faz o que o substituído fazia" in kit
+    assert "Qualquer membro do caso marca um Citado, em qualquer etapa" in kit
+    assert "fica impedida na hora, sem ato de ninguém" in kit
 
 
 # ═══════════════════════════════════════════════════════════════════════════
