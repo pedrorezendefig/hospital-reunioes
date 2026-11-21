@@ -29,6 +29,7 @@ from app.middleware.limite_corpo import LIMITE_CORPO_BYTES, LimiteDeCorpoMiddlew
 from app.routers import conduta_comite, conduta_depoimentos  # noqa: E402
 from app.services.conduta import casos, cifra, depoimentos  # noqa: E402
 from app.services.conduta.acesso import hoje_em_sao_paulo  # noqa: E402
+from app.services.conhecimento import CONHECIMENTO_DIR  # noqa: E402
 
 MB = 1024 * 1024
 
@@ -599,3 +600,39 @@ class TestApuracaoNaoAvanca:
             "A Apuração só avança com todos os depoimentos concluídos. Faltam 2."
         )
         assert depoimentos.bloqueio_do_avanco([]) is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# O texto do Produto Canal de Conduta no kit de conhecimento diz o
+# comportamento novo
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestKitDeConhecimento:
+    @pytest.fixture
+    def texto(self) -> str:
+        return (CONHECIMENTO_DIR / "canal-de-conduta.md").read_text(encoding="utf-8")
+
+    @pytest.mark.parametrize(
+        "frase",
+        [
+            "## Os depoimentos",
+            "ANEXAR TRANSCRIÇÃO DO DEPOIMENTO",
+            "ANEXAR ÁUDIO DO DEPOIMENTO",
+            "ANEXAR TERMO ASSINADO",
+            "até 300 MB",
+            "câmera do celular",
+            "a anterior continua guardada",
+            "Não existe link para baixar direto",
+            '"CONCLUIR DEPOIMENTO" só libera com os sete itens',
+            "guarda quem marcou e quando",
+            '"Não se aplica", com o motivo',
+            "A etapa Apuração só avança com todos os depoimentos concluídos",
+        ],
+    )
+    def test_o_kit_diz_o_comportamento_do_depoimento(self, texto, frase):
+        assert frase in texto
+
+    def test_o_kit_nao_diz_mais_que_o_botao_esta_bloqueado(self, texto):
+        assert "aparece bloqueado até os depoimentos chegarem" not in texto
+        assert "Aguardando assinatura" in texto
