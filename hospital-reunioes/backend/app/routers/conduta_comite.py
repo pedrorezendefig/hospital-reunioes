@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field, field_validator
 from supabase import Client
 
 from app.dependencies import get_supabase_client
-from app.services.conduta import cifra, configuracoes, triagem
+from app.services.conduta import avisos, cifra, configuracoes, triagem
 from app.services.conduta.acesso import CAMPOS_DA_LISTA, hoje_em_sao_paulo
 from app.services.conduta.portao import (
     INDISPONIVEL,
@@ -115,12 +115,14 @@ async def abrir_caso(aberto: CasoAberto = Depends(portao_do_caso), supabase: Cli
 
 
 def _agir(funcao, supabase, aberto: CasoAberto, **argumentos) -> dict:
+    antes = avisos.tarefas_antes(supabase, aberto.caso["id"])
     try:
         caso = funcao(supabase, aberto, **argumentos)
     except triagem.AcaoRecusadaError as recusa:
         raise HTTPException(status_code=recusa.status, detail=recusa.mensagem) from recusa
     except cifra.CifraIndisponivelError as erro:
         raise _indisponivel(erro) from erro
+    avisos.avisar_tarefas_novas(supabase, aberto.caso["id"], antes)
     return {"caso": _metadados(caso)}
 
 

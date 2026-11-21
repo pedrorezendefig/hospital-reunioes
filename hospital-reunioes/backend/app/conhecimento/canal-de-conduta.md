@@ -33,6 +33,15 @@ A triagem e os ritos:
 - o rito Completo prorroga uma única vez, por mais 30 dias, com justificativa escrita, que fica guardada cifrada;
 - no Encaminhamento (assunto fora do canal), depois da conferência do segundo leitor, a coordenação confirma a resposta padrão num clique e o caso encerra como "Encaminhado". A resposta diz ao relator que o assunto não é tratado no canal, para onde ele deve ir e que assédio, ameaça ou retaliação viram um novo relato.
 
+Os avisos por e-mail:
+
+- quem passa a ter uma tarefa num caso (confirmar a triagem, conferir, decidir a contestação, enviar a orientação) recebe um e-mail no endereço do cadastro, com a frase "Há uma tarefa no Canal de Conduta." e o link para MINHA VEZ. O e-mail não diz o protocolo, nenhum nome, o rito nem nada do relato;
+- o rito Completo e a Rota Especial avisam na hora, em até um minuto. Os outros casos avisam às 8h do dia seguinte, num e-mail só por pessoa, por mais tarefas que ela tenha. Se a tarefa já foi feita antes do e-mail sair, ele não sai;
+- lembretes a cinco dias e a um dia do prazo, às 8h, a quem tem tarefa no caso. Se ninguém tem tarefa naquela etapa (como na apuração), o lembrete vai à coordenação. Cada lembrete sai uma vez só, e a prorrogação recomeça os lembretes do prazo novo;
+- quem é citado ou está impedido não recebe aviso do caso;
+- quem relatou não recebe aviso por nenhum meio: o retorno a ele é só pela página de acompanhamento;
+- os avisos são feitos por uma rotina automática, sem IA.
+
 ## As configurações e os textos
 
 A coordenação do Comitê edita, na tela Configurações:
