@@ -52,7 +52,32 @@ export interface Contestacao {
   resultado: "mantida" | "acatada" | null;
 }
 
+export interface MembroDoCaso {
+  id: string;
+  nome: string | null;
+  papel: string;
+}
+
+export interface ContestacaoDeParticipacao {
+  id: string;
+  contestado: string | null;
+  motivo: string;
+  votos: number;
+  resultado: "confirmada" | "rejeitada" | null;
+  pode_decidir: boolean;
+}
+
+export interface Citado {
+  id: string;
+  nome: string | null;
+  ligado: boolean;
+}
+
 export interface CasoAberto extends CasoDaLista {
+  membros_do_caso: MembroDoCaso[];
+  pode_contestar_participacao: boolean;
+  contestacoes_de_participacao: ContestacaoDeParticipacao[];
+  citados: Citado[];
   relato: string;
   escopo: Escopo | null;
   destino: string | null;
@@ -97,7 +122,16 @@ export const DESTINOS: { valor: string; rotulo: string }[] = [
   { valor: "gestor", rotulo: "Liderança direta ou DP" },
 ];
 
-export const SITUACOES: { valor: Situacao; rotulo: string }[] = [
+/** Os motivos de impedimento da especificação (seção 3.3). */
+export const MOTIVOS_DE_IMPEDIMENTO: { valor: string; rotulo: string }[] = [
+  { valor: "parte", rotulo: "Parte do caso" },
+  { valor: "chefia_direta", rotulo: "Chefia direta de envolvido" },
+  { valor: "parentesco", rotulo: "Parentesco" },
+  { valor: "relacao_pessoal", rotulo: "Relação pessoal" },
+  { valor: "interesse", rotulo: "Interesse no resultado" },
+];
+
+export const SITUACOES:{ valor: Situacao; rotulo: string }[] = [
   { valor: "em_triagem", rotulo: "Em triagem" },
   { valor: "em_andamento", rotulo: "Em andamento" },
   { valor: "encerrado", rotulo: "Encerrado" },

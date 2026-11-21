@@ -213,6 +213,22 @@ describe("a tela do caso", () => {
     expect(screen.getByText(CASO.relato)).toBeTruthy();
   });
 
+  it("declarado o impedimento, o caso sai da tela e ela leva de volta aos casos (#1828)", async () => {
+    respostas = { "/casos/c1": CASO, "/casos/c1/impedimento": { caso: {} } };
+    render(<TelaDoCaso casoId="c1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "DECLARAR IMPEDIMENTO" }));
+    fireEvent.click(screen.getByLabelText("Relação pessoal"));
+    fireEvent.click(screen.getByRole("button", { name: "CONFIRMAR IMPEDIMENTO" }));
+
+    const aviso = await screen.findByRole("status");
+    expect(aviso.textContent).toContain("Você se declarou impedido neste caso e não tem mais acesso a ele.");
+    expect(screen.queryByText(CASO.relato)).toBeNull();
+    expect(within(aviso).getByRole("link", { name: "Voltar aos casos" }).getAttribute("href")).toBe(
+      "/comite-de-conduta/casos"
+    );
+  });
+
   it("no Encaminhamento, um clique envia a orientação e encerra", async () => {
     respostas = { "/casos/c1": CASO, "/casos/c1/encaminhamento": { caso: {} } };
     render(<TelaDoCaso casoId="c1" />);
