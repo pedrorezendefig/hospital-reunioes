@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import { useMovimentoReduzido } from "@/hooks/useMovimentoReduzido";
@@ -44,6 +44,8 @@ export interface FilaDoPapel {
 export interface InicioDaPessoa {
   hoje: string;
   frase: { titulo: string; apoio: string };
+  /** Nada vencido nem para as próximas 48 horas, como na frase (issue #1946). */
+  em_dia?: boolean;
   contadores: Record<GrupoDoInicio, number>;
   itens: ItemDoInicio[];
   avisos: { fonte: string; mensagem: string }[];
@@ -239,10 +241,16 @@ function tituloDaAba(vencidos: number): string {
  * A frase mora numa região anunciada que já existe enquanto a tela carrega:
  * quando ela chega, o leitor de tela a lê (issue #1935).
  */
-export function MinhaFila() {
+export function MinhaFila({ aoCarregar }: { aoCarregar?: (inicio: InicioDaPessoa) => void } = {}) {
   const [inicio, setInicio] = useState<InicioDaPessoa | null>(null);
   const [falhou, setFalhou] = useState(false);
   const movimentoReduzido = useMovimentoReduzido();
+  // Quem monta a tela fica sabendo do Início que chegou (se a pessoa está em
+  // dia, issue #1946), sem refazer o pedido quando a função muda.
+  const avisar = useRef(aoCarregar);
+  useEffect(() => {
+    avisar.current = aoCarregar;
+  });
 
   // Também roda depois de uma ação de um clique: o servidor refaz a fila, a
   // frase e os contadores.
@@ -251,7 +259,10 @@ export function MinhaFila() {
       const res = await fetch("/api/inicio", { headers: await cabecalhoDeAcesso() });
       if (!res.ok) throw new Error(String(res.status));
       const corpo = (await res.json()) as InicioDaPessoa;
-      if (vivo()) setInicio(corpo);
+      if (vivo()) {
+        setInicio(corpo);
+        avisar.current?.(corpo);
+      }
     } catch {
       if (vivo()) setFalhou(true);
     }

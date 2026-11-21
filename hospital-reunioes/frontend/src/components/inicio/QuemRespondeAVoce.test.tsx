@@ -44,6 +44,7 @@ const EQUIPE: QuemResponde = {
       vencidos: 2,
       em_aberto: 3,
       ultimo_acesso: "há 4 dias",
+      entregas_90_dias: { no_prazo: 5, fora_do_prazo: 3 },
       itens_vencidos: [
         {
           id: "B2",
@@ -68,6 +69,7 @@ const EQUIPE: QuemResponde = {
       vencidos: 0,
       em_aberto: 1,
       ultimo_acesso: "nunca entrou",
+      entregas_90_dias: { no_prazo: 1, fora_do_prazo: 0 },
       itens_vencidos: [],
     },
   ],
@@ -115,14 +117,21 @@ function linhaDe(nome: string): HTMLElement {
 }
 
 describe("a linha de cada pessoa", () => {
-  it("traz nome, cargo, vencidos agora, em aberto e último acesso, na ordem do servidor", async () => {
+  it("traz nome, cargo, vencidos agora, em aberto, entregas de 90 dias e último acesso, na ordem do servidor", async () => {
     const { bloco, chamadas } = await abrir();
 
     expect(chamadas).toEqual(["/api/inicio/quem-responde"]);
+    expect(within(bloco).getAllByRole("columnheader").map((th) => th.textContent)).toEqual([
+      "Pessoa",
+      "Vencidos agora",
+      "Em aberto",
+      "Entregas em 90 dias",
+      "Último acesso",
+    ]);
     const linhas = within(bloco).getAllByRole("row").slice(1);
     expect(linhas.map((tr) => Array.from(tr.querySelectorAll("td")).map((td) => td.textContent))).toEqual([
-      ["Bruno ReisFarmacêutico", "2", "3", "há 4 dias"],
-      ["Ana SouzaEnfermeira", "0", "1", "nunca entrou"],
+      ["Bruno ReisFarmacêutico", "2", "3", "5 no prazo, 3 fora", "há 4 dias"],
+      ["Ana SouzaEnfermeira", "0", "1", "1 no prazo, 0 fora", "nunca entrou"],
     ]);
   });
 
