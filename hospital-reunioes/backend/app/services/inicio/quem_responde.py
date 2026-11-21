@@ -13,7 +13,9 @@ lembrete da Agenda regulatória só entra para quem alcança a agenda. O último
 acesso (Registro de acesso, decisão 10) só é lido para as pessoas da lista,
 que são justamente as que têm algum item visível a quem pede.
 
-As entregas de 90 dias e as Rotinas do ciclo entram em outra fatia.
+As entregas de 90 dias de cada pessoa (issue #1946) são a mesma conta que
+ela vê no Início dela (`entregas`), com o sigilo do Núcleo de quem pede. As
+Rotinas do ciclo entram em outra fatia.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.dependencies import is_super_admin, recursos_nsp_da_pessoa, reunioes_ocultas, tem_acesso_reunioes
+from app.services.inicio import entregas
 from app.services.inicio.fonte_pendencias import STATUS_ABERTOS
 from app.services.inicio.registro_de_acesso import TABELA as TABELA_DO_REGISTRO
 from app.services.inicio.regras import FUSO, dias_de_atraso
@@ -48,6 +51,7 @@ class PessoaQueResponde(BaseModel):
     vencidos: int
     em_aberto: int
     ultimo_acesso: str
+    entregas_90_dias: entregas.Numeros
     itens_vencidos: list[ItemVencido]
 
 
@@ -112,9 +116,10 @@ def _origem(linha: dict, reunioes: dict[str, dict]) -> str:
     return f"{titulo}, de {quando.strftime('%d/%m/%Y')}." if quando else f"{titulo}."
 
 
-def _visiveis(supabase, me: dict) -> tuple[list[dict], dict[str, dict]] | None:
-    """As Pendências abertas que quem pede acompanha, com as Reuniões delas.
-    None quando a pessoa não acompanha ninguém e não recebe o bloco."""
+def _visiveis(supabase, me: dict) -> tuple[list[dict], dict[str, dict], set[str]] | None:
+    """As Pendências abertas que quem pede acompanha, com as Reuniões delas e
+    as Reuniões do Núcleo que quem pede não alcança. None quando a pessoa não
+    acompanha ninguém e não recebe o bloco."""
     if not tem_acesso_reunioes(me):
         return None
     ocultas = set(reunioes_ocultas(supabase, me))
@@ -127,11 +132,11 @@ def _visiveis(supabase, me: dict) -> tuple[list[dict], dict[str, dict]] | None:
             if (com_agenda if e_lembrete_do_nucleo(linha) else linha["id_reuniao"] not in ocultas)
         ]
         reunioes = _reunioes(supabase, sorted({linha["id_reuniao"] for linha in linhas if linha.get("id_reuniao")}))
-        return linhas, reunioes
+        return linhas, reunioes, ocultas
     conduzidas = {rid: r for rid, r in _reunioes_que_conduziu(supabase, me).items() if rid not in ocultas}
     if not conduzidas:
         return None
-    return _abertas(supabase, sorted(conduzidas)), conduzidas
+    return _abertas(supabase, sorted(conduzidas)), conduzidas, ocultas
 
 
 def _ultimos_acessos(supabase, ids: list[str]) -> dict[str, date]:
@@ -164,7 +169,7 @@ def montar(supabase, me: dict | None, agora: datetime) -> QuemRespondeAVoce | No
     visiveis = _visiveis(supabase, me)
     if visiveis is None:
         return None
-    linhas, reunioes = visiveis
+    linhas, reunioes, ocultas = visiveis
     hoje = agora.astimezone(FUSO).date()
 
     por_pessoa: dict[str, list[dict]] = {}
@@ -178,6 +183,7 @@ def montar(supabase, me: dict | None, agora: datetime) -> QuemRespondeAVoce | No
         resultado = supabase.table("participantes").select("id, nome_completo, cargo").in_("id", ids).execute()
         cadastro = {linha["id"]: linha for linha in resultado.data or []}
     acessos = _ultimos_acessos(supabase, ids)
+    entregues = entregas.ler(supabase, ids, ocultas, hoje)
 
     pessoas: list[PessoaQueResponde] = []
     for pessoa_id in ids:
@@ -205,6 +211,7 @@ def montar(supabase, me: dict | None, agora: datetime) -> QuemRespondeAVoce | No
                 vencidos=len(vencidos),
                 em_aberto=len(itens),
                 ultimo_acesso=texto_do_ultimo_acesso(acessos.get(pessoa_id), hoje),
+                entregas_90_dias=entregas.numeros(entregues.get(pessoa_id, [])),
                 itens_vencidos=vencidos,
             )
         )

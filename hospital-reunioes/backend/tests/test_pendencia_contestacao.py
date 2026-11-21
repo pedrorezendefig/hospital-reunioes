@@ -24,7 +24,7 @@ from app.services.pendencia_ciclo import AcaoRecusada, Comando, Papel, acoes_dis
 # o Início, os de `test_inicio_reunioes.py`.
 sys.path.insert(0, os.path.dirname(__file__))
 
-from test_inicio_reunioes import AURORA, FACILITADOR, _reuniao, _rota, nucleo  # noqa: E402, F401
+from test_inicio_reunioes import AURORA, FACILITADOR, _na_reuniao, _reuniao, _rota, nucleo  # noqa: E402, F401
 from test_inicio_reunioes import _Banco as _BancoDoInicio  # noqa: E402
 from test_pendencia_acoes import _banco, cliente  # noqa: E402, F401
 
@@ -482,6 +482,44 @@ def test_a_contestacao_nao_vai_para_a_fila_do_responsavel_nem_de_outro_facilitad
     )
 
 
+_PESSOAS_DA_REUNIAO = {
+    "facilitador": FACILITADOR,
+    "quem_contestou": AURORA,
+    "co_responsavel": {"id": "P_CO", "nome_completo": "Caio Melo", "access_profile": "regular"},
+    "outro_participante": {"id": "P_OUTRO_PART", "nome_completo": "Olivia Paz", "access_profile": "regular"},
+    "super_admin_que_nao_conduz": {"id": "P_ADMIN", "nome_completo": "Alice Alves", "access_profile": "super_admin"},
+}
+
+
+@pytest.mark.parametrize(
+    "papel,ve",
+    [
+        ("facilitador", True),
+        ("quem_contestou", False),
+        ("co_responsavel", False),
+        ("outro_participante", False),
+        ("super_admin_que_nao_conduz", False),
+    ],
+)
+def test_so_o_facilitador_da_reuniao_ve_a_contestacao_no_inicio(monkeypatch, ocultas, papel, ve):
+    """Issue #1945: quem contestou e os outros Participantes não veem o item;
+    o botão leva o Facilitador ao quadro, com a pendência aberta para ajustar
+    ou recusar."""
+    banco = _cenario_da_fila(_CONTESTOU_HOJE)
+    banco.pendencias[0]["co_responsavel_id"] = "P_CO"
+    banco.reuniao_participantes = _na_reuniao("R50", "P_FACI", "P_AURORA", "P_CO", "P_OUTRO_PART", "P_ADMIN")
+
+    resposta = _rota(monkeypatch, _PESSOAS_DA_REUNIAO[papel], banco)
+
+    contestacoes = [item for item in resposta.itens if item.tipo == "contestacao"]
+    if not ve:
+        assert contestacoes == []
+        return
+    assert [(item.id, item.acao, item.destino) for item in contestacoes] == [
+        ("A050", "Ajustar ou recusar", "/pendencias/kanban?highlight=A050")
+    ]
+
+
 @pytest.mark.parametrize("resposta_do_facilitador", ["ajustar", "recusar"])
 def test_depois_de_ajustar_ou_recusar_a_contestacao_sai_da_fila(monkeypatch, ocultas, resposta_do_facilitador):
     respondida = _evento(21, resposta_do_facilitador, "2026-11-18T13:00:00+00:00")
@@ -515,5 +553,20 @@ def test_o_texto_de_reunioes_no_kit_diz_como_funciona_a_contestacao():
     assert "Se o erro era o responsável, ele escolhe a pessoa certa no cadastro" in secao
     # Quem administra o aplicativo faz tudo, menos contestar.
     assert "faz tudo, menos contestar" in texto
+    assert chr(0x2014) not in secao
+    assert chr(0x2013) not in secao
+
+
+def test_o_texto_do_inicio_no_kit_diz_quem_ve_a_contestacao():
+    """Issue #1945: a seção do Início diz que a Contestação aberta entra só na
+    fila do Facilitador, o que o botão abre e quando ela sai."""
+    from app.services.conhecimento import CONHECIMENTO_DIR
+
+    texto = " ".join((CONHECIMENTO_DIR / "reunioes.md").read_text(encoding="utf-8").split())
+    secao = texto.split("## O Início", 1)[1].split(" ## ", 1)[0]
+    assert "A contestação de um item da ata aparece só no Início do facilitador da reunião" in secao
+    assert "quem contestou e os outros participantes não a veem" in secao
+    assert "O botão Ajustar ou recusar abre a pendência no quadro de pendências" in secao
+    assert "sai da lista assim que ele ajusta ou recusa" in secao
     assert chr(0x2014) not in secao
     assert chr(0x2013) not in secao

@@ -21,6 +21,8 @@ export interface PessoaQueResponde {
   vencidos: number;
   em_aberto: number;
   ultimo_acesso: string;
+  /** As entregas de 90 dias, a mesma conta que a pessoa vê no Início dela (issue #1946). */
+  entregas_90_dias: { no_prazo: number; fora_do_prazo: number };
   itens_vencidos: ItemVencido[];
 }
 
@@ -40,7 +42,7 @@ async function cabecalhoDeAcesso(): Promise<Record<string, string>> {
 function Vencidos({ pessoa }: { pessoa: PessoaQueResponde }) {
   return (
     <tr>
-      <td colSpan={4} className="px-3 pb-4 pt-1 bg-slate-50">
+      <td colSpan={5} className="px-3 pb-4 pt-1 bg-slate-50">
         {pessoa.itens_vencidos.length === 0 ? (
           <p className="text-sm text-text-secondary">Nada vencido e não entregue.</p>
         ) : (
@@ -65,8 +67,8 @@ function Vencidos({ pessoa }: { pessoa: PessoaQueResponde }) {
 
 /**
  * Quem responde a você (issue #1943, ADR 0104 decisão 9): uma linha por
- * pessoa que quem olha acompanha, com os vencidos agora, os itens em aberto e
- * o último acesso. Vem num pedido separado do resto do Início, e a falha dele
+ * pessoa que quem olha acompanha, com os vencidos agora, os itens em aberto,
+ * as entregas de 90 dias no prazo e fora (issue #1946) e o último acesso. Vem num pedido separado do resto do Início, e a falha dele
  * fica neste bloco. Quem não acompanha ninguém recebe `null` e não vê nada.
  * Clicar na linha, ou apertar Enter nela, abre ali mesmo o que venceu e não
  * foi entregue. No celular a tabela rola dentro do bloco.
@@ -108,12 +110,13 @@ export function QuemRespondeAVoce() {
         <p className="mt-3 text-base text-text">Ninguém com item em aberto agora.</p>
       ) : (
         <div data-testid="rolagem-quem-responde" className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-left">
+          <table className="w-full min-w-[680px] text-left">
             <thead>
               <tr className="text-[11px] text-text-secondary">
                 <th className="px-3 py-2 font-normal">Pessoa</th>
                 <th className="px-3 py-2 font-normal text-right">Vencidos agora</th>
                 <th className="px-3 py-2 font-normal text-right">Em aberto</th>
+                <th className="px-3 py-2 font-normal">Entregas em 90 dias</th>
                 <th className="px-3 py-2 font-normal">Último acesso</th>
               </tr>
             </thead>
@@ -140,6 +143,9 @@ export function QuemRespondeAVoce() {
                       {pessoa.vencidos}
                     </td>
                     <td className="px-3 py-3 text-right text-xl tabular-nums text-text">{pessoa.em_aberto}</td>
+                    <td className="px-3 py-3 text-sm text-text whitespace-nowrap tabular-nums">
+                      {`${pessoa.entregas_90_dias.no_prazo} no prazo, ${pessoa.entregas_90_dias.fora_do_prazo} fora`}
+                    </td>
                     <td className="px-3 py-3 text-sm text-text-secondary whitespace-nowrap">{pessoa.ultimo_acesso}</td>
                   </tr>
                   {aberta === pessoa.id && <Vencidos pessoa={pessoa} />}

@@ -24,7 +24,7 @@ from fastapi import HTTPException
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.routers import inicio as inicio_router  # noqa: E402
-from app.services.inicio import quem_responde  # noqa: E402
+from app.services.inicio import entregas, quem_responde  # noqa: E402
 
 BRT = ZoneInfo("America/Sao_Paulo")
 # Quarta-feira, 18/11/2026, 10h em Brasília.
@@ -95,6 +95,7 @@ class _Banco:
     reunioes: list = field(default_factory=list)
     participantes: list = field(default_factory=list)
     registro_de_acesso: list = field(default_factory=list)
+    pendencia_historico: list = field(default_factory=list)
     teto: int | None = None
 
     def table(self, nome):
@@ -139,12 +140,13 @@ REUNIOES = [
 ]
 
 
-def _banco(*pendencias, acessos=()) -> _Banco:
+def _banco(*pendencias, acessos=(), historico=()) -> _Banco:
     return _Banco(
         pendencias=list(pendencias),
         reunioes=[dict(r, deleted_at=None) for r in REUNIOES],
         participantes=[ANA, BRUNO, CAIO],
         registro_de_acesso=[{"participante_id": pid, "dia": dia} for pid, dia in acessos],
+        pendencia_historico=list(historico),
     )
 
 
@@ -165,6 +167,10 @@ def _rota(monkeypatch, me: dict | None, banco: _Banco):
     monkeypatch.setattr(inicio_router, "get_participante_for_user", _participante)
     monkeypatch.setattr(inicio_router, "agora_em_brasilia", lambda: AGORA)
     return asyncio.run(inicio_router.get_quem_responde(current_user={"id": "u1"}, supabase=banco))
+
+
+async def _async(valor):
+    return valor
 
 
 def _nomes(resposta) -> list[str]:
@@ -296,6 +302,53 @@ class TestLinhaDaPessoa:
         )
 
         assert _nomes(_rota(monkeypatch, SUPER, banco)) == ["Bruno Reis", "Ana Souza", "Caio Melo"]
+
+    def test_a_linha_traz_as_entregas_de_90_dias_com_os_mesmos_numeros_que_a_pessoa_ve(self, monkeypatch, nucleo):
+        # Issue #1946. Ana: uma entrega no prazo, uma fora e uma depois de
+        # Repactuação vencida (fora). Bruno: uma no prazo.
+        def concluir(id_acao, dia, prazo, n):
+            return {
+                "id": n,
+                "id_acao": id_acao,
+                "comando": "concluir",
+                "criado_em": f"{dia}T13:00:00+00:00",
+                "prazo_antes": prazo,
+                "conta_atraso": False,
+            }
+
+        banco = _banco(
+            _pendencia("A1", "P_ANA"),
+            _pendencia("A2", "P_ANA", status="CONCLUIDO"),
+            _pendencia("A3", "P_ANA", status="CONCLUIDO"),
+            _pendencia("A4", "P_ANA", status="CONCLUIDO"),
+            _pendencia("B1", "P_BRUNO"),
+            _pendencia("B2", "P_BRUNO", status="CONCLUIDO"),
+            historico=[
+                concluir("A2", "2026-11-09", "2026-11-10", 1),
+                concluir("A3", "2026-11-12", "2026-11-10", 2),
+                {
+                    "id": 3,
+                    "id_acao": "A4",
+                    "comando": "repactuar",
+                    "criado_em": "2026-11-08T13:00:00+00:00",
+                    "prazo_antes": "2026-11-05",
+                    "conta_atraso": True,
+                },
+                concluir("A4", "2026-11-14", "2026-11-15", 4),
+                concluir("B2", "2026-11-14", "2026-11-15", 5),
+            ],
+        )
+
+        resposta = _rota(monkeypatch, SUPER, banco)
+
+        por_nome = {p.nome: (p.entregas_90_dias.no_prazo, p.entregas_90_dias.fora_do_prazo) for p in resposta.pessoas}
+        assert por_nome == {"Ana Souza": (1, 2), "Bruno Reis": (1, 0)}
+        # A mesma conta que a Ana vê no Início dela.
+        monkeypatch.setattr(entregas, "reunioes_ocultas", lambda _sb, _me: ["RN"])
+        ana = {"id": "P_ANA", "nome_completo": "Ana Souza", "access_profile": "regular"}
+        monkeypatch.setattr(inicio_router, "get_participante_for_user", lambda *_a, **_kw: _async(ana))
+        propria = asyncio.run(inicio_router.get_meus_numeros(current_user={"id": "u1"}, supabase=banco))
+        assert (propria.numeros_90_dias.no_prazo, propria.numeros_90_dias.fora_do_prazo) == por_nome["Ana Souza"]
 
     def test_o_que_venceu_e_nao_foi_entregue_vem_com_ha_quantos_dias(self, monkeypatch, nucleo):
         banco = _banco(
