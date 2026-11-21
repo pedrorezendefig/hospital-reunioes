@@ -18,7 +18,7 @@ fechado para a pessoa não se distinguem. O super admin não passa por cima.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from uuid import UUID
 
 import httpx
@@ -33,6 +33,7 @@ from app.services.conduta.acesso import (
     caso_se_a_pessoa_abre,
     casos_da_pessoa,
     hoje_em_sao_paulo,
+    papel_no_caso,
     pessoa_no_comite,
 )
 
@@ -134,6 +135,9 @@ async def _caso_aberto(caso_id: UUID, current_user: dict, supabase) -> CasoAbert
     if aberto is None:
         raise _recusar()
     caso, atribuicoes = aberto
+    papel = papel_no_caso(pessoa.papel, atribuicoes)
+    if papel != pessoa.papel:
+        pessoa = replace(pessoa, papel=papel)
     return CasoAberto(autor_id=me["id"], pessoa=pessoa, caso=caso, atribuicoes=atribuicoes)
 
 

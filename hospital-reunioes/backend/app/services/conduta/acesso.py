@@ -70,6 +70,20 @@ def _atribuicao_vale(atribuicao: dict[str, Any], pessoa: PessoaNoComite) -> bool
     return atribuicao.get("revogada_em") is None and bool(atribuicao.get("termo_assinado_em") or pessoa.termo_valido)
 
 
+def papel_no_caso(papel: str | None, atribuicoes: list[dict]) -> str | None:
+    """O papel da pessoa naquele caso. O suplente convocado faz o que o
+    substituído fazia (issue #1828): o papel dele vem da convocação."""
+    for atribuicao in atribuicoes:
+        if (
+            atribuicao.get("motivo") == "suplente_convocado"
+            and atribuicao.get("substitui_papel")
+            and not atribuicao.get("revogada_em")
+            and not atribuicao.get("impedido_em")
+        ):
+            return atribuicao["substitui_papel"]
+    return papel
+
+
 def pode_abrir(caso: dict[str, Any], pessoa: PessoaNoComite, atribuicoes: list[dict], citado: bool) -> bool:
     """`atribuicoes` são as da pessoa neste caso."""
     if citado:

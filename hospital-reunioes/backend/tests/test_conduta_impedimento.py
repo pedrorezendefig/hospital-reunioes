@@ -155,3 +155,48 @@ class TestDeclararImpedimento:
         assert _recusado(comite.abrir(MEMBRO, caso))
         assert [c["id"] for c in comite.lista(MEMBRO).json()["casos"]] == [outro]
         assert comite.abrir(MEMBRO, outro).status_code == 200
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3 e 4. O suplente convocado abre só o caso da convocação; sem convocação,
+# nenhum caso
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestSuplente:
+    def test_suplente_sem_convocacao_nao_ve_caso_nenhum(self, comite):
+        caso = comite.caso()
+
+        assert _recusado(comite.lista(SUPLENTE))
+        assert _recusado(comite.abrir(SUPLENTE, caso))
+
+    def test_o_suplente_convocado_abre_so_o_caso_da_convocacao(self, comite):
+        caso = comite.caso()
+        outro = comite.caso()
+
+        comite.ok(MEMBRO, caso, "impedimento", {"motivo": "relacao_pessoal"})
+
+        assert [c["id"] for c in comite.lista(SUPLENTE).json()["casos"]] == [caso]
+        assert comite.abrir(SUPLENTE, caso).status_code == 200
+        assert _recusado(comite.abrir(SUPLENTE, outro))
+
+    def test_o_suplente_faz_o_que_a_coordenacao_impedida_fazia(self, comite):
+        caso = comite.caso()
+        comite.ok(COORDENACAO, caso, "impedimento", {"motivo": "chefia_direta"})
+
+        aberto = comite.abrir(SUPLENTE, caso).json()
+        assert aberto["papel"] == "coordenacao"
+        assert aberto["o_que_fazer_agora"]["bloqueio"] is None
+        vez = comite.cliente(SUPLENTE).get(f"{BASE}/minha-vez").json()["itens"]
+        assert [(i["id"], i["acao"]) for i in vez] == [(caso, "Confirmar a triagem")]
+        comite.ok(SUPLENTE, caso, "triagem", DENTRO_RAPIDO)
+
+    def test_sem_suplente_livre_o_impedimento_vale_e_ninguem_mais_e_convocado(self, comite):
+        caso = comite.caso()
+        comite.ok(MEMBRO, caso, "impedimento", {"motivo": "parte"})
+
+        comite.ok(SEGUNDO_LEITOR, caso, "impedimento", {"motivo": "parte"})
+
+        assert _recusado(comite.abrir(SEGUNDO_LEITOR, caso))
+        convocados = [a for a in comite.banco.tabelas["conduta_atribuicoes"] if a["motivo"] == "suplente_convocado"]
+        assert [(a["participante_id"], a["substitui_id"]) for a in convocados] == [(SUPLENTE, MEMBRO)]

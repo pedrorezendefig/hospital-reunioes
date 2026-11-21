@@ -12,10 +12,15 @@ mudar o banco: sem a linha, nada acontece.
 
 from __future__ import annotations
 
-from app.services.conduta import trilha
+import logging
+
+from app.services.conduta import membros, trilha
+from app.services.conduta.acesso import hoje_em_sao_paulo
 from app.services.conduta.portao import CasoAberto
-from app.services.conduta.ritos import agora_utc
+from app.services.conduta.ritos import PAPEIS_VOTANTES, agora_utc
 from app.services.conduta.triagem import AcaoRecusadaError
+
+logger = logging.getLogger(__name__)
 
 MOTIVOS = {
     "parte": "parte no caso",
@@ -45,10 +50,69 @@ def _impedir(supabase, caso_id: str, pessoa_id: str, motivo: str) -> None:
         ).execute()
 
 
+def _suplente_livre(supabase, caso_id: str) -> str | None:
+    """O primeiro suplente vigente, com o Termo assinado, que ainda não tem
+    nada no caso (convocação, impedimento) e não é Citado nele."""
+    comite_id = membros.id_do_comite(supabase)
+    if not comite_id:
+        return None
+    hoje = hoje_em_sao_paulo()
+    candidatos = sorted(
+        (
+            p
+            for p in membros.participacoes(supabase, comite_id)
+            if p["papel"] == "suplente" and p.get("termo_assinado_em") and membros.vigente_em(p, hoje)
+        ),
+        key=lambda p: (str(p["vigencia_inicio"]), p["participante_id"]),
+    )
+    no_caso = supabase.table("conduta_atribuicoes").select("participante_id").eq("caso_id", caso_id).execute().data
+    citados = supabase.table("conduta_citados").select("participante_id").eq("caso_id", caso_id).execute().data
+    ocupados = {linha["participante_id"] for linha in (no_caso or []) + (citados or [])}
+    return next((p["participante_id"] for p in candidatos if p["participante_id"] not in ocupados), None)
+
+
+def _avisar_o_suplente(supabase, suplente_id: str) -> None:
+    """Sino, sem protocolo nem conteúdo. O aviso não desfaz a convocação."""
+    try:
+        supabase.table("notificacoes").insert(
+            {
+                "destinatario_id": suplente_id,
+                "tipo": membros.TIPO_DO_AVISO,
+                "titulo": "Convocação no Comitê de Conduta",
+                "mensagem": "Você foi convocado como suplente para um caso. Veja em Casos, no Canal de Conduta.",
+            }
+        ).execute()
+    except Exception as erro:  # noqa: BLE001
+        logger.error("[conduta_impedimento] Aviso da convocação não gravado no sino: %s", erro)
+
+
+def _convocar_no_lugar(supabase, caso_id: str, impedido_id: str, papel: str | None) -> None:
+    """Quem ficou impedido votava no caso: um suplente entra no lugar, com o
+    papel do substituído. Sem suplente livre, a trilha diz isso."""
+    if papel not in PAPEIS_VOTANTES:
+        return
+    suplente = _suplente_livre(supabase, caso_id)
+    if suplente is None:
+        trilha.registrar(supabase, caso_id, None, "sem_suplente", "nenhum suplente livre para convocar")
+        return
+    trilha.registrar(supabase, caso_id, None, "convocacao", "convocou um suplente no lugar de quem ficou impedido")
+    supabase.table("conduta_atribuicoes").insert(
+        {
+            "caso_id": caso_id,
+            "participante_id": suplente,
+            "motivo": "suplente_convocado",
+            "substitui_id": impedido_id,
+            "substitui_papel": papel,
+        }
+    ).execute()
+    _avisar_o_suplente(supabase, suplente)
+
+
 def declarar_impedimento(supabase, aberto: CasoAberto, *, motivo: str) -> dict:
     if motivo not in MOTIVOS:
         raise AcaoRecusadaError(422, "Escolha o motivo do impedimento.")
     caso_id = aberto.caso["id"]
     trilha.registrar(supabase, caso_id, aberto.autor_id, "impedimento", f"declarou impedimento: {MOTIVOS[motivo]}")
     _impedir(supabase, caso_id, aberto.autor_id, motivo)
+    _convocar_no_lugar(supabase, caso_id, aberto.autor_id, aberto.pessoa.papel)
     return aberto.caso
