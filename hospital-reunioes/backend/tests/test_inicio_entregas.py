@@ -293,6 +293,9 @@ class TestCicloNovo:
 
         assert _numeros(_rota(monkeypatch, ANA, banco)) == (0, 1)
 
+    def test_o_evento_da_migracao_para_o_ciclo_novo_nao_e_entrega(self):
+        assert _conta(_evento("A1", "migracao", "2026-11-01", prazo_antes="2026-10-30")) == (0, 0)
+
     def test_a_reuniao_do_nucleo_que_a_pessoa_nao_alcanca_fica_fora(self, monkeypatch, nucleo):
         nucleo["ocultas"] = ["RN"]
         banco = _Banco(
