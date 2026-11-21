@@ -126,6 +126,7 @@ describe("versão do rodapé", () => {
  * ainda cai em `experimental.proxyTimeout` (30 s por padrão), menos do que um
  * prontuário de dezenas de MB leva numa conexão residencial.
  */
+import { LIMITE_DO_AUDIO } from "@/lib/conduta/depoimentos";
 import { LIMITE_POR_ARQUIVO } from "@/lib/contas-medicas/envio";
 
 describe("corpo dos envios pelo rewrite", () => {
@@ -134,6 +135,12 @@ describe("corpo dos envios pelo rewrite", () => {
 
     expect(typeof teto).toBe("number");
     expect(teto as number).toBeGreaterThan(LIMITE_POR_ARQUIVO + 1024 * 1024);
+  });
+
+  it("o teto do corpo cabe o áudio do depoimento do Canal de Conduta mais o envelope (issue #1830)", () => {
+    const teto = nextConfig.experimental?.middlewareClientMaxBodySize;
+
+    expect(teto as number).toBeGreaterThan(LIMITE_DO_AUDIO + 1024 * 1024);
   });
 
   it("o repasse ao backend espera pelo menos dez minutos", () => {

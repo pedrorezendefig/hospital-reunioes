@@ -88,6 +88,10 @@ ROTAS_TOKENIZADAS = [
 PARAMS_DE_SEGREDO = {"token"}
 PARAMS_SEM_SEGREDO = {
     "anexo_id",
+    # UUID de um arquivo do depoimento do Canal de Conduta (issue #1830). Não é
+    # credencial: a rota passa pelo portão do caso, e o arquivo só sai se for
+    # do depoimento daquele caso, com a abertura gravada na trilha.
+    "arquivo_id",
     # Caminho de um arquivo do Retrato da Ana dentro de `retrato/` (issue
     # #1720), como `assets/retrato.css`. Não é credencial: a rota exige
     # require_super_admin e só aceita a página, os assets e os dados.
@@ -123,6 +127,9 @@ PARAMS_SEM_SEGREDO = {
     # abre a rota passa pelo `require_super_admin`, e o id sozinho nao da
     # acesso a nada, como o `produto_id` ao lado.
     "demanda_id",
+    # UUID do depoimento do Canal de Conduta (issue #1830). Não é credencial: a
+    # rota passa pelo portão do caso e só acha o depoimento daquele caso.
+    "depoimento_id",
     # UUID de uma versão de documento do Núcleo (issue #1767). Não é
     # credencial: a rota exige `require_recurso_nsp("documentos")`.
     "documento_id",

@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field, field_validator
 from supabase import Client
 
 from app.dependencies import get_supabase_client
-from app.services.conduta import cifra, configuracoes, triagem
+from app.services.conduta import cifra, configuracoes, depoimentos, triagem
 from app.services.conduta.acesso import CAMPOS_DA_LISTA, hoje_em_sao_paulo
 from app.services.conduta.portao import (
     INDISPONIVEL,
@@ -90,6 +90,7 @@ async def abrir_caso(aberto: CasoAberto = Depends(portao_do_caso), supabase: Cli
         contestacao = triagem.contestacao_para_a_tela(supabase, caso["id"])
         prorrogacao = cifra.decifrar_texto(caso["prorrogacao_cifrada"]) if caso.get("prorrogacao_cifrada") else None
         orientacao = cifra.decifrar_texto(caso["orientacao_cifrada"]) if caso.get("orientacao_cifrada") else None
+        cartoes = depoimentos.para_a_tela(supabase, caso)
     except cifra.CifraIndisponivelError as erro:
         raise _indisponivel(erro) from erro
     vencidos = triagem.registrar_vencidos(supabase, [caso], hoje_em_sao_paulo())
@@ -111,6 +112,7 @@ async def abrir_caso(aberto: CasoAberto = Depends(portao_do_caso), supabase: Cli
         if caso.get("rito") == "completo"
         else None,
         "orientacao": orientacao,
+        **cartoes,
     }
 
 

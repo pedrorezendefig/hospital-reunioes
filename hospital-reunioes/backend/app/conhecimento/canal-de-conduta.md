@@ -33,6 +33,26 @@ A triagem e os ritos:
 - o rito Completo prorroga uma única vez, por mais 30 dias, com justificativa escrita, que fica guardada cifrada;
 - no Encaminhamento (assunto fora do canal), depois da conferência do segundo leitor, a coordenação confirma a resposta padrão num clique e o caso encerra como "Encaminhado". A resposta diz ao relator que o assunto não é tratado no canal, para onde ele deve ir e que assédio, ameaça ou retaliação viram um novo relato.
 
+## Os depoimentos
+
+Na etapa Apuração, o botão "ADICIONAR PESSOA A OUVIR" cria um cartão para cada pessoa ouvida, com o nome, o cargo e o papel: acusado, testemunha ou denunciante identificado. A gravação e a transcrição são feitas fora do aplicativo, na plataforma de gravação do hospital, e o cartão recebe os arquivos depois.
+
+- Cada arquivo tem o seu botão, sem escolher o tipo: "ANEXAR TRANSCRIÇÃO DO DEPOIMENTO" (TXT, VTT, DOCX ou PDF), "ANEXAR ÁUDIO DO DEPOIMENTO" (MP3, M4A ou OGG, até 300 MB, o que cabe um depoimento de duas horas) e "ANEXAR TERMO ASSINADO" (PDF ou foto).
+- O termo assinado também sobe pela câmera do celular: "FOTOGRAFAR TERMO ASSINADO" abre a câmera, uma foto por página, e as páginas vão juntas.
+- Mandar um arquivo de novo cria uma versão nova, e a anterior continua guardada. O cartão mostra todas as versões, com quem enviou e quando.
+- Os arquivos ficam cifrados e só abrem pelo aplicativo, para quem abre o caso. Não existe link para baixar direto. O áudio toca na própria tela. Cada abertura de arquivo fica registrada.
+- O nome e o cargo da pessoa ouvida ficam guardados cifrados.
+- O cartão mostra "Aguardando assinatura" até o termo assinado chegar.
+
+"CONCLUIR DEPOIMENTO" só libera com os sete itens da lista de conferência marcados. Enquanto falta algum, o botão fica bloqueado e a tela diz o que falta.
+
+- Três itens se marcam sozinhos quando o arquivo chega: transcrição, áudio e termo assinado.
+- Quatro são declarações de quem conduziu: "Abri os arquivos na aplicação e estão corretos", "Apaguei a gravação de áudio da plataforma de gravação", "Apaguei os arquivos do computador e do celular" e "Guardei o original assinado no envelope do caso". Cada uma guarda quem marcou e quando, e não se desmarca.
+- Quando a pessoa não aceita gravação, quem conduz toca em "A PESSOA NÃO ACEITOU GRAVAÇÃO", escreve o motivo e digita os pontos da conversa, que fazem as vezes da transcrição. Os itens de transcrição e de áudio ficam "Não se aplica", com o motivo, e o termo assinado continua obrigatório.
+- O depoimento concluído não muda mais.
+
+A etapa Apuração só avança com todos os depoimentos concluídos. Com algum em aberto, a tela diz quantos faltam.
+
 ## As configurações e os textos
 
 A coordenação do Comitê edita, na tela Configurações:
@@ -88,7 +108,7 @@ Quem não tem acesso recebe a mesma recusa, exista o caso ou não.
 
 ## O que ele ainda não faz
 
-O formulário público de relato, as páginas públicas que vão mostrar os textos das configurações, a página de acompanhamento, a sugestão do agente na triagem, a Rota Especial, as perguntas ao relator, os depoimentos, o voto, a ata, o dossiê e o Termo de Confidencialidade e Posse do membro chegam nas próximas entregas. Na apuração, o botão "ADICIONAR PESSOA A OUVIR" aparece bloqueado até os depoimentos chegarem. O item Comitê de Conduta do menu lateral abre a tela Membros; MINHA VEZ, Casos e Configurações abrem pelo endereço do Comitê de Conduta. Por enquanto ninguém relata pelo Canal: os relatos continuam chegando pela Ouvidoria.
+O formulário público de relato, as páginas públicas que vão mostrar os textos das configurações, a página de acompanhamento, a sugestão do agente na triagem, a Rota Especial, as perguntas ao relator, o roteiro de perguntas e o termo de declaração redigidos pelo agente, o voto, a ata, o dossiê e o Termo de Confidencialidade e Posse do membro chegam nas próximas entregas. Por enquanto, o termo de declaração é redigido fora do aplicativo e só a cópia assinada entra no cartão. O item Comitê de Conduta do menu lateral abre a tela Membros; MINHA VEZ, Casos e Configurações abrem pelo endereço do Comitê de Conduta. Por enquanto ninguém relata pelo Canal: os relatos continuam chegando pela Ouvidoria.
 
 ## O que já foi decidido
 
@@ -109,5 +129,10 @@ O formulário público de relato, as páginas públicas que vão mostrar os text
 - Pedido para tirar o prazo vencido de um caso: não existe; o vencido fica registrado mesmo depois da prorrogação.
 - Pedido para prorrogar de novo um caso do rito Completo, ou prorrogar um caso do rito Rápido: o rito Completo prorroga uma vez só, e os outros não prorrogam.
 - A coordenação que não consegue encerrar um Encaminhamento: costuma faltar a conferência do segundo leitor.
+- "CONCLUIR DEPOIMENTO" que não libera: falta algum dos sete itens da lista; a tela diz qual.
+- Pedido para trocar ou apagar um arquivo do depoimento: não existe; mande a versão nova, e a anterior fica guardada.
+- Pedido para desmarcar uma declaração da lista ou reabrir um depoimento concluído: não existe; a declaração e o depoimento concluído ficam como estão.
+- Áudio que não sobe: o botão aceita MP3, M4A ou OGG de até 300 MB.
+- A Apuração que não avança: há depoimento em aberto.
 - Pedido para apagar ou corrigir uma versão antiga de um texto: não existe; salva-se uma versão nova, e a antiga fica.
 - Pedido de um item novo nas configurações: entra por Demanda, porque a lista de itens é fixa.

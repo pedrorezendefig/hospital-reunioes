@@ -260,6 +260,30 @@ describe("a tela do caso", () => {
     expect(botao.disabled).toBe(true);
     expect(screen.getByText("Só a coordenação prorroga o prazo.")).toBeTruthy();
   });
+
+  it("na Apuração, ADICIONAR PESSOA A OUVIR abre o cartão novo, e a tela mostra os depoimentos", async () => {
+    respostas = {
+      "/casos/c1": {
+        ...CASO,
+        rito: "rapido",
+        etapa: "apuracao",
+        orientacao: null,
+        o_que_fazer_agora: {
+          ...CASO.o_que_fazer_agora,
+          botao: "ADICIONAR PESSOA A OUVIR",
+          acao: "adicionar_pessoa",
+          bloqueio: null,
+        },
+        depoimentos: [],
+        avanco_da_apuracao: null,
+      },
+    };
+    render(<TelaDoCaso casoId="c1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "ADICIONAR PESSOA A OUVIR" }));
+
+    expect(screen.getByRole("form", { name: "Adicionar pessoa a ouvir" })).toBeTruthy();
+  });
 });
 
 const PASTAS = [resolve(process.cwd(), "src/components/conduta"), resolve(process.cwd(), "src/app/comite-de-conduta")];
