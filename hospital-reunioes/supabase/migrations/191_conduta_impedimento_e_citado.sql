@@ -68,6 +68,9 @@ COMMENT ON TABLE conduta_contestacoes_de_participacao IS
 CREATE UNIQUE INDEX IF NOT EXISTS idx_conduta_contestacoes_de_participacao_aberta
   ON conduta_contestacoes_de_participacao (caso_id, contestado_id)
   WHERE decidida_em IS NULL;
+-- A tela do caso, a contestação e a decisão leem as contestações só por caso.
+CREATE INDEX IF NOT EXISTS idx_conduta_contestacoes_de_participacao_caso
+  ON conduta_contestacoes_de_participacao (caso_id);
 CREATE INDEX IF NOT EXISTS idx_conduta_contestacoes_de_participacao_contestado
   ON conduta_contestacoes_de_participacao (contestado_id);
 CREATE INDEX IF NOT EXISTS idx_conduta_contestacoes_de_participacao_autor

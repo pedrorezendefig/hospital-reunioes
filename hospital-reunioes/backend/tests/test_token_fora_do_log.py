@@ -117,6 +117,10 @@ PARAMS_SEM_SEGREDO = {
     # exige "enviar e corrigir contas" e ser a faturista da Conta (ou ter o
     # painel completo), entao o id sozinho nao abre porta nenhuma.
     "conta_id",
+    # UUID da contestação da participação no Canal de Conduta (issue #1828).
+    # Não é credencial: a decisão passa pelo portão do caso, e o id só vale
+    # dentro do caso_id do mesmo path.
+    "contestacao_id",
     "convenio_id",
     "data",
     # UUID da Demanda da aba Tecnologia (issue #637). Nao e credencial: quem

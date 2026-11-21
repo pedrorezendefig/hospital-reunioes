@@ -118,6 +118,15 @@ def test_uma_contestacao_aberta_por_pessoa_em_cada_caso(banco):
     assert _contestar(banco, caso, autor="P3").returncode == 0
 
 
+def test_a_busca_das_contestacoes_do_caso_tem_indice(banco):
+    # A tela do caso lê as contestações só por caso_id; o índice único parcial
+    # (caso_id, contestado_id) WHERE decidida_em IS NULL não serve a essa busca.
+    definicoes = banco.ok(
+        "SELECT indexdef FROM pg_indexes WHERE tablename = 'conduta_contestacoes_de_participacao';"
+    ).splitlines()
+    assert any(d.rstrip().endswith("(caso_id)") for d in definicoes), definicoes
+
+
 def test_ninguem_contesta_a_si_mesmo(banco):
     assert _contestar(banco, _caso(banco), contestado="P1", autor="P1").returncode != 0
 
