@@ -1,6 +1,6 @@
-"""A migration 190 do Canal de Conduta num Postgres de verdade (issue #1830).
+"""A migration 193 do Canal de Conduta num Postgres de verdade (issue #1830).
 
-Sobe um Postgres descartável, aplica a 175 e a 190 (a 190 duas vezes) sobre o
+Sobe um Postgres descartável, aplica a 175 e a 193 (a 193 duas vezes) sobre o
 mínimo de antes e prova no banco:
 
 - a etapa Apuração não avança com depoimento em aberto;
@@ -27,7 +27,7 @@ from test_conduta_migration_banco import ESQUEMA_ANTERIOR
 from test_conduta_migration_banco import MIGRATION as MIGRATION_175
 from test_pendencia_historico_banco import _bin_do_postgres, _Postgres
 
-MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "190_conduta_depoimentos.sql"
+MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "193_conduta_depoimentos.sql"
 
 TABELAS_NOVAS = ("conduta_depoimentos", "conduta_depoimento_arquivos", "conduta_depoimento_conferencia")
 # 300 MB de áudio, mais o nonce e a etiqueta da cifra (28 bytes).
@@ -42,7 +42,7 @@ def banco():
             pytest.fail("O CI precisa do initdb para provar as travas do depoimento no banco.")
         pytest.skip("Sem initdb nesta máquina.")
     pg = _Postgres(bindir)
-    pg.porta = "54190"
+    pg.porta = "54193"
     pg.subir()
     try:
         pg.ok(ESQUEMA_ANTERIOR)
@@ -144,6 +144,18 @@ def test_o_resto_do_caso_muda_com_depoimento_em_aberto(banco):
     r = banco.sql(f"UPDATE conduta_casos SET categoria = 'B' WHERE id = '{caso}';", papel="service_role")
 
     assert r.returncode == 0
+
+
+def test_a_contestacao_da_triagem_sai_da_apuracao_com_depoimento_em_aberto(banco):
+    """O rito Rápido e o Completo entram na Apuração antes da conferência, e o
+    segundo leitor ainda contesta dali. Contestar não é avançar a Apuração."""
+    caso = _caso(banco)
+    _depoimento(banco, caso)
+
+    r = banco.sql(f"UPDATE conduta_casos SET etapa = 'contestada' WHERE id = '{caso}';", papel="service_role")
+
+    assert r.returncode == 0, r.stderr
+    assert banco.ok(f"SELECT etapa FROM conduta_casos WHERE id = '{caso}';") == "contestada"
 
 
 # ── O arquivo guardado e as versões ─────────────────────────────────────────
@@ -278,5 +290,5 @@ def test_nenhum_dado_de_pessoa_entra_pela_migration():
     assert re.search(r"INSERT INTO (participacoes|participantes)", sql, re.IGNORECASE) is None
 
 
-def test_o_recibo_e_o_190(banco):
-    assert banco.ok("SELECT max(numero) FROM migracoes_aplicadas;") == "190"
+def test_o_recibo_e_o_193(banco):
+    assert banco.ok("SELECT max(numero) FROM migracoes_aplicadas;") == "193"

@@ -1,5 +1,5 @@
 -- =====================================================
--- Migration 190: Canal de Conduta, o depoimento da Apuração
+-- Migration 193: Canal de Conduta, o depoimento da Apuração
 -- (issue #1830, PRD #1786, ADR 0097, decisão 2; especificação, 7.1 e 7.2)
 -- =====================================================
 -- O que entra:
@@ -179,9 +179,11 @@ CREATE TRIGGER trg_conduta_depoimento_conferencia_em_aberto
   FOR EACH ROW EXECUTE FUNCTION conduta_depoimento_em_aberto();
 
 -- ---------- 4. A Apuração só avança com os depoimentos concluídos ----------
+-- A ida para 'contestada' não é avanço: o rito Rápido e o Completo entram na
+-- Apuração antes da conferência, e o segundo leitor ainda contesta dali.
 CREATE OR REPLACE FUNCTION conduta_apuracao_com_depoimentos_concluidos() RETURNS TRIGGER AS $$
 BEGIN
-  IF OLD.etapa = 'apuracao' AND NEW.etapa IS DISTINCT FROM 'apuracao' AND EXISTS (
+  IF OLD.etapa = 'apuracao' AND NEW.etapa NOT IN ('apuracao', 'contestada') AND EXISTS (
        SELECT 1 FROM conduta_depoimentos WHERE caso_id = NEW.id AND concluido_em IS NULL
      ) THEN
     RAISE EXCEPTION 'A Apuração só avança com todos os depoimentos concluídos'
@@ -205,4 +207,4 @@ COMMIT;
 
 
 -- recibo: a subida espera este número no /api/health (issue #969)
-INSERT INTO migracoes_aplicadas (numero) VALUES (190) ON CONFLICT (numero) DO NOTHING;
+INSERT INTO migracoes_aplicadas (numero) VALUES (193) ON CONFLICT (numero) DO NOTHING;
