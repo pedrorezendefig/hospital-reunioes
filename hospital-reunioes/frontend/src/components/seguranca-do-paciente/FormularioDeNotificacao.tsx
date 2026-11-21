@@ -33,6 +33,11 @@ import {
 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import {
+  PerguntasDeEsclarecimento,
+  usePerguntasDeEsclarecimento,
+  type ChaveDoAcompanhamento,
+} from "@/components/seguranca-do-paciente/PerguntasDeEsclarecimento";
 import { ACEITOS_NO_CAMPO, conferirArquivos, reduzirFoto, tamanhoLegivel } from "@/lib/seguranca-do-paciente/anexos";
 import {
   AVISO_DO_PACIENTE,
@@ -176,7 +181,15 @@ function CodigoDeAcompanhamento({ codigo }: { codigo: string }) {
   );
 }
 
-function Confirmacao({ recibo }: { recibo: Recibo }) {
+function Confirmacao({ recibo, contato }: { recibo: Recibo; contato: string }) {
+  // A chave do acompanhamento: o código na anônima, o contato na identificada.
+  const chave: ChaveDoAcompanhamento | null = recibo.codigo_acompanhamento
+    ? { protocolo: recibo.protocolo, codigo: recibo.codigo_acompanhamento }
+    : contato
+      ? { protocolo: recibo.protocolo, contato }
+      : null;
+  const perguntas = usePerguntasDeEsclarecimento(chave, true);
+
   return (
     <div className="bg-white rounded-2xl border border-emerald-200 shadow-premium px-5 py-8 text-center space-y-4">
       <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" aria-hidden />
@@ -194,6 +207,7 @@ function Confirmacao({ recibo }: { recibo: Recibo }) {
         </p>
       )}
       {recibo.codigo_acompanhamento && <CodigoDeAcompanhamento codigo={recibo.codigo_acompanhamento} />}
+      {chave && <PerguntasDeEsclarecimento chave={chave} perguntas={perguntas} responderDepois />}
       <Link href="/notificar/acompanhar" className={BOTAO_SECUNDARIO + " w-full"}>
         Acompanhar a notificação
       </Link>
@@ -348,7 +362,10 @@ export function FormularioDeNotificacao({ porta, identificacao = null }: Props) 
     }
   }
 
-  if (recibo) return <Confirmacao recibo={recibo} />;
+  if (recibo) {
+    const contato = form.anonimo ? "" : porta === "modulo" ? (identificacao?.contato ?? "") : form.contato.trim();
+    return <Confirmacao recibo={recibo} contato={contato} />;
+  }
 
   return (
     <form

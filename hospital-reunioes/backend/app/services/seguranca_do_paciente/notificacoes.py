@@ -163,15 +163,18 @@ def manifestacao_do_caso(supabase, caso_id: str) -> str | None:
     return linhas[0].get("manifestacao_id") if linhas else None
 
 
-def consultar(supabase, protocolo: str, codigo: str | None, contato: str | None) -> dict[str, str] | None:
-    """O que a página de acompanhamento mostra, ou `None` para toda recusa.
+def conferir(supabase, protocolo: str, codigo: str | None, contato: str | None) -> dict[str, Any] | None:
+    """A notificação do protocolo, quando o código ou o contato conferem, ou
+    `None` para toda recusa.
 
     Reusa as conferências da Ouvidoria: o código pelo hash, o contato pelo
     e-mail sem caixa ou pelos dígitos do telefone. A recusa é uma só, para não
     ensinar quais protocolos existem (`ouvidoria_acompanhamento`)."""
     linhas = (
         supabase.table("nsp_notificacoes")
-        .select("protocolo, estado, anonimo, codigo_acompanhamento_hash, notificante_contato")
+        .select(
+            "id, protocolo, estado, anonimo, codigo_acompanhamento_hash, notificante_contato, classificar_manualmente"
+        )
         .eq("protocolo", (protocolo or "").strip().upper())
         .limit(1)
         .execute()
@@ -189,6 +192,14 @@ def consultar(supabase, protocolo: str, codigo: str | None, contato: str | None)
     elif not contato or not ouvidoria_acompanhamento.contato_confere(
         contato, {"manifestante_contato": caso.get("notificante_contato")}
     ):
+        return None
+    return caso
+
+
+def consultar(supabase, protocolo: str, codigo: str | None, contato: str | None) -> dict[str, str] | None:
+    """O que a página de acompanhamento mostra, ou `None` para toda recusa."""
+    caso = conferir(supabase, protocolo, codigo, contato)
+    if caso is None:
         return None
     return {"protocolo": caso["protocolo"], "estado": ESTADO_PUBLICO.get(caso.get("estado"), RECEBIDA)}
 

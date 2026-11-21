@@ -208,12 +208,13 @@ def _sem_quem_notificou(relato: str, nome: str | None, contato: str | None) -> s
     return relato
 
 
-def entrada_da_notificacao(linha: dict, *, setor: str | None) -> dict:
+def entrada_da_notificacao(linha: dict, *, setor: str | None, esclarecimentos: str = "") -> dict:
     """Os campos do formato de entrada do Anexo B, e só eles, a partir da
-    linha da notificação. O relato já sai pseudonimizado."""
-    relato = _sem_quem_notificou(
-        linha.get("relato") or "", linha.get("notificante_nome"), linha.get("notificante_contato")
-    )
+    linha da notificação. O relato e as respostas de esclarecimento (issue
+    #1991) já saem pseudonimizados e sem o nome e o contato de quem notificou."""
+    nome, contato = linha.get("notificante_nome"), linha.get("notificante_contato")
+    relato = _sem_quem_notificou(linha.get("relato") or "", nome, contato)
+    esclarecimentos = _sem_quem_notificou(esclarecimentos or "", nome, contato)
     grave = linha.get("grave_ou_morte")
     return {
         "relato": pseudonimizar(relato),
@@ -223,7 +224,7 @@ def entrada_da_notificacao(linha: dict, *, setor: str | None) -> dict:
         "atingiu_paciente": _ATINGIU_O_PACIENTE.get(linha.get("chegou_ao_paciente"), "nao_sei"),
         "grave_ou_morte": "nao_respondido" if grave is None else ("sim" if grave else "nao"),
         "percepcao_familia": _PERCEPCAO.get(linha.get("percebido_ou_reclamacao"), ""),
-        "esclarecimentos": "",
+        "esclarecimentos": pseudonimizar(esclarecimentos) if esclarecimentos else "",
     }
 
 

@@ -11,7 +11,7 @@
  * errado. A régua do servidor está em
  * `backend/tests/test_seguranca_do_paciente_notificacoes.py`.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AcompanharNotificacaoPage from "./page";
@@ -65,9 +65,15 @@ describe("acompanhar a notificação", () => {
     fireEvent.click(botao("Consultar"));
 
     await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Em análise"));
+    // Depois do estado, as perguntas de esclarecimento, com a mesma chave (issue #1991).
+    await waitFor(() => expect(enviados).toHaveLength(2));
     expect(enviados).toEqual([
       {
         url: "/api/nsp/publico/acompanhamento",
+        corpo: { protocolo: "NSP-2026-0007", codigo: "ABCDE-FGHJK" },
+      },
+      {
+        url: "/api/nsp/publico/perguntas",
         corpo: { protocolo: "NSP-2026-0007", codigo: "ABCDE-FGHJK" },
       },
     ]);
@@ -99,5 +105,60 @@ describe("acompanhar a notificação", () => {
 
     await waitFor(() => expect(screen.getByRole("alert").textContent).toBe(recusa));
     expect(screen.queryByRole("status")).toBeNull();
+  });
+});
+
+describe("as perguntas de esclarecimento no acompanhamento (issue #1991)", () => {
+  const PERGUNTA = "O paciente precisou de transfusão?";
+
+  function servidorComPerguntas(perguntas: string[], depois: string[] = []) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        enviados.push({ url, corpo: JSON.parse(String(init?.body ?? "{}")) });
+        const corpo =
+          url === "/api/nsp/publico/acompanhamento"
+            ? { protocolo: "NSP-2026-0007", estado: "Recebida" }
+            : url === "/api/nsp/publico/perguntas"
+              ? { perguntas, aguardando: false }
+              : { perguntas: depois };
+        return { ok: true, status: 200, json: async () => corpo } as Response;
+      })
+    );
+  }
+
+  async function consultarComContato() {
+    render(<AcompanharNotificacaoPage />);
+    fireEvent.click(botao("Notifiquei com o meu nome"));
+    escrever("Protocolo", "NSP-2026-0007");
+    escrever("E-mail ou telefone", "profissional@hsm.test");
+    fireEvent.click(botao("Consultar"));
+    await waitFor(() => expect(screen.getByText("Recebida")).toBeTruthy());
+  }
+
+  it("mostra as perguntas sem resposta e aceita a resposta pelo protocolo e contato", async () => {
+    servidorComPerguntas([PERGUNTA]);
+    await consultarComContato();
+
+    const bloco = await screen.findByRole("region", { name: "Perguntas do Núcleo" });
+    expect(within(bloco).queryByRole("link", { name: "Responder depois" })).toBeNull();
+    fireEvent.change(within(bloco).getByLabelText(PERGUNTA), { target: { value: "Sim, duas bolsas." } });
+    fireEvent.click(within(bloco).getByRole("button", { name: "Enviar respostas" }));
+
+    await waitFor(() => expect(screen.getByText("Obrigado. A resposta chegou ao Núcleo.")).toBeTruthy());
+    expect(enviados.find((e) => e.url === "/api/nsp/publico/respostas")?.corpo).toEqual({
+      protocolo: "NSP-2026-0007",
+      contato: "profissional@hsm.test",
+      respostas: [{ pergunta: PERGUNTA, resposta: "Sim, duas bolsas." }],
+    });
+    expect(screen.queryByLabelText(PERGUNTA)).toBeNull();
+  });
+
+  it("sem pergunta em aberto, a página mostra só o estado", async () => {
+    servidorComPerguntas([]);
+    await consultarComContato();
+
+    await waitFor(() => expect(enviados.some((e) => e.url === "/api/nsp/publico/perguntas")).toBe(true));
+    expect(screen.queryByRole("region", { name: "Perguntas do Núcleo" })).toBeNull();
   });
 });

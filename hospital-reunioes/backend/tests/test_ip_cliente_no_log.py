@@ -386,12 +386,15 @@ QR = "/api/ouvidoria/qr"
 
 # As operações sem `security` que nem truncam: saem do log SEM endereço
 # nenhum, pelo limite sem IP (issue #1986, ADR 0107 decisão 6). A notificação
-# de incidente do Núcleo (issue #1987). A conferência de que cada uma usa o
-# serviço de verdade está em `test_o_canal_sem_endereco_usa_o_limite_sem_ip`.
+# de incidente do Núcleo (issue #1987) e as perguntas de esclarecimento dela
+# (issue #1991). A conferência de que cada uma usa o serviço de verdade está em
+# `test_o_canal_sem_endereco_usa_o_limite_sem_ip`.
 SEM_ENDERECO_NO_LOG = {
     "GET /api/nsp/publico/setores",
     "POST /api/nsp/publico/acompanhamento",
     "POST /api/nsp/publico/notificacoes",
+    "POST /api/nsp/publico/perguntas",
+    "POST /api/nsp/publico/respostas",
 }
 
 # As operações que o schema mostra sem `security` e que mesmo assim NÃO

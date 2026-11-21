@@ -29,6 +29,10 @@ beforeEach(() => {
       if (url === "/api/nsp/publico/setores") {
         return { ok: true, status: 200, json: async () => ({ setores: [{ id: "setor-uti", nome: "UTI Adulto" }] }) } as Response;
       }
+      if (url === "/api/nsp/publico/perguntas") {
+        // A confirmação pergunta se o agente propôs perguntas (issue #1991).
+        return { ok: true, status: 200, json: async () => ({ perguntas: [], aguardando: false }) } as Response;
+      }
       envios.push({ url, corpo: JSON.parse(String(init?.body ?? "{}")) });
       return {
         ok: true,

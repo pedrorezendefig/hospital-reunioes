@@ -44,7 +44,7 @@ from app.dependencies import (
 from app.limiter import limiter
 from app.services import limite_sem_ip, ouvidoria_nucleo
 from app.services.ouvidoria_anexos import AnexoGrandeDemaisError, AnexoRecusadoError, TipoNaoPermitidoError
-from app.services.seguranca_do_paciente import agente_de_triagem, anexos, caso_grave, notificacoes
+from app.services.seguranca_do_paciente import agente_de_triagem, anexos, caso_grave, esclarecimentos, notificacoes
 from app.services.seguranca_do_paciente.permissao import hoje_em_sao_paulo
 
 logger = logging.getLogger(__name__)
@@ -397,6 +397,95 @@ async def acompanhar_notificacao(
     if situacao is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=NAO_ENCONTRADA)
     return situacao
+
+
+# A confirmação pergunta de novo enquanto o agente lê a notificação: a conta
+# é própria, para não gastar a do acompanhamento.
+LIMITE_DAS_PERGUNTAS = "60/minute;600/hour"
+FALHA_DAS_PERGUNTAS = "Não foi possível falar com o hospital agora. Tente novamente em instantes."
+PERGUNTA_SEM_VAGA = "Essa pergunta já foi respondida ou não está mais aberta. Consulte de novo."
+
+
+def _caso_conferido(supabase, consulta: ConsultaDeAcompanhamento) -> dict:
+    try:
+        caso = notificacoes.conferir(supabase, consulta.protocolo, consulta.codigo, consulta.contato)
+    except (APIError, httpx.HTTPError) as erro:
+        logger.error("Falha ao conferir a notificação para as perguntas: %s", type(erro).__name__)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=FALHA_DAS_PERGUNTAS) from erro
+    if caso is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=NAO_ENCONTRADA)
+    return caso
+
+
+@router.post("/publico/perguntas")
+@limite_sem_ip.limitar(LIMITE_DAS_PERGUNTAS)
+async def perguntas_de_esclarecimento(
+    request: Request,
+    consulta: ConsultaDeAcompanhamento,
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """As perguntas do agente que ainda esperam resposta (issue #1991), com a
+    mesma chave do acompanhamento. `aguardando` diz que o agente ainda não
+    leu a notificação: a confirmação pergunta de novo daqui a pouco."""
+    caso = _caso_conferido(supabase, consulta)
+    try:
+        abertas, ultima = esclarecimentos.pendentes(supabase, caso["id"])
+    except (APIError, httpx.HTTPError) as erro:
+        logger.error("Falha ao ler as perguntas de esclarecimento: %s", type(erro).__name__)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=FALHA_DAS_PERGUNTAS) from erro
+    aguardando = (
+        ultima is None
+        and not caso.get("classificar_manualmente")
+        and not esclarecimentos.triagem_confirmada(caso)
+        and agente_de_triagem.agente_ligado()
+    )
+    return {"perguntas": abertas, "aguardando": aguardando}
+
+
+class RespostaDeEsclarecimento(BaseModel):
+    pergunta: str = Field(..., min_length=1, max_length=1000)
+    resposta: str = Field(..., max_length=500)
+
+    @field_validator("resposta")
+    @classmethod
+    def _com_texto(cls, valor: str) -> str:
+        valor = valor.strip()
+        if not valor:
+            raise ValueError("Escreva a resposta.")
+        return valor
+
+
+class EnvioDeRespostas(ConsultaDeAcompanhamento):
+    respostas: list[RespostaDeEsclarecimento] = Field(..., min_length=1, max_length=2)
+
+
+@router.post("/publico/respostas")
+@limite_sem_ip.limitar(LIMITE_DA_REDE)
+async def responder_as_perguntas(
+    request: Request,
+    envio: EnvioDeRespostas,
+    tarefas: BackgroundTasks,
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """Quem notificou responde as perguntas, na confirmação ou no
+    acompanhamento. O agente lê de novo depois da resposta, só enquanto a
+    triagem não foi confirmada; depois, a resposta só fica gravada."""
+    caso = _caso_conferido(supabase, envio)
+    try:
+        esclarecimentos.responder(supabase, caso, [(item.pergunta, item.resposta) for item in envio.respostas])
+    except esclarecimentos.PerguntaSemVagaError as erro:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=PERGUNTA_SEM_VAGA) from erro
+    except (APIError, httpx.HTTPError) as erro:
+        logger.error("Falha ao gravar a resposta de esclarecimento: %s", type(erro).__name__)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=FALHA_DAS_PERGUNTAS) from erro
+    agente_de_triagem.agendar_triagem_com_esclarecimentos(tarefas, supabase, caso["id"])
+    try:
+        abertas, _ = esclarecimentos.pendentes(supabase, caso["id"])
+    except (APIError, httpx.HTTPError) as erro:
+        # A resposta já ficou: a tela consulta de novo.
+        logger.error("Falha ao ler as perguntas depois da resposta: %s", type(erro).__name__)
+        abertas = []
+    return {"perguntas": abertas}
 
 
 @router.get("/notificacoes")
