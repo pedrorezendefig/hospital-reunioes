@@ -6,6 +6,8 @@ export { chamarNsp as chamarConduta, formatarDia, hojeLocal } from "@/lib/segura
 
 export type Cadeira = "coordenacao" | "segundo_leitor" | "membro" | "suplente";
 export type Situacao = "vigente" | "a_comecar" | "vencida" | "encerrada";
+/** O Termo de Confidencialidade e Posse do membro (issue #1823). */
+export type SituacaoDoTermo = "assinado" | "aguardando_assinatura" | "nao_enviado";
 
 export interface MembroDoComite {
   id: string;
@@ -18,7 +20,13 @@ export interface MembroDoComite {
   vigencia_fim: string;
   encerrada_em: string | null;
   termo_assinado: boolean;
+  termo: SituacaoDoTermo;
   situacao: Situacao;
+}
+
+/** Incluir e reenviar o Termo devolvem a linha e, se o Termo não saiu, o motivo. */
+export interface MembroComAviso extends MembroDoComite {
+  aviso_termo?: string | null;
 }
 
 export interface ListaDeMembros {
@@ -56,6 +64,18 @@ export const COR_SITUACAO: Record<Situacao, string> = {
   a_comecar: "bg-sky-50 text-sky-700",
   vencida: "bg-amber-50 text-amber-800",
   encerrada: "bg-slate-100 text-slate-600",
+};
+
+export const LABEL_TERMO: Record<SituacaoDoTermo, string> = {
+  assinado: "Assinado",
+  aguardando_assinatura: "Aguardando assinatura",
+  nao_enviado: "Não enviado",
+};
+
+export const COR_TERMO: Record<SituacaoDoTermo, string> = {
+  assinado: "bg-emerald-50 text-emerald-700",
+  aguardando_assinatura: "bg-amber-50 text-amber-800",
+  nao_enviado: "bg-red-50 text-red-700",
 };
 
 export const LABEL_ACAO_DO_REGISTRO: Record<LinhaDoRegistro["acao"], string> = {

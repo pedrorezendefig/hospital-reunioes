@@ -72,6 +72,16 @@ describe("MINHA VEZ", () => {
     expect(await screen.findByText("Nada depende de você agora.")).toBeTruthy();
   });
 
+  it("sem o Termo assinado, diz que falta assinar e não oferece caso (issue #1823)", async () => {
+    respostas = { "/minha-vez": { itens: [], termo_pendente: true } };
+    render(<MinhaVez />);
+
+    expect(await screen.findByText("Falta assinar o Termo de Confidencialidade e Posse.")).toBeTruthy();
+    expect(screen.getByText(/chegou no seu e-mail profissional pela ClickSign/)).toBeTruthy();
+    expect(screen.queryByText("Nada depende de você agora.")).toBeNull();
+    expect(screen.queryByRole("link", { name: "ABRIR O MAIS URGENTE" })).toBeNull();
+  });
+
   it("mostra protocolo, etapa, ação e prazo, na ordem do servidor", async () => {
     respostas = {
       "/minha-vez": {

@@ -24,6 +24,7 @@ from app.services.conduta.portao import (
     portao_da_acao,
     portao_da_coordenacao,
     portao_da_lista,
+    portao_da_tela_inicial,
     portao_do_caso,
 )
 from app.services.conduta.ritos import (
@@ -66,9 +67,14 @@ def _metadados(caso: dict) -> dict:
 
 @router.get("/minha-vez")
 async def minha_vez(
-    comite: NoComite = Depends(portao_da_lista), supabase: Client = Depends(get_supabase_client)
+    comite: NoComite = Depends(portao_da_tela_inicial), supabase: Client = Depends(get_supabase_client)
 ) -> dict:
-    return {"itens": triagem.minha_vez(supabase, comite, hoje_em_sao_paulo())}
+    """`termo_pendente`: a pessoa está no Comitê e ainda não assinou o Termo
+    de Confidencialidade e Posse; a tela diz isso no lugar dos casos."""
+    return {
+        "itens": triagem.minha_vez(supabase, comite, hoje_em_sao_paulo()),
+        "termo_pendente": comite.termo_pendente,
+    }
 
 
 @router.get("/casos")

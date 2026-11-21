@@ -6,14 +6,17 @@ import { AlertCircle, Loader2, Plus } from "lucide-react";
 import {
   CADEIRAS,
   COR_SITUACAO,
+  COR_TERMO,
   LABEL_ACAO_DO_REGISTRO,
   LABEL_SITUACAO,
+  LABEL_TERMO,
   ROTA_DOS_MEMBROS,
   chamarConduta,
   formatarDia,
   type Cadeira,
   type LinhaDoRegistro,
   type ListaDeMembros,
+  type MembroComAviso,
   type MembroDoComite,
 } from "@/lib/conduta/membros";
 
@@ -26,7 +29,7 @@ const BOTAO =
 const BOTAO_LEVE =
   "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50 transition-colors";
 
-const COLUNAS = ["Membro", "Cadeira", "Diretor", "Vigência", "Situação"];
+const COLUNAS = ["Membro", "Cadeira", "Diretor", "Vigência", "Situação", "Termo"];
 
 function diaDoCarimbo(carimbo: string): string {
   return new Date(carimbo).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
@@ -38,6 +41,9 @@ function diaDoCarimbo(carimbo: string): string {
  * mudanças. Incluir e encerrar aparecem só para quem tem o perfil de cadastro
  * (`pode_cadastrar`, do servidor), que recusa de novo quem chamar a API
  * direto. Encerrar não apaga: a linha fica, como encerrada.
+ *
+ * Cada linha diz a situação do Termo de Confidencialidade e Posse (issue
+ * #1823); quem cadastra reconsulta o status na ClickSign e reenvia o Termo.
  */
 export function MembrosDoComite() {
   const [lista, setLista] = useState<ListaDeMembros | null>(null);
@@ -45,6 +51,7 @@ export function MembrosDoComite() {
   const [erro, setErro] = useState<string | null>(null);
   const [data, setData] = useState("");
   const [incluindo, setIncluindo] = useState(false);
+  const [avisoDoTermo, setAvisoDoTermo] = useState<string | null>(null);
 
   const carregar = useCallback(async (dia?: string) => {
     try {
@@ -112,11 +119,19 @@ export function MembrosDoComite() {
       {incluindo && (
         <FormularioDeInclusao
           aoCancelar={() => setIncluindo(false)}
-          aoSalvar={async () => {
+          aoSalvar={async (aviso) => {
             setIncluindo(false);
+            setAvisoDoTermo(aviso);
             await carregar();
           }}
         />
+      )}
+
+      {avisoDoTermo && (
+        <div role="status" className="px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          <p className="font-semibold">O membro foi incluído, mas o Termo não saiu.</p>
+          <p>{avisoDoTermo}</p>
+        </div>
       )}
 
       {lista?.data && <p className="text-sm font-semibold text-slate-700">Composição em {formatarDia(lista.data)}</p>}
@@ -186,6 +201,7 @@ function LinhaDoMembro({
   const [confirmando, setConfirmando] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
   // Antes do início, encerrar desfaz a inclusão: a Participação nunca vale.
   const aComecar = membro.situacao === "a_comecar";
 
@@ -205,6 +221,25 @@ function LinhaDoMembro({
     }
   }
 
+  async function cuidarDoTermo(acao: "reconsultar" | "reenviar") {
+    setEnviando(true);
+    setErro(null);
+    try {
+      const linha = await chamarConduta<MembroComAviso>(
+        `${ROTA_DOS_MEMBROS}/${encodeURIComponent(membro.id)}/termo/${acao}`,
+        { method: "POST", body: {} }
+      );
+      setAviso(linha.aviso_termo ?? null);
+      await aoEncerrar();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível falar com a assinatura eletrônica.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  const cuidaDoTermo = podeEncerrar && membro.situacao !== "encerrada" && membro.termo !== "assinado";
+
   return (
     <tr className="align-top">
       <td className="px-3 py-2.5 font-medium text-slate-900">{membro.nome ?? "Pessoa sem nome no cadastro"}</td>
@@ -218,8 +253,25 @@ function LinhaDoMembro({
           {LABEL_SITUACAO[membro.situacao]}
         </span>
       </td>
+      <td className="px-3 py-2.5">
+        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${COR_TERMO[membro.termo]}`}>
+          {LABEL_TERMO[membro.termo]}
+        </span>
+      </td>
       {podeEncerrar && (
         <td className="px-3 py-2.5 text-right whitespace-nowrap">
+          {cuidaDoTermo && (
+            <span className="inline-flex gap-2 mr-2">
+              {membro.termo === "aguardando_assinatura" && (
+                <button type="button" className={BOTAO_LEVE} disabled={enviando} onClick={() => cuidarDoTermo("reconsultar")}>
+                  Reconsultar status
+                </button>
+              )}
+              <button type="button" className={BOTAO_LEVE} disabled={enviando} onClick={() => cuidarDoTermo("reenviar")}>
+                Reenviar o Termo
+              </button>
+            </span>
+          )}
           {membro.situacao !== "encerrada" &&
             (confirmando ? (
               <span className="inline-flex gap-2">
@@ -236,13 +288,20 @@ function LinhaDoMembro({
               </button>
             ))}
           {erro && <p className="text-xs text-red-600 mt-1">{erro}</p>}
+          {aviso && <p className="text-xs text-amber-800 mt-1 whitespace-normal">{aviso}</p>}
         </td>
       )}
     </tr>
   );
 }
 
-function FormularioDeInclusao({ aoCancelar, aoSalvar }: { aoCancelar: () => void; aoSalvar: () => Promise<void> }) {
+function FormularioDeInclusao({
+  aoCancelar,
+  aoSalvar,
+}: {
+  aoCancelar: () => void;
+  aoSalvar: (avisoDoTermo: string | null) => Promise<void>;
+}) {
   const [pessoas, setPessoas] = useState<{ id: string; nome: string }[]>([]);
   const [pessoa, setPessoa] = useState("");
   const [cadeira, setCadeira] = useState<Cadeira>("membro");
@@ -262,7 +321,7 @@ function FormularioDeInclusao({ aoCancelar, aoSalvar }: { aoCancelar: () => void
     e.preventDefault();
     setEnviando(true);
     try {
-      await chamarConduta(ROTA_DOS_MEMBROS, {
+      const nova = await chamarConduta<MembroComAviso>(ROTA_DOS_MEMBROS, {
         method: "POST",
         body: {
           participante_id: pessoa,
@@ -272,7 +331,7 @@ function FormularioDeInclusao({ aoCancelar, aoSalvar }: { aoCancelar: () => void
           ...(fim ? { vigencia_fim: fim } : {}),
         },
       });
-      await aoSalvar();
+      await aoSalvar(nova.aviso_termo ?? null);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível incluir.");
     } finally {
@@ -338,7 +397,10 @@ function FormularioDeInclusao({ aoCancelar, aoSalvar }: { aoCancelar: () => void
         <input type="checkbox" checked={diretor} onChange={(e) => setDiretor(e.target.checked)} />
         É diretor
       </label>
-      <p className="text-xs text-slate-500">Os membros do Comitê recebem um aviso desta inclusão.</p>
+      <p className="text-xs text-slate-500">
+        Os membros do Comitê recebem um aviso desta inclusão, e a pessoa recebe o Termo de Confidencialidade e Posse
+        no e-mail profissional, para assinar.
+      </p>
       {erro && <p className="text-sm text-red-600">{erro}</p>}
       <div className="flex gap-2">
         <button type="submit" className={BOTAO} disabled={enviando || !pessoa || !inicio}>

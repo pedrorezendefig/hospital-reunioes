@@ -135,6 +135,22 @@ async def webhook_clicksign(
             )
         return {"received": True}
 
+    # As assinaturas do Canal de Conduta, todas numa tabela só (issue #1823,
+    # ADR 0097 decisão 13): o Termo de Confidencialidade e Posse e os
+    # documentos dos casos.
+    from app.services.conduta import assinaturas as assinaturas_do_canal
+
+    assinatura_do_canal = assinaturas_do_canal.por_chave(supabase, envelope_key)
+    if assinatura_do_canal:
+        try:
+            assinaturas_do_canal.processar_evento(supabase, assinatura_do_canal, event_name)
+        except Exception as e:
+            logger.error(f"[ClickSign webhook] Falha na assinatura do Canal de Conduta: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=500, detail="Falha ao registrar a assinatura; a ClickSign deve reenviar o evento."
+            )
+        return {"received": True}
+
     logger.warning(f"[ClickSign webhook] envelope_key '{envelope_key}' não encontrado no banco.")
     return {"message": "Documento não encontrado."}
 

@@ -398,6 +398,8 @@ class _Cenario:
                 "nsp_documentos_envios": [],
                 "reunioes": [],
                 "pops_versoes": [],
+                # O quinto destino do webhook (issue #1823): o Canal de Conduta.
+                "conduta_assinaturas": [],
             }
         )
         app = FastAPI()
