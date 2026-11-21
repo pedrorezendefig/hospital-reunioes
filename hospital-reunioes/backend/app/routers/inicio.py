@@ -18,7 +18,7 @@ from app.dependencies import (
     get_supabase_client,
     is_secretaria,
 )
-from app.services.inicio import Inicio, montar_inicio, quem_responde, registro_de_acesso
+from app.services.inicio import Inicio, entregas, montar_inicio, quem_responde, registro_de_acesso
 from app.services.inicio.regras import FUSO
 
 router = APIRouter(prefix="/inicio", tags=["inicio"])
@@ -57,3 +57,18 @@ async def get_quem_responde(
     if is_secretaria(me):
         raise HTTPException(status_code=403, detail="A Secretária não tem Início")
     return quem_responde.montar(supabase, me, agora_em_brasilia())
+
+
+@router.get("/meus-numeros", response_model=entregas.MeusNumeros | None)
+async def get_meus_numeros(
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+) -> entregas.MeusNumeros | None:
+    """Os próprios números de 90 dias e o que foi entregue nos últimos 7 dias
+    (issue #1946), em pedido separado do resto do Início: a falha deles não
+    derruba a Minha Fila. Só os de quem pede, nunca os de outra pessoa."""
+    me = await get_participante_for_user(current_user, supabase)
+    barrar_desligado(me)
+    if is_secretaria(me):
+        raise HTTPException(status_code=403, detail="A Secretária não tem Início")
+    return entregas.meus_numeros(supabase, me, agora_em_brasilia())
