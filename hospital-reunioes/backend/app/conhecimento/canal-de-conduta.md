@@ -50,6 +50,16 @@ Quem não é da coordenação do Comitê, o super admin inclusive, não abre a t
 
 Não existe e-mail do DP nas configurações: o encaminhamento ao DP não sai por e-mail, e a página só mostra o contato dele.
 
+## O Código de Conduta
+
+A coordenação do Comitê publica o Código de Conduta em PDF, e só ela. Cada publicação vira uma versão nova, com quem publicou, quando e a data em que passa a valer. A data de vigência pode ser hoje ou depois, nunca antes de hoje nem antes da vigência da última versão: assim nenhuma publicação muda o Código que valia num dia que já passou.
+
+Nenhuma versão é apagada ou trocada, e a própria base de dados recusa essa alteração. A coordenação lista todas as versões e baixa qualquer uma delas.
+
+Dada uma data, o aplicativo diz qual versão valia naquele dia: a de vigência mais recente até a data. Se duas versões começam no mesmo dia, vale a publicada depois. É por ela que cada punição cita o item do Código que valia na data do fato.
+
+A versão vigente tem um endereço público estável, sem login, que a página do canal usa quando abrir. O endereço é sempre o mesmo, de uma versão para a outra, e mostra o PDF da versão que vale hoje. Versão com vigência futura só aparece nele a partir do dia dela. Com o canal fechado, o endereço responde como se não existisse.
+
 ## A tela Membros
 
 A tela Membros diz quem compõe o Comitê e até quando. Cada linha mostra a pessoa, a cadeira, se ela é diretor, a vigência e a situação: vigente, a começar, vencida ou encerrada. Escolhendo uma data passada, a tela mostra a composição daquele dia.
@@ -110,4 +120,5 @@ O formulário público de relato, as páginas públicas que vão mostrar os text
 - Pedido para prorrogar de novo um caso do rito Completo, ou prorrogar um caso do rito Rápido: o rito Completo prorroga uma vez só, e os outros não prorrogam.
 - A coordenação que não consegue encerrar um Encaminhamento: costuma faltar a conferência do segundo leitor.
 - Pedido para apagar ou corrigir uma versão antiga de um texto: não existe; salva-se uma versão nova, e a antiga fica.
+- Pedido para publicar o Código de Conduta com vigência numa data passada: não existe; a versão nova vale de hoje ou de uma data futura, e a que valia antes continua valendo para os dias que já passaram.
 - Pedido de um item novo nas configurações: entra por Demanda, porque a lista de itens é fixa.

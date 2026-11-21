@@ -10,13 +10,15 @@ nasce fechada sem depender de quem a escreve. O log das rotas do módulo sai
 sem IP (`app.middleware.request_context`).
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from supabase import Client
 
 from app.config import settings
 from app.dependencies import get_supabase_client
+from app.routers.conduta_codigo import resposta_em_pdf
 from app.services import limite_sem_ip
-from app.services.conduta import configuracoes
+from app.services.conduta import codigo, configuracoes
+from app.services.conduta.acesso import hoje_em_sao_paulo
 
 
 def exigir_canal_aberto() -> None:
@@ -41,3 +43,18 @@ async def textos(request: Request, supabase: Client = Depends(get_supabase_clien
     a cada chamada, então tem limite por aparelho, sem guardar o endereço
     (decisão 10 da ADR 0097)."""
     return {"textos": configuracoes.vigentes_publicas(supabase)}
+
+
+@router.get("/codigo-de-conduta")
+@limite_sem_ip.limitar("60/minute")
+async def codigo_de_conduta(request: Request, supabase: Client = Depends(get_supabase_client)) -> Response:
+    """O PDF do Código de Conduta vigente hoje (issue #1841), num endereço que
+    não muda de uma versão para a outra. O número da versão vai no cabeçalho
+    `X-Codigo-De-Conduta-Versao`."""
+    try:
+        achada = codigo.pdf_vigente_em(supabase, hoje_em_sao_paulo())
+    except codigo.RecusaDoCodigo as recusa:
+        raise HTTPException(status_code=recusa.status_code, detail=recusa.motivo) from recusa
+    if achada is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="O Código de Conduta ainda não foi publicado")
+    return resposta_em_pdf(*achada)
