@@ -1,6 +1,7 @@
 ---
 status: accepted
 amends: 0034
+amended_by: 0102
 ---
 
 # Apagar manifestação é retenção antecipada, não DELETE
