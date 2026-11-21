@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime, timedelta
 
 from app.services.pendencia_service import _e_conflito_unicidade
-from app.services.pendencias_consulta import as_data, hoje_em_brasilia
+from app.services.pendencias_consulta import FUSO, as_data, hoje_em_brasilia
 from app.services.quadro_classificacao import ROTINA, frequencia_da_linha, tipo_da_linha
 from app.services.rotina_ciclo import (
     MENSAL,
@@ -110,7 +110,33 @@ def ciclos_em_aberto(rotina: dict, marcadas: list[dict], hoje: date) -> list[Cic
     return [c for c in devidos(rotina, hoje) if c.inicio.isoformat() not in feitos]
 
 
-# ─── Marcar e encerrar ───────────────────────────────────────────────────────
+# ─── A revisão do Facilitador (decisão 72 da #1757; issue #1944) ─────────────
+
+# O Facilitador revisa cada Rotina a cada 90 dias: mantém ou encerra. Sem
+# revisão, a Rotina continua, e a revisão espera na Minha Fila dele.
+DIAS_ATE_A_REVISAO = 90
+
+
+def _dia_em_brasilia(valor) -> date | None:
+    if not valor:
+        return None
+    if isinstance(valor, datetime):
+        momento = valor
+    else:
+        momento = datetime.fromisoformat(str(valor).replace("Z", "+00:00"))
+    return momento.astimezone(FUSO).date() if momento.tzinfo else momento.date()
+
+
+def revisao_em(rotina: dict) -> date | None:
+    """O dia em que vence a revisão: 90 dias depois da última, ou do
+    nascimento da Rotina. A encerrada não se revisa."""
+    if rotina.get("status") != ATIVA:
+        return None
+    base = as_data(rotina.get("revisada_em")) or _dia_em_brasilia(rotina.get("created_at"))
+    return base + timedelta(days=DIAS_ATE_A_REVISAO) if base else None
+
+
+# ─── Marcar, manter e encerrar ───────────────────────────────────────────────
 
 
 class CicloInexistente(ValueError):  # noqa: N818, o nome do domínio
@@ -202,6 +228,19 @@ def marcar(
         if _e_conflito_unicidade(e):
             raise JaMarcada("Esse ciclo já foi marcado.") from e
         raise
+    return gravada[0]
+
+
+def manter(supabase, rotina: dict, *, autor_id: str | None, autor_nome: str) -> dict:
+    """A revisão que mantém a Rotina: um clique, sem anotação. A próxima vence
+    90 dias depois de hoje."""
+    if rotina.get("status") != ATIVA:
+        raise JaEncerrada("Esta Rotina foi encerrada e não se revisa mais.")
+    mudanca = {"revisada_em": hoje_em_brasilia().isoformat(), "revisada_por_nome": autor_nome}
+    gravada = supabase.table("rotinas").update(mudanca).eq("id", rotina["id"]).eq("status", ATIVA).execute().data
+    if not gravada:
+        raise JaEncerrada("Esta Rotina foi encerrada e não se revisa mais.")
+    logger.info("[Rotina] %s mantida na revisão por %s", rotina["id"], autor_id)
     return gravada[0]
 
 

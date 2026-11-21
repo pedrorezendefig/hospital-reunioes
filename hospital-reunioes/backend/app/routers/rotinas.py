@@ -227,6 +227,24 @@ async def marcar_nao_realizada(
     return _marcar(rotina, inicio, NAO_REALIZADA, body.anotacao, _autor(me, current_user), supabase)
 
 
+@router.post("/{id_rotina}/manter")
+async def manter_rotina(
+    id_rotina: UUID,
+    current_user: dict = Depends(get_current_user),
+    supabase=Depends(get_supabase_client),
+):
+    """A revisão de 90 dias (issue #1944): o Facilitador (ou o Super admin)
+    mantém a Rotina com um clique. Encerrar continua pedindo anotação."""
+    rotina, me, papeis = await _rotina_e_papeis(id_rotina, current_user, supabase)
+    if not papeis & {FACILITADOR, SUPER_ADMIN}:
+        raise HTTPException(status_code=403, detail="Só o Facilitador da Reunião revisa a Rotina")
+    try:
+        mantida = rotina_service.manter(supabase, rotina, **_autor(me, current_user))
+    except rotina_service.JaEncerrada as recusa:
+        raise HTTPException(status_code=409, detail=str(recusa)) from recusa
+    return {"id": mantida.get("id", str(id_rotina)), "revisada_em": mantida.get("revisada_em")}
+
+
 @router.post("/{id_rotina}/encerrar")
 async def encerrar_rotina(
     id_rotina: UUID,

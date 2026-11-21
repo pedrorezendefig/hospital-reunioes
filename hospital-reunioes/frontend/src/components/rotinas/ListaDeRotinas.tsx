@@ -184,6 +184,14 @@ export function ListaDeRotinas() {
     carregar().catch(() => setRotinas([]));
   }, [carregar]);
 
+  // O Início (issue #1944) chega com #rotina-<id>: a lista vem depois do
+  // primeiro desenho, então a rolagem até a Rotina espera ela chegar.
+  const carregou = rotinas !== null;
+  useEffect(() => {
+    if (!carregou || !window.location.hash.startsWith("#rotina-")) return;
+    document.getElementById(decodeURIComponent(window.location.hash.slice(1)))?.scrollIntoView();
+  }, [carregou]);
+
   async function enviar(url: string, corpo?: Record<string, string>) {
     setErro(null);
     try {
@@ -226,7 +234,10 @@ export function ListaDeRotinas() {
       {rotinas.map((rotina) => {
         const frequencia = rotina.frequencia ? FREQUENCIA[rotina.frequencia] : "sem frequência";
         return (
-          <section key={rotina.id} className="rounded-xl border border-border bg-white p-4 space-y-3">
+          <section
+            key={rotina.id}
+            id={`rotina-${rotina.id}`}
+            className="scroll-mt-4 rounded-xl border border-border bg-white p-4 space-y-3">
             <header className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <h2 className="text-base text-text break-words">{rotina.descricao}</h2>

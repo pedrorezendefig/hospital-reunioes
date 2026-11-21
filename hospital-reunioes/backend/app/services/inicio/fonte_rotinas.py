@@ -10,11 +10,14 @@ segue o das Pendências.
 A Rotina sem frequência (o fluxo contínuo antigo convertido, issue #1877) não
 tem ciclo: ela entra na fila do Facilitador da Reunião, sem prazo, até ele
 escolher a frequência.
+
+O trilho mostra as Rotinas do ciclo de agora do responsável, e a revisão de
+90 dias de cada Rotina entra na fila do Facilitador (issue #1944).
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from app.dependencies import reunioes_ocultas, tem_acesso_reunioes
 from app.services import rotina_service
@@ -38,11 +41,66 @@ def _dia_em_brasilia(quando) -> date | None:
     return datetime.fromisoformat(str(quando).replace("Z", "+00:00")).astimezone(FUSO).date()
 
 
-def itens(supabase, me: dict, agora: datetime | None = None) -> list[dict]:
-    """Os itens da fonte, no formato comum do Início, sem grupo."""
+def _do_responsavel(supabase, me: dict) -> list[dict]:
+    """As Rotinas de que a pessoa é a responsável, sem as do Núcleo oculto. Só
+    o responsável vê a Rotina no Início: o Facilitador marca por ele na tela
+    das Rotinas, não aqui."""
     if not tem_acesso_reunioes(me):
         return []
-    return _verificacoes(supabase, me, agora) + _frequencias_a_escolher(supabase, me)
+    rotinas = supabase.table("rotinas").select("*").eq("responsavel_id", me["id"]).execute().data or []
+    if not rotinas:
+        return []
+    ocultas = set(reunioes_ocultas(supabase, me))
+    return [r for r in rotinas if r["id_reuniao"] not in ocultas]
+
+
+def _destino(rotina: dict) -> str:
+    return f"/rotinas#rotina-{rotina['id']}"
+
+
+def do_ciclo(supabase, me: dict, hoje: date) -> list[dict]:
+    """O trilho (issue #1944): as Rotinas com um ciclo que contém hoje, e a
+    Verificação desse ciclo quando já foi marcada. A que ainda não começou ou
+    foi encerrada não tem ciclo corrente e fica de fora."""
+    rotinas = _do_responsavel(supabase, me)
+    if not rotinas:
+        return []
+    marcadas = rotina_service.verificacoes_de(supabase, [r["id"] for r in rotinas])
+    saida: list[dict] = []
+    for rotina in rotinas:
+        corrente = next((c for c in rotina_service.devidos(rotina, hoje) if c.inicio <= hoje <= c.fim), None)
+        if corrente is None:
+            continue
+        verificacao = next(
+            (
+                v
+                for v in marcadas.get(rotina["id"], [])
+                if str(v.get("ciclo_inicio"))[:10] == corrente.inicio.isoformat()
+            ),
+            None,
+        )
+        saida.append(
+            {
+                "id": rotina["id"],
+                "titulo": rotina.get("descricao") or "Rotina sem descrição",
+                "ciclo_inicio": corrente.inicio,
+                "ciclo_fim": corrente.fim,
+                "verificacao": (verificacao or {}).get("resultado"),
+                "destino": _destino(rotina),
+            }
+        )
+    saida.sort(key=lambda r: (r["ciclo_fim"], r["titulo"].lower()))
+    return saida
+
+
+def itens(supabase, me: dict, agora: datetime | None = None) -> list[dict]:
+    """Os itens da fonte, no formato comum do Início, sem grupo: as
+    Verificações em aberto do responsável e as Rotinas a revisar do
+    Facilitador."""
+    if not tem_acesso_reunioes(me):
+        return []
+    hoje = (agora or datetime.now(FUSO)).astimezone(FUSO).date()
+    return _verificacoes(supabase, me, hoje) + _frequencias_a_escolher(supabase, me) + _a_revisar(supabase, me)
 
 
 def _frequencias_a_escolher(supabase, me: dict) -> list[dict]:
@@ -86,16 +144,61 @@ def _frequencias_a_escolher(supabase, me: dict) -> list[dict]:
     ]
 
 
-def _verificacoes(supabase, me: dict, agora: datetime | None) -> list[dict]:
+def _a_revisar(supabase, me: dict) -> list[dict]:
+    """A revisão de 90 dias (decisão 72 da #1757): a Rotina ativa das Reuniões
+    que a pessoa conduz, com o prazo no dia em que a revisão vence. Manter é um
+    clique; encerrar pede anotação, na tela das Rotinas."""
+    reunioes = {
+        r["id_reuniao"]: r
+        for r in supabase.table("reunioes").select("id_reuniao, titulo").eq("facilitador_id", me["id"]).execute().data
+        or []
+    }
+    for oculta in reunioes_ocultas(supabase, me) if reunioes else []:
+        reunioes.pop(oculta, None)
+    if not reunioes:
+        return []
+    rotinas = (
+        supabase.table("rotinas")
+        .select("*")
+        .in_("id_reuniao", sorted(reunioes))
+        .eq("status", rotina_service.ATIVA)
+        .execute()
+        .data
+        or []
+    )
+    saida: list[dict] = []
+    for rotina in rotinas:
+        # A sem frequência espera a escolha (issue #1877), não a revisão.
+        prazo = rotina_service.revisao_em(rotina) if rotina.get("frequencia") else None
+        if prazo is None:
+            continue
+        saida.append(
+            {
+                "tipo": "rotina_a_revisar",
+                "id": rotina["id"],
+                "titulo": rotina.get("descricao") or "Rotina sem descrição",
+                "origem": f"Revisão de 90 dias. {_origem(rotina, reunioes.get(rotina['id_reuniao']))}",
+                "prazo": prazo,
+                "chegou_em": prazo - timedelta(days=rotina_service.DIAS_ATE_A_REVISAO),
+                "area": "Reuniões",
+                "acao": "Revisar a Rotina",
+                "destino": _destino(rotina),
+                "contexto": (
+                    f"Responsável: {rotina.get('responsavel_nome') or 'sem nome'}. "
+                    "Sem revisão, a Rotina continua. Encerrar pede uma anotação, na tela das Rotinas."
+                ),
+                "acao_de_um_clique": {"rotulo": "Manter", "endpoint": f"/api/rotinas/{rotina['id']}/manter"},
+                "acao_secundaria": {"rotulo": "Encerrar", "destino": _destino(rotina)},
+            }
+        )
+    return saida
+
+
+def _verificacoes(supabase, me: dict, hoje: date) -> list[dict]:
     """Os ciclos em aberto das Rotinas de que a pessoa é responsável."""
-    rotinas = supabase.table("rotinas").select("*").eq("responsavel_id", me["id"]).execute().data or []
+    rotinas = _do_responsavel(supabase, me)
     if not rotinas:
         return []
-    ocultas = set(reunioes_ocultas(supabase, me))
-    rotinas = [r for r in rotinas if r["id_reuniao"] not in ocultas]
-    if not rotinas:
-        return []
-    hoje = (agora or datetime.now(FUSO)).astimezone(FUSO).date()
     marcadas = rotina_service.verificacoes_de(supabase, [r["id"] for r in rotinas])
     ids_reunioes = sorted({r["id_reuniao"] for r in rotinas})
     reunioes = {
@@ -127,6 +230,7 @@ def _verificacoes(supabase, me: dict, agora: datetime | None) -> list[dict]:
                         "rotulo": "Realizada",
                         "endpoint": f"/api/rotinas/{rotina['id']}/ciclos/{inicio}/realizada",
                     },
+                    "acao_secundaria": {"rotulo": "Não realizada", "destino": _destino(rotina)},
                 }
             )
     return saida

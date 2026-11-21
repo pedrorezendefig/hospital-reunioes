@@ -140,6 +140,24 @@ describe("a tela das Rotinas", () => {
     expect(marcadas.textContent).toContain("Equipe de plantão");
     expect(screen.queryByRole("button", { name: "Encerrar a Rotina" })).toBeNull();
   });
+
+  it("o link do Início (#rotina-<id>) leva até a Rotina, depois que a lista chega", async () => {
+    const rolou: Element[] = [];
+    Element.prototype.scrollIntoView = function (this: Element) {
+      rolou.push(this);
+    };
+    window.location.hash = "#rotina-RT1";
+    try {
+      render(<ListaDeRotinas />);
+      const ciclos = await screen.findByRole("list", { name: "Ciclos em aberto de Reunir a equipe" });
+
+      const rotina = ciclos.closest("section") as HTMLElement;
+      expect(rotina.id).toBe("rotina-RT1");
+      await waitFor(() => expect(rolou).toEqual([rotina]));
+    } finally {
+      window.location.hash = "";
+    }
+  });
 });
 
 // O fluxo contínuo antigo virou Rotina sem frequência (issue #1877).

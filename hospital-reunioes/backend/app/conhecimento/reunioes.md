@@ -55,6 +55,10 @@ Quem marca é o responsável, no aplicativo. Para quem não entra no aplicativo,
 
 A tela Rotinas, no menu de Reuniões, mostra as rotinas no nome da pessoa e as das reuniões que ela conduz, com os ciclos em aberto e as marcações feitas. A verificação do ciclo em aberto também aparece no Início do responsável, com o prazo no último dia do ciclo e o botão Realizada, que marca ali mesmo; o ciclo que fechou sem marcação aparece como prazo vencido.
 
+Ao lado da lista, o trilho do Início mostra as rotinas do ciclo de agora em que a pessoa é a responsável, com o fim de cada ciclo e quantas já têm a verificação marcada. Na lista, a linha da verificação tem dois caminhos: Realizada marca ali mesmo, sem sair do Início, e Não realizada leva à tela Rotinas, que pede a anotação. Só o responsável vê a rotina no Início dele; o facilitador que marca por alguém faz isso na tela Rotinas.
+
+O facilitador revisa cada rotina das reuniões que conduz a cada 90 dias, contados do envio da ata ou da última revisão: mantém ou encerra. Quando a revisão chega perto, a revisão aparece no Início do facilitador, e se ele não decide, ela passa para o que já venceu e a rotina continua sendo cobrada normalmente. Manter é um clique, ali mesmo, e a próxima revisão fica para 90 dias depois; encerrar leva à tela Rotinas e pede a anotação.
+
 O fluxo contínuo das atas antigas acabou. Cada pendência aberta e sem prazo cuja linha no quadro da ata dizia "Fluxo contínuo" virou rotina sem frequência, com o mesmo responsável, e a pendência original foi encerrada, com um registro no histórico que aponta para a rotina. A rotina sem frequência fica no Início do facilitador da reunião até ele escolher a frequência (semanal, quinzenal ou mensal), na tela Rotinas. Até lá, nenhum ciclo é cobrado do responsável. Escolhida a frequência, ela não se troca, e a rotina começa no ciclo seguinte ao da escolha, o primeiro inteiro. A pendência sem prazo que não tinha "Fluxo contínuo" no quadro continua pendência: a tela Acertos de setor também lista as pendências abertas e sem prazo, para quem administra o aplicativo abrir cada uma e dar o prazo.
 
 ## Contestar um item da ata
@@ -173,6 +177,7 @@ Na tela da reunião, o botão Excluir, que apagava a reunião em qualquer status
 - A linha de Processo entra, no envio, na lista de definições de processo do setor da reunião, com o trecho da ata copiado; cuidam dela os facilitadores das reuniões do setor, quem administra o aplicativo vê todas, a Secretária não vê, e tirar um item pede anotação e cabe ao facilitador da reunião de origem e a quem administra o aplicativo.
 - Cada linha da ata é Ação, Rotina ou Processo, e só a Ação vira pendência; a linha sem tipo vale como Ação, e toda Rotina precisa de responsável e frequência antes do envio.
 - A rotina segue o calendário (semana, quinzena de 1 a 15 e de 16 ao fim do mês, ou mês), começa no primeiro ciclo inteiro depois do envio, e cada ciclo é marcado como Realizada, com um clique, ou Não realizada, com anotação; o facilitador marca por quem não entra no aplicativo e encerra a rotina com anotação.
+- O Início mostra no trilho as rotinas do ciclo do responsável e quantas já foram marcadas; Realizada é um clique ali, e a revisão de 90 dias de cada rotina aparece no Início do facilitador, que mantém com um clique ou encerra com anotação.
 - O fluxo contínuo antigo virou rotina sem frequência, que o facilitador completa pelo Início; a pendência sem prazo que não era fluxo contínuo vai para a tela Acertos de setor.
 
 ## O que costuma virar Demanda
