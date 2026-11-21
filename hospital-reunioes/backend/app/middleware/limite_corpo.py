@@ -15,10 +15,25 @@ promete recusar arquivo a arquivo, sem derrubar os válidos).
 from __future__ import annotations
 
 import json
+import re
 
 LIMITE_CORPO_BYTES = 100 * 1024 * 1024
 
+# A única rota com teto maior: o áudio do depoimento do Canal de Conduta (issue
+# #1830). Um depoimento de duas horas passa de 100 MB; o botão aceita até 300
+# MB, e o teto cabe isso mais o envelope do multipart.
+TETOS_POR_ROTA: tuple[tuple[re.Pattern[str], int], ...] = (
+    (re.compile(r"/comite-de-conduta/casos/[^/]+/depoimentos/[^/]+/audio$"), 302 * 1024 * 1024),
+)
+
 _DETALHE = "Corpo da requisição acima do limite de {mb} MB."
+
+
+def teto_da_rota(caminho: str, limite_bytes: int = LIMITE_CORPO_BYTES) -> int:
+    for padrao, teto in TETOS_POR_ROTA:
+        if padrao.search(caminho):
+            return teto
+    return limite_bytes
 
 
 class _CorpoAcimaDoTetoError(Exception):
@@ -38,12 +53,13 @@ class LimiteDeCorpoMiddleware:
             await self.app(scope, receive, send)
             return
 
+        limite = teto_da_rota(scope.get("path") or "", self.limite_bytes)
         headers = dict(scope.get("headers") or [])
         content_length = headers.get(b"content-length")
         if content_length is not None:
             try:
-                if int(content_length) > self.limite_bytes:
-                    await self._recusar(send)
+                if int(content_length) > limite:
+                    await self._recusar(send, limite)
                     return
             except ValueError:
                 # Content-Length ilegível: o servidor HTTP recusa antes de nós;
@@ -58,7 +74,7 @@ class LimiteDeCorpoMiddleware:
             mensagem = await receive()
             if mensagem["type"] == "http.request":
                 recebido += len(mensagem.get("body", b""))
-                if recebido > self.limite_bytes:
+                if recebido > limite:
                     raise _CorpoAcimaDoTetoError
             return mensagem
 
@@ -75,11 +91,11 @@ class LimiteDeCorpoMiddleware:
             # por alguma rota a resposta já começou, só resta interromper.
             if resposta_comecou:
                 raise
-            await self._recusar(send)
+            await self._recusar(send, limite)
 
-    async def _recusar(self, send):
+    async def _recusar(self, send, limite: int):
         corpo = json.dumps(
-            {"detail": _DETALHE.format(mb=self.limite_bytes // (1024 * 1024))},
+            {"detail": _DETALHE.format(mb=limite // (1024 * 1024))},
             ensure_ascii=False,
         ).encode()
         await send(

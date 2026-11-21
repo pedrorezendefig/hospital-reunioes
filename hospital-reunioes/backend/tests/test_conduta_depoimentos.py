@@ -12,21 +12,25 @@ import base64
 import os
 import secrets
 import sys
+import uuid
 from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
 from conduta_apoio import Banco
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.config import settings  # noqa: E402
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
+from app.middleware.limite_corpo import LIMITE_CORPO_BYTES, LimiteDeCorpoMiddleware, teto_da_rota  # noqa: E402
 from app.routers import conduta_comite, conduta_depoimentos  # noqa: E402
-from app.services.conduta import casos, cifra  # noqa: E402
+from app.services.conduta import casos, cifra, depoimentos  # noqa: E402
 from app.services.conduta.acesso import hoje_em_sao_paulo  # noqa: E402
+
+MB = 1024 * 1024
 
 BASE = "/api/comite-de-conduta"
 RELATO = "O supervisor grita com a equipe do almoxarifado e ameaça cortar as horas."
@@ -130,6 +134,9 @@ class Comite:
             files={"arquivo": (nome, conteudo, "application/octet-stream")},
         )
 
+    def baixar(self, pid: str, caso_id: str, dep: str, arquivo_id: str):
+        return self.cliente(pid).get(f"{BASE}/casos/{caso_id}/depoimentos/{dep}/arquivos/{arquivo_id}")
+
     def cartao(self, pid: str, caso_id: str, dep: str) -> dict:
         return next(d for d in self.abrir(pid, caso_id)["depoimentos"] if d["id"] == dep)
 
@@ -162,3 +169,200 @@ class TestCartaoDoDepoimento:
         )
         assert cartao["situacao"] == "Aguardando assinatura"
         assert "adicionou_pessoa_a_ouvir" in comite.trilha(caso)
+
+    def test_cada_botao_recebe_o_seu_arquivo_e_o_cartao_mostra_cada_um_no_seu_lugar(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+
+        assert comite.anexar(MEMBRO, caso, dep, "transcricao", "transcricao.txt", TRANSCRICAO).status_code == 200
+        assert comite.anexar(MEMBRO, caso, dep, "audio", "gravacao.m4a", AUDIO_M4A).status_code == 200
+        assert comite.anexar(MEMBRO, caso, dep, "termo-assinado", "IMG_0001.jpg", FOTO_DO_TERMO).status_code == 200
+
+        arquivos = comite.cartao(MEMBRO, caso, dep)["arquivos"]
+        assert [(tipo, len(arquivos[tipo])) for tipo in ("transcricao", "audio", "termo_assinado")] == [
+            ("transcricao", 1),
+            ("audio", 1),
+            ("termo_assinado", 1),
+        ]
+
+    def test_o_botao_define_o_tipo_e_recusa_o_arquivo_de_outro_tipo(self, comite):
+        """Sem seletor de tipo: o botão do áudio não aceita a transcrição, e o
+        da transcrição não aceita o áudio."""
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+
+        audio_errado = comite.anexar(MEMBRO, caso, dep, "audio", "transcricao.txt", TRANSCRICAO)
+        transcricao_errada = comite.anexar(MEMBRO, caso, dep, "transcricao", "gravacao.m4a", AUDIO_M4A)
+
+        assert (audio_errado.status_code, transcricao_errada.status_code) == (422, 422)
+        assert "MP3, M4A ou OGG" in audio_errado.json()["detail"]
+        assert comite.cartao(MEMBRO, caso, dep)["arquivos"] == {"transcricao": [], "audio": [], "termo_assinado": []}
+        assert comite.banco.storage.objetos == {}
+
+    def test_quem_nao_abre_o_caso_nao_anexa(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+
+        resposta = comite.anexar(DE_FORA, caso, dep, "audio", "gravacao.m4a", AUDIO_M4A)
+
+        assert resposta.status_code == 403
+        assert comite.banco.storage.objetos == {}
+
+    def test_depoimento_de_outro_caso_nao_entra_pelo_caso_que_a_pessoa_abre(self, comite):
+        caso, outro = comite.caso(), comite.caso()
+        dep_do_outro = comite.depoimento(outro)
+
+        resposta = comite.anexar(MEMBRO, caso, dep_do_outro, "audio", "gravacao.m4a", AUDIO_M4A)
+
+        assert resposta.status_code == 404
+
+    def test_so_na_etapa_apuracao(self, comite):
+        caso = comite.caso(etapa="triagem")
+
+        assert comite.adicionar(COORDENACAO, caso).status_code == 409
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Um áudio de 250 MB em M4A sobe, fica cifrado no bucket e toca para um
+# membro do caso
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestAudioDoDepoimento:
+    def test_um_m4a_de_250_mb_cabe_no_botao_do_audio_e_um_de_301_nao(self):
+        assert depoimentos.conferir_arquivo("audio", "depoimento.m4a", 250 * MB) == "audio/mp4"
+        with pytest.raises(depoimentos.DepoimentoRecusadoError) as recusa:
+            depoimentos.conferir_arquivo("audio", "depoimento.m4a", 301 * MB)
+        assert recusa.value.status == 413
+
+    def test_o_corpo_de_250_mb_passa_pelo_teto_do_app_so_na_rota_do_audio(self):
+        """O teto global do app é 100 MB: sem a exceção da rota do áudio, o
+        depoimento de duas horas voltaria 413 antes de chegar ao botão."""
+        rota_do_audio = f"/api/comite-de-conduta/casos/{uuid.uuid4()}/depoimentos/{uuid.uuid4()}/audio"
+        rota_da_transcricao = rota_do_audio.removesuffix("/audio") + "/transcricao"
+
+        assert teto_da_rota(rota_do_audio) >= 250 * MB + MB
+        assert teto_da_rota(rota_do_audio) >= depoimentos.LIMITE_DO_AUDIO + MB
+        assert teto_da_rota(rota_da_transcricao) == LIMITE_CORPO_BYTES
+
+    def test_o_middleware_usa_o_teto_da_rota(self):
+        app = FastAPI()
+        app.add_middleware(LimiteDeCorpoMiddleware, limite_bytes=1024)
+
+        @app.post("/{caminho:path}")
+        async def eco(request: Request):
+            return {"bytes": len(await request.body())}
+
+        cliente = TestClient(app)
+        corpo = b"x" * 4096
+        rota_do_audio = f"/api/comite-de-conduta/casos/{uuid.uuid4()}/depoimentos/{uuid.uuid4()}/audio"
+
+        assert cliente.post(rota_do_audio, content=corpo).json() == {"bytes": 4096}
+        assert cliente.post(rota_do_audio.removesuffix("/audio") + "/transcricao", content=corpo).status_code == 413
+
+    def test_o_audio_fica_cifrado_no_bucket_e_toca_para_um_membro_do_caso(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso, pid=COORDENACAO)
+        assert comite.anexar(COORDENACAO, caso, dep, "audio", "gravacao.m4a", AUDIO_M4A).status_code == 200
+
+        ((bucket, _), guardado), *_ = comite.banco.storage.objetos.items()
+        assert bucket == "conduta-arquivos"
+        assert b"som do depoimento" not in guardado and b"ftyp" not in guardado
+        assert cifra.decifrar_arquivo(guardado) == AUDIO_M4A
+
+        (versao,) = comite.cartao(MEMBRO, caso, dep)["arquivos"]["audio"]
+        resposta = comite.baixar(MEMBRO, caso, dep, versao["paginas"][0]["id"])
+
+        assert resposta.status_code == 200
+        assert resposta.content == AUDIO_M4A
+        assert resposta.headers["content-type"] == "audio/mp4"
+        assert resposta.headers["cache-control"] == "no-store"
+        assert "abriu_arquivo" in comite.trilha(caso)
+
+    def test_quem_nao_abre_o_caso_nao_ouve(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+        comite.anexar(MEMBRO, caso, dep, "audio", "gravacao.m4a", AUDIO_M4A)
+        (versao,) = comite.cartao(MEMBRO, caso, dep)["arquivos"]["audio"]
+
+        resposta = comite.baixar(DE_FORA, caso, dep, versao["paginas"][0]["id"])
+
+        assert resposta.status_code == 403
+        assert AUDIO_M4A not in resposta.content
+
+    def test_arquivo_de_outro_depoimento_nao_sai_pelo_depoimento_errado(self, comite):
+        caso = comite.caso()
+        dep, outro = comite.depoimento(caso), comite.depoimento(caso)
+        comite.anexar(MEMBRO, caso, outro, "audio", "gravacao.m4a", AUDIO_M4A)
+        (versao,) = comite.cartao(MEMBRO, caso, outro)["arquivos"]["audio"]
+
+        assert comite.baixar(MEMBRO, caso, dep, versao["paginas"][0]["id"]).status_code == 404
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# O termo assinado sobe pela câmera do celular, e uma nova versão não apaga a
+# anterior
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestTermoAssinado:
+    def test_a_foto_da_camera_sobe_como_termo_assinado(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+
+        resposta = comite.anexar(MEMBRO, caso, dep, "termo-assinado", "image.jpg", FOTO_DO_TERMO)
+
+        assert resposta.status_code == 200, resposta.text
+        (versao,) = comite.cartao(MEMBRO, caso, dep)["arquivos"]["termo_assinado"]
+        (pagina,) = versao["paginas"]
+        assert pagina["content_type"] == "image/jpeg"
+        assert comite.baixar(MEMBRO, caso, dep, pagina["id"]).content == FOTO_DO_TERMO
+
+    def test_duas_fotos_viram_as_duas_paginas_da_mesma_versao(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+
+        resposta = comite.cliente(MEMBRO).post(
+            f"{BASE}/casos/{caso}/depoimentos/{dep}/termo-assinado",
+            files=[("arquivo", ("p1.jpg", FOTO_DO_TERMO, "image/jpeg")), ("arquivo", ("p2.heic", b"heic", "image/heic"))],
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        (versao,) = comite.cartao(MEMBRO, caso, dep)["arquivos"]["termo_assinado"]
+        assert [p["content_type"] for p in versao["paginas"]] == ["image/jpeg", "image/heic"]
+
+    def test_a_versao_nova_nao_apaga_a_anterior(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+        comite.anexar(MEMBRO, caso, dep, "termo-assinado", "image.jpg", FOTO_DO_TERMO)
+        corrigido = FOTO_DO_TERMO + b" com a correcao do depoente"
+
+        comite.anexar(COORDENACAO, caso, dep, "termo-assinado", "image.jpg", corrigido)
+
+        versoes = comite.cartao(MEMBRO, caso, dep)["arquivos"]["termo_assinado"]
+        assert [(v["versao"], v["enviado_por"]) for v in versoes] == [(2, NOMES[COORDENACAO]), (1, NOMES[MEMBRO])]
+        conteudos = [comite.baixar(MEMBRO, caso, dep, v["paginas"][0]["id"]).content for v in versoes]
+        assert conteudos == [corrigido, FOTO_DO_TERMO]
+        assert len(comite.banco.storage.objetos) == 2
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Nenhum arquivo do depoimento é servido por URL assinada do bucket
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestSemUrlDoBucket:
+    def test_nenhum_dos_tres_arquivos_sai_por_url_do_bucket(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+        comite.anexar(MEMBRO, caso, dep, "transcricao", "transcricao.txt", TRANSCRICAO)
+        comite.anexar(MEMBRO, caso, dep, "audio", "gravacao.m4a", AUDIO_M4A)
+        comite.anexar(MEMBRO, caso, dep, "termo-assinado", "image.jpg", FOTO_DO_TERMO)
+
+        tela = comite.abrir(MEMBRO, caso)
+        ids = [p["id"] for versoes in tela["depoimentos"][0]["arquivos"].values() for v in versoes for p in v["paginas"]]
+        conteudos = [comite.baixar(MEMBRO, caso, dep, i).content for i in ids]
+
+        assert sorted(conteudos) == sorted([TRANSCRICAO, AUDIO_M4A, FOTO_DO_TERMO])
+        assert comite.banco.storage.urls_assinadas == []
+        assert "conduta-arquivos" not in str(tela) and "depoimentos/" not in str(tela)
