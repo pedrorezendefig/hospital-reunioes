@@ -137,6 +137,8 @@ Abaixo dos gráficos, o painel mostra o gráfico de atrasos por setor e o rankin
 
 Toda segunda-feira, o aplicativo guarda os números do painel de cada pessoa que o vê, a fotografia da semana, no horário de Brasília. Rodar de novo na mesma semana não muda a fotografia. Com ela, o painel mostra a evolução das atrasadas nas últimas 8 semanas, e cada card ganha a seta de subida ou descida em relação à semana anterior. A contagem começou quando essa mudança entrou: a seta só aparece quando existe a fotografia da semana anterior, ou seja, a partir da segunda semana. A semana sem fotografia não aparece, e nada é recalculado do passado. Com algum filtro ligado, os cards ficam sem seta, porque a fotografia é do painel sem filtro.
 
+Toda segunda-feira, a partir das 8h, cada pessoa recebe um e-mail com o resumo da semana que passou, de segunda a domingo, no horário de Brasília. O facilitador recebe, das reuniões que conduz, o que foi concluído, atualizado e repactuado na semana, com a anotação de cada um, e as pendências que seguem atrasadas. O responsável recebe só as pendências dele em aberto, inclusive as que divide com outra pessoa. Quem é as duas coisas recebe um e-mail só, com as duas partes separadas. Quem não tem nada para ver não recebe e-mail. Cada pessoa recebe um só por semana, mesmo que o envio rode de novo naquela manhã. As reuniões do Núcleo ficam de fora para quem o Núcleo não deixa ver. O link do e-mail abre o aplicativo. A repactuação não gera aviso na hora: ela aparece no e-mail de segunda.
+
 O painel não tem alerta de prazo nem lista do que depende de cada um: isso fica no Início, e o painel tem um link para lá.
 
 ## O calendário

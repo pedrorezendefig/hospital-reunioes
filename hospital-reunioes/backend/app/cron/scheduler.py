@@ -76,6 +76,13 @@ Jobs:
      #1873). Alimenta a evolução de 8 semanas e a seta dos cards. Idempotente
      por semana: quem já tem a fotografia da semana não é fotografado de novo,
      e a chave da tabela garante uma por pessoa e semana. Sem IA.
+ 20. enviar_email_de_segunda: segunda-feira, de hora em hora das 08h às 12h, manda
+     o e-mail de segunda de Reuniões, um por pessoa: ao Facilitador, o que foi
+     concluído, atualizado e repactuado na semana nas Reuniões dele e o que segue
+     atrasado; ao responsável, as Pendências dele em aberto (issue #1876). Quem
+     não tem nada para ver não recebe. Idempotente por semana: a linha em
+     `email_de_segunda` é gravada antes do envio, e o modo de teste do e-mail
+     não grava. Sem IA.
 
 Nenhum job dispara IA por conta própria (ADR 0082): a recomendação da Validação
 e o segundo agente de Contas médicas rodam só pelo botão da tela. A fila de
@@ -540,6 +547,21 @@ def avisar_termo_e_vigencia_nsp() -> None:
         )
 
 
+def enviar_email_de_segunda() -> None:
+    """O e-mail de segunda de Reuniões (issue #1876). Roda na segunda, de hora
+    em hora das 08h às 12h, como a fotografia: um deploy às 08h não perde a
+    semana, e as passadas seguintes só pegam quem faltou. Sem IA."""
+    from app.services import email_de_segunda
+
+    try:
+        enviados = email_de_segunda.enviar_semana(_supabase(), hoje=_hoje())
+    except Exception as e:
+        logger.error(f"[Cron] Erro em enviar_email_de_segunda: {type(e).__name__}")
+        return
+    if enviados:
+        logger.info(f"[Cron] E-mail de segunda de Reuniões: {enviados} pessoa(s).")
+
+
 def despachar_emails_nsp() -> None:
     """A fila de e-mails do Núcleo (issue #1985). A janela, a retentativa e a
     reivindicação vivem no serviço; aqui, só o relógio."""
@@ -834,6 +856,17 @@ def start_scheduler() -> None:
         id="fotografia_painel_reunioes",
         replace_existing=True,
     )
+    # Segunda, 08h a 12h: o e-mail sai na primeira passada, e as outras só
+    # pegam quem faltou (issue #1876).
+    scheduler.add_job(
+        enviar_email_de_segunda,
+        "cron",
+        day_of_week="mon",
+        hour="8-12",
+        minute=0,
+        id="email_de_segunda_reunioes",
+        replace_existing=True,
+    )
     scheduler.add_job(
         despachar_emails_nsp,
         "interval",
@@ -894,7 +927,7 @@ def start_scheduler() -> None:
         "reconciliacao_tecnologia (de hora em hora), nota_do_google (06:45, uma leitura por semana), "
         "agenda_regulatoria_nsp (05:45), avisos_termo_e_vigencia_nsp (08:00), emails_nsp (a cada 10min), "
         "encerramento_atas_nsp (05:50), transcricoes_nsp (04:15), "
-        "fotografia_painel_reunioes (segunda, 07h a 12h)"
+        "fotografia_painel_reunioes (segunda, 07h a 12h), email_de_segunda_reunioes (segunda, 08h a 12h)"
     )
 
 
