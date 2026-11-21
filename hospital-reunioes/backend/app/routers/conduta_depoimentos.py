@@ -27,6 +27,15 @@ class PessoaAOuvir(BaseModel):
     papel: Literal["acusado", "testemunha", "denunciante"]
 
 
+class ItemDaLista(BaseModel):
+    item: str = Field(max_length=40)
+
+
+class SemGravacao(BaseModel):
+    motivo: str = Field(default="", max_length=1000)
+    pontos: str = Field(default="", max_length=40000)
+
+
 def _agir(funcao, *argumentos, **nomeados):
     try:
         return funcao(*argumentos, **nomeados)
@@ -90,6 +99,38 @@ async def anexar_termo_assinado(
 ) -> dict:
     """Arquivo ou câmera do celular: uma foto por página, até cinco."""
     return await _anexar(supabase, aberto, depoimento_id, "termo_assinado", arquivo)
+
+
+@router.post("/casos/{caso_id}/depoimentos/{depoimento_id}/conferencia")
+async def marcar_item_da_lista(
+    depoimento_id: UUID,
+    corpo: ItemDaLista,
+    aberto: CasoAberto = Depends(portao_da_acao),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    _agir(depoimentos.marcar_item, supabase, aberto, str(depoimento_id), corpo.item)
+    return {"ok": True}
+
+
+@router.post("/casos/{caso_id}/depoimentos/{depoimento_id}/sem-gravacao")
+async def registrar_sem_gravacao(
+    depoimento_id: UUID,
+    corpo: SemGravacao,
+    aberto: CasoAberto = Depends(portao_da_acao),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    _agir(depoimentos.registrar_sem_gravacao, supabase, aberto, str(depoimento_id), **corpo.model_dump())
+    return {"ok": True}
+
+
+@router.post("/casos/{caso_id}/depoimentos/{depoimento_id}/conclusao")
+async def concluir_depoimento(
+    depoimento_id: UUID,
+    aberto: CasoAberto = Depends(portao_da_acao),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    _agir(depoimentos.concluir, supabase, aberto, str(depoimento_id))
+    return {"ok": True}
 
 
 @router.get("/casos/{caso_id}/depoimentos/{depoimento_id}/arquivos/{arquivo_id}")

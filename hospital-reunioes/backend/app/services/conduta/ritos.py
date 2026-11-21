@@ -241,7 +241,6 @@ def o_que_fazer_agora(caso: dict[str, Any], olhar: Olhar) -> dict[str, Any]:
         "ADICIONAR PESSOA A OUVIR",
         _COMO_APURACAO,
         "adicionar_pessoa",
-        "O registro dos depoimentos ainda não está disponível no aplicativo.",
     )
 
 

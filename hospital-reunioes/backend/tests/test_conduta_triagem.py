@@ -269,7 +269,8 @@ class TestOQueFazerAgora:
         caixa = comite.abrir(COORDENACAO, caso)["o_que_fazer_agora"]
         assert caixa["frase"] == "Ouça o acusado e até duas pessoas. Sempre em dupla."
         assert caixa["botao"] == "ADICIONAR PESSOA A OUVIR"
-        assert caixa["bloqueio"]
+        # Os depoimentos chegaram (issue #1830): o botão abre o cartão.
+        assert caixa["bloqueio"] is None
 
     def test_o_trilho_destaca_a_etapa_atual(self, comite):
         caso = comite.caso()

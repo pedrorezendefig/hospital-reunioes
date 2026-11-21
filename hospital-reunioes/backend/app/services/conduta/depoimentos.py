@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 TABELA = "conduta_depoimentos"
 ARQUIVOS = "conduta_depoimento_arquivos"
+CONFERENCIA = "conduta_depoimento_conferencia"
 # O bucket privado do Canal (migration 175), sem policy e sem URL.
 BUCKET = "conduta-arquivos"
 
@@ -91,6 +92,21 @@ TIPOS = {
 }
 LIMITE_DO_AUDIO = TIPOS["audio"].limite_bytes
 
+# A lista de conferência (especificação, 7.2), na ordem da tela.
+ITENS = (
+    ("transcricao", "Transcrição anexada"),
+    ("audio", "Áudio anexado"),
+    ("termo_assinado", "Termo assinado anexado"),
+    ("arquivos_corretos", "Abri os arquivos na aplicação e estão corretos"),
+    ("gravacao_apagada", "Apaguei a gravação de áudio da plataforma de gravação"),
+    ("arquivos_apagados", "Apaguei os arquivos do computador e do celular"),
+    ("original_no_envelope", "Guardei o original assinado no envelope do caso"),
+)
+AUTOMATICOS = ("transcricao", "audio", "termo_assinado")
+DECLARACOES = {item: rotulo for item, rotulo in ITENS if item not in AUTOMATICOS}
+_TAMANHO_DO_MOTIVO = 500
+_TAMANHO_DOS_PONTOS = 20000
+
 
 class DepoimentoRecusadoError(Exception):
     """A ação não pode acontecer agora. `status` vai para a resposta, e a
@@ -126,10 +142,60 @@ def conferir_arquivo(tipo: str, nome: str, tamanho: int) -> str:
     return regra.content_types[extensao]
 
 
-def situacao(depoimento: dict) -> str:
+def situacao(depoimento: dict, arquivos: list[dict]) -> str:
+    """O cartão mostra "Aguardando assinatura" até o termo assinado chegar."""
     if depoimento.get("concluido_em"):
         return "Concluído"
-    return "Aguardando assinatura"
+    if not any(a["tipo"] == "termo_assinado" for a in arquivos):
+        return "Aguardando assinatura"
+    return "Falta a lista de conferência"
+
+
+def lista_de_conferencia(
+    depoimento: dict, arquivos: list[dict], marcas: list[dict], nomes: dict[str, str], motivo: str | None
+) -> list[dict[str, Any]]:
+    """Os sete itens, cada um `feito`, `pendente` ou `nao_se_aplica`. O feito
+    diz quem e quando: o último envio, nos automáticos; a declaração, nos
+    outros. `motivo` é o de sem gravação, já decifrado."""
+    por_item = {m["item"]: m for m in marcas}
+    lista = []
+    for item, rotulo in ITENS:
+        linha: dict[str, Any] = {"item": item, "rotulo": rotulo, "automatico": item in AUTOMATICOS}
+        if item in AUTOMATICOS:
+            enviados = sorted((a for a in arquivos if a["tipo"] == item), key=lambda a: a["versao"])
+            if item != "termo_assinado" and depoimento.get("sem_gravacao_em"):
+                linha.update(estado="nao_se_aplica", motivo=motivo)
+            elif enviados:
+                ultimo = enviados[-1]
+                linha.update(
+                    estado="feito", marcado_por=nomes.get(ultimo["enviado_por"], ""), marcado_em=ultimo["enviado_em"]
+                )
+            else:
+                linha.update(estado="pendente")
+        elif item in por_item:
+            marca = por_item[item]
+            linha.update(
+                estado="feito", marcado_por=nomes.get(marca["marcado_por"], ""), marcado_em=marca["marcado_em"]
+            )
+        else:
+            linha.update(estado="pendente")
+        lista.append(linha)
+    return lista
+
+
+def bloqueio_da_conclusao(lista: list[dict]) -> str | None:
+    faltam = [i["rotulo"] for i in lista if i["estado"] == "pendente"]
+    return f"Falta marcar: {', '.join(faltam)}." if faltam else None
+
+
+def bloqueio_do_avanco(depoimentos: list[dict]) -> str | None:
+    """A Apuração só avança para o relatório com todos os depoimentos
+    concluídos (especificação, 7.2). O banco tem a mesma trava."""
+    faltam = sum(1 for d in depoimentos if not d.get("concluido_em"))
+    if not faltam:
+        return None
+    quantos = "Falta 1" if faltam == 1 else f"Faltam {faltam}"
+    return f"A Apuração só avança com todos os depoimentos concluídos. {quantos}."
 
 
 # ── Leituras ────────────────────────────────────────────────────────────────
@@ -144,8 +210,7 @@ def _depoimento(supabase, caso_id: str, depoimento_id: str) -> dict:
     """O depoimento DESTE caso. Sem o casamento com o caso, o id de um
     depoimento viraria caminho lateral para outro caso."""
     linhas = (
-        supabase.table(TABELA).select("*").eq("id", depoimento_id).eq("caso_id", caso_id).limit(1).execute().data
-        or []
+        supabase.table(TABELA).select("*").eq("id", depoimento_id).eq("caso_id", caso_id).limit(1).execute().data or []
     )
     if not linhas:
         raise DepoimentoRecusadoError(404, "Depoimento não encontrado neste caso.")
@@ -189,24 +254,63 @@ def _versoes(arquivos: list[dict], nomes: dict[str, str]) -> dict[str, list[dict
     return saida
 
 
+def _marcas(supabase, depoimento_ids: list[str]) -> list[dict]:
+    if not depoimento_ids:
+        return []
+    return supabase.table(CONFERENCIA).select("*").in_("depoimento_id", depoimento_ids).execute().data or []
+
+
+def _sem_gravacao(depoimento: dict, nomes: dict[str, str]) -> dict[str, str] | None:
+    if not depoimento.get("sem_gravacao_em"):
+        return None
+    return {
+        "motivo": cifra.decifrar_texto(depoimento["sem_gravacao_motivo_cifrado"]),
+        "pontos": cifra.decifrar_texto(depoimento["pontos_cifrados"]),
+        "registrado_por": nomes.get(depoimento.get("sem_gravacao_por") or "", ""),
+    }
+
+
+def _cartao(depoimento: dict, arquivos: list[dict], marcas: list[dict], nomes: dict[str, str]) -> dict[str, Any]:
+    sem_gravacao = _sem_gravacao(depoimento, nomes)
+    lista = lista_de_conferencia(depoimento, arquivos, marcas, nomes, sem_gravacao and sem_gravacao["motivo"])
+    return {
+        "id": depoimento["id"],
+        "nome": cifra.decifrar_texto(depoimento["nome_cifrado"]),
+        "cargo": cifra.decifrar_texto(depoimento["cargo_cifrado"]),
+        "papel": depoimento["papel"],
+        "situacao": situacao(depoimento, arquivos),
+        "arquivos": _versoes(arquivos, nomes),
+        "sem_gravacao": sem_gravacao,
+        "lista": lista,
+        "bloqueio_da_conclusao": None if depoimento.get("concluido_em") else bloqueio_da_conclusao(lista),
+        "concluido_em": depoimento.get("concluido_em"),
+        "concluido_por": nomes.get(depoimento.get("concluido_por") or "", "") or None,
+    }
+
+
 def para_a_tela(supabase, caso: dict) -> dict[str, Any]:
-    """Os cartões do caso, decifrados. Levanta `CifraIndisponivelError` se a
-    chave não abre."""
+    """Os cartões do caso, decifrados, e a trava do avanço da Apuração.
+    Levanta `CifraIndisponivelError` se a chave não abre."""
     lista = _do_caso(supabase, caso["id"])
-    arquivos = _arquivos(supabase, [d["id"] for d in lista])
-    nomes = _nomes(supabase, {a["enviado_por"] for a in arquivos})
+    ids = [d["id"] for d in lista]
+    arquivos, marcas = _arquivos(supabase, ids), _marcas(supabase, ids)
+    nomes = _nomes(
+        supabase,
+        {a["enviado_por"] for a in arquivos}
+        | {m["marcado_por"] for m in marcas}
+        | {d.get("sem_gravacao_por") for d in lista}
+        | {d.get("concluido_por") for d in lista},
+    )
     cartoes = [
-        {
-            "id": d["id"],
-            "nome": cifra.decifrar_texto(d["nome_cifrado"]),
-            "cargo": cifra.decifrar_texto(d["cargo_cifrado"]),
-            "papel": d["papel"],
-            "situacao": situacao(d),
-            "arquivos": _versoes([a for a in arquivos if a["depoimento_id"] == d["id"]], nomes),
-        }
+        _cartao(
+            d,
+            [a for a in arquivos if a["depoimento_id"] == d["id"]],
+            [m for m in marcas if m["depoimento_id"] == d["id"]],
+            nomes,
+        )
         for d in lista
     ]
-    return {"depoimentos": cartoes}
+    return {"depoimentos": cartoes, "avanco_da_apuracao": bloqueio_do_avanco(lista)}
 
 
 # ── Ações ───────────────────────────────────────────────────────────────────
@@ -337,3 +441,88 @@ def abrir_arquivo(supabase, aberto: CasoAberto, depoimento_id: str, arquivo_id: 
     if cifrado is None:
         raise DepoimentoRecusadoError(503, "O arquivo não pôde ser aberto agora. Tente de novo.")
     return cifra.decifrar_arquivo(cifrado), arquivo["content_type"]
+
+
+def marcar_item(supabase, aberto: CasoAberto, depoimento_id: str, item: str) -> None:
+    """A declaração de quem conduziu, com quem marcou e quando. Uma vez
+    marcada, não se desmarca nem se refaz."""
+    if item not in DECLARACOES:
+        raise DepoimentoRecusadoError(422, "Este item é marcado sozinho pelo aplicativo.")
+    caso = aberto.caso
+    depoimento = _depoimento(supabase, caso["id"], depoimento_id)
+    _exigir_aberto(caso, depoimento)
+    if any(m["item"] == item for m in _marcas(supabase, [depoimento["id"]])):
+        raise DepoimentoRecusadoError(409, "Este item já foi marcado.")
+    trilha.registrar(supabase, caso["id"], aberto.autor_id, "declarou_item_da_lista", f"declarou: {DECLARACOES[item]}")
+    try:
+        supabase.table(CONFERENCIA).insert(
+            {
+                "depoimento_id": depoimento["id"],
+                "item": item,
+                "marcado_por": aberto.autor_id,
+                "marcado_em": agora_utc().isoformat(),
+            }
+        ).execute()
+    except APIError as erro:
+        if getattr(erro, "code", None) == "23505":
+            raise DepoimentoRecusadoError(409, "Este item já foi marcado.") from erro
+        raise
+
+
+def _mudar(supabase, depoimento: dict, campos: dict[str, Any]) -> dict:
+    """Muda o depoimento que ainda não foi concluído; senão, recusa."""
+    linhas = (
+        supabase.table(TABELA).update(campos).eq("id", depoimento["id"]).is_("concluido_em", "null").execute().data
+        or []
+    )
+    if not linhas:
+        raise DepoimentoRecusadoError(409, "O depoimento mudou enquanto você agia. Abra de novo.")
+    return linhas[0]
+
+
+def registrar_sem_gravacao(supabase, aberto: CasoAberto, depoimento_id: str, *, motivo: str, pontos: str) -> dict:
+    """A pessoa não aceitou gravação: quem conduz digita os pontos da conversa,
+    que fazem as vezes da transcrição. Transcrição e áudio ficam "Não se
+    aplica", com o motivo."""
+    motivo, pontos = (motivo or "").strip(), (pontos or "").strip()
+    if not motivo or not pontos:
+        raise DepoimentoRecusadoError(422, "Escreva o motivo e os pontos da conversa.")
+    if len(motivo) > _TAMANHO_DO_MOTIVO or len(pontos) > _TAMANHO_DOS_PONTOS:
+        raise DepoimentoRecusadoError(422, "O texto passou do tamanho que cabe.")
+    caso = aberto.caso
+    depoimento = _depoimento(supabase, caso["id"], depoimento_id)
+    _exigir_aberto(caso, depoimento)
+    if depoimento.get("sem_gravacao_em"):
+        raise DepoimentoRecusadoError(409, "Este depoimento já está registrado sem gravação.")
+    if any(a["tipo"] in ("transcricao", "audio") for a in _arquivos(supabase, [depoimento["id"]])):
+        raise DepoimentoRecusadoError(409, "Este depoimento já tem gravação anexada.")
+    motivo_cifrado, pontos_cifrados = cifra.cifrar_texto(motivo), cifra.cifrar_texto(pontos)
+    trilha.registrar(supabase, caso["id"], aberto.autor_id, "registrou_sem_gravacao", "depoimento sem gravação")
+    return _mudar(
+        supabase,
+        depoimento,
+        {
+            "sem_gravacao_em": agora_utc().isoformat(),
+            "sem_gravacao_por": aberto.autor_id,
+            "sem_gravacao_motivo_cifrado": motivo_cifrado,
+            "pontos_cifrados": pontos_cifrados,
+        },
+    )
+
+
+def concluir(supabase, aberto: CasoAberto, depoimento_id: str) -> dict:
+    """O botão CONCLUIR DEPOIMENTO: só com os sete itens da lista."""
+    caso = aberto.caso
+    depoimento = _depoimento(supabase, caso["id"], depoimento_id)
+    _exigir_aberto(caso, depoimento)
+    motivo = (
+        cifra.decifrar_texto(depoimento["sem_gravacao_motivo_cifrado"]) if depoimento.get("sem_gravacao_em") else None
+    )
+    lista = lista_de_conferencia(
+        depoimento, _arquivos(supabase, [depoimento["id"]]), _marcas(supabase, [depoimento["id"]]), {}, motivo
+    )
+    bloqueio = bloqueio_da_conclusao(lista)
+    if bloqueio:
+        raise DepoimentoRecusadoError(409, bloqueio)
+    trilha.registrar(supabase, caso["id"], aberto.autor_id, "concluiu_depoimento", "concluiu o depoimento")
+    return _mudar(supabase, depoimento, {"concluido_em": agora_utc().isoformat(), "concluido_por": aberto.autor_id})

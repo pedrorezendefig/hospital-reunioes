@@ -40,7 +40,7 @@ COORDENACAO, MEMBRO, DE_FORA = "COORD", "MEMB", "FORA"
 NOMES = {COORDENACAO: "Ana Coordenadora", MEMBRO: "Bruno Membro", DE_FORA: "Carla de Fora"}
 
 PESSOA_OUVIDA = {"nome": "Fulano de Tal", "cargo": "Supervisor do almoxarifado", "papel": "acusado"}
-TRANSCRICAO = "Entrevistador: o senhor confirma? Fulano: confirmo que levantei a voz.".encode()
+TRANSCRICAO = b"Entrevistador: o senhor confirma? Fulano: confirmo que levantei a voz."
 # O começo de um M4A de verdade (caixa ftyp), seguido de "som".
 AUDIO_M4A = b"\x00\x00\x00\x20ftypM4A \x00\x00\x00\x00M4A mp42isom" + b"som do depoimento" * 64
 FOTO_DO_TERMO = b"\xff\xd8\xff\xe0" + b"pixels do termo assinado" * 32
@@ -324,7 +324,10 @@ class TestTermoAssinado:
 
         resposta = comite.cliente(MEMBRO).post(
             f"{BASE}/casos/{caso}/depoimentos/{dep}/termo-assinado",
-            files=[("arquivo", ("p1.jpg", FOTO_DO_TERMO, "image/jpeg")), ("arquivo", ("p2.heic", b"heic", "image/heic"))],
+            files=[
+                ("arquivo", ("p1.jpg", FOTO_DO_TERMO, "image/jpeg")),
+                ("arquivo", ("p2.heic", b"heic", "image/heic")),
+            ],
         )
 
         assert resposta.status_code == 200, resposta.text
@@ -360,9 +363,239 @@ class TestSemUrlDoBucket:
         comite.anexar(MEMBRO, caso, dep, "termo-assinado", "image.jpg", FOTO_DO_TERMO)
 
         tela = comite.abrir(MEMBRO, caso)
-        ids = [p["id"] for versoes in tela["depoimentos"][0]["arquivos"].values() for v in versoes for p in v["paginas"]]
+        ids = [
+            p["id"] for versoes in tela["depoimentos"][0]["arquivos"].values() for v in versoes for p in v["paginas"]
+        ]
         conteudos = [comite.baixar(MEMBRO, caso, dep, i).content for i in ids]
 
         assert sorted(conteudos) == sorted([TRANSCRICAO, AUDIO_M4A, FOTO_DO_TERMO])
         assert comite.banco.storage.urls_assinadas == []
         assert "conduta-arquivos" not in str(tela) and "depoimentos/" not in str(tela)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# "CONCLUIR DEPOIMENTO" fica bloqueado, com o motivo, até os sete itens
+# estarem marcados
+# ═══════════════════════════════════════════════════════════════════════════
+
+ITENS_DA_LISTA = [
+    "Transcrição anexada",
+    "Áudio anexado",
+    "Termo assinado anexado",
+    "Abri os arquivos na aplicação e estão corretos",
+    "Apaguei a gravação de áudio da plataforma de gravação",
+    "Apaguei os arquivos do computador e do celular",
+    "Guardei o original assinado no envelope do caso",
+]
+DECLARACOES = ("arquivos_corretos", "gravacao_apagada", "arquivos_apagados", "original_no_envelope")
+
+
+def _marcar(comite: Comite, pid: str, caso: str, dep: str, item: str):
+    return comite.cliente(pid).post(f"{BASE}/casos/{caso}/depoimentos/{dep}/conferencia", json={"item": item})
+
+
+def _concluir(comite: Comite, pid: str, caso: str, dep: str):
+    return comite.cliente(pid).post(f"{BASE}/casos/{caso}/depoimentos/{dep}/conclusao")
+
+
+def _tres_arquivos(comite: Comite, caso: str, dep: str) -> None:
+    comite.anexar(MEMBRO, caso, dep, "transcricao", "transcricao.txt", TRANSCRICAO)
+    comite.anexar(MEMBRO, caso, dep, "audio", "gravacao.m4a", AUDIO_M4A)
+    comite.anexar(MEMBRO, caso, dep, "termo-assinado", "image.jpg", FOTO_DO_TERMO)
+
+
+class TestConclusao:
+    def test_a_lista_tem_os_sete_itens_da_especificacao_tres_automaticos(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+
+        lista = comite.cartao(MEMBRO, caso, dep)["lista"]
+
+        assert [i["rotulo"] for i in lista] == ITENS_DA_LISTA
+        assert [i["automatico"] for i in lista] == [True, True, True, False, False, False, False]
+        assert {i["estado"] for i in lista} == {"pendente"}
+
+    def test_os_arquivos_marcam_os_tres_automaticos(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+
+        _tres_arquivos(comite, caso, dep)
+
+        lista = comite.cartao(MEMBRO, caso, dep)["lista"]
+        assert [i["estado"] for i in lista] == ["feito"] * 3 + ["pendente"] * 4
+
+    def test_sem_os_sete_concluir_fica_bloqueado_com_o_motivo(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+        _tres_arquivos(comite, caso, dep)
+        for item in DECLARACOES[:3]:
+            assert _marcar(comite, MEMBRO, caso, dep, item).status_code == 200
+
+        cartao = comite.cartao(MEMBRO, caso, dep)
+        resposta = _concluir(comite, MEMBRO, caso, dep)
+
+        motivo = "Falta marcar: Guardei o original assinado no envelope do caso."
+        assert cartao["bloqueio_da_conclusao"] == motivo
+        assert (resposta.status_code, resposta.json()["detail"]) == (409, motivo)
+        assert comite.cartao(MEMBRO, caso, dep)["situacao"] != "Concluído"
+
+    def test_com_os_sete_o_depoimento_conclui_e_nao_muda_mais(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+        _tres_arquivos(comite, caso, dep)
+        for item in DECLARACOES:
+            _marcar(comite, MEMBRO, caso, dep, item)
+
+        assert comite.cartao(MEMBRO, caso, dep)["bloqueio_da_conclusao"] is None
+        assert _concluir(comite, MEMBRO, caso, dep).status_code == 200
+
+        cartao = comite.cartao(MEMBRO, caso, dep)
+        assert cartao["situacao"] == "Concluído"
+        assert "concluiu_depoimento" in comite.trilha(caso)
+        assert comite.anexar(MEMBRO, caso, dep, "audio", "outra.m4a", AUDIO_M4A).status_code == 409
+
+    def test_sem_termo_assinado_o_cartao_diz_aguardando_assinatura(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+        comite.anexar(MEMBRO, caso, dep, "transcricao", "transcricao.txt", TRANSCRICAO)
+        assert comite.cartao(MEMBRO, caso, dep)["situacao"] == "Aguardando assinatura"
+
+        comite.anexar(MEMBRO, caso, dep, "termo-assinado", "image.jpg", FOTO_DO_TERMO)
+        assert comite.cartao(MEMBRO, caso, dep)["situacao"] == "Falta a lista de conferência"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Cada item marcado pelo membro registra quem marcou e quando
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestDeclaracoes:
+    def test_o_item_marcado_guarda_quem_marcou_e_quando(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+        antes = datetime.now().astimezone()
+
+        assert _marcar(comite, COORDENACAO, caso, dep, "gravacao_apagada").status_code == 200
+
+        item = next(i for i in comite.cartao(MEMBRO, caso, dep)["lista"] if i["item"] == "gravacao_apagada")
+        assert (item["estado"], item["marcado_por"]) == ("feito", NOMES[COORDENACAO])
+        assert datetime.fromisoformat(item["marcado_em"]) >= antes
+        (linha,) = [x for x in comite.banco.tabelas["conduta_trilha"] if x["acao"] == "declarou_item_da_lista"]
+        assert linha["autor_id"] == COORDENACAO
+        assert "Apaguei a gravação" in linha["detalhe"]
+
+    def test_a_declaracao_feita_nao_e_refeita_por_outro(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+        _marcar(comite, COORDENACAO, caso, dep, "arquivos_corretos")
+
+        segunda = _marcar(comite, MEMBRO, caso, dep, "arquivos_corretos")
+
+        assert segunda.status_code == 409
+        item = next(i for i in comite.cartao(MEMBRO, caso, dep)["lista"] if i["item"] == "arquivos_corretos")
+        assert item["marcado_por"] == NOMES[COORDENACAO]
+
+    def test_item_automatico_nao_se_marca_a_mao(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+
+        assert _marcar(comite, MEMBRO, caso, dep, "audio").status_code == 422
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Sem gravação, os pontos digitados substituem a transcrição e os dois itens
+# ficam "Não se aplica", com o motivo
+# ═══════════════════════════════════════════════════════════════════════════
+
+SEM_GRAVACAO = {"motivo": "A pessoa não aceitou ser gravada.", "pontos": "Confirmou que levantou a voz na reunião."}
+
+
+def _sem_gravacao(comite: Comite, pid: str, caso: str, dep: str, corpo: dict | None = None):
+    return comite.cliente(pid).post(
+        f"{BASE}/casos/{caso}/depoimentos/{dep}/sem-gravacao", json=SEM_GRAVACAO if corpo is None else corpo
+    )
+
+
+class TestSemGravacao:
+    def test_os_pontos_substituem_a_transcricao_e_os_dois_itens_nao_se_aplicam(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+
+        assert _sem_gravacao(comite, MEMBRO, caso, dep).status_code == 200
+
+        cartao = comite.cartao(MEMBRO, caso, dep)
+        assert cartao["sem_gravacao"] == {**SEM_GRAVACAO, "registrado_por": NOMES[MEMBRO]}
+        estados = {i["item"]: (i["estado"], i.get("motivo")) for i in cartao["lista"]}
+        assert estados["transcricao"] == ("nao_se_aplica", SEM_GRAVACAO["motivo"])
+        assert estados["audio"] == ("nao_se_aplica", SEM_GRAVACAO["motivo"])
+        assert estados["termo_assinado"] == ("pendente", None)
+
+    def test_sem_gravacao_conclui_com_o_termo_e_as_quatro_declaracoes(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+        _sem_gravacao(comite, MEMBRO, caso, dep)
+        comite.anexar(MEMBRO, caso, dep, "termo-assinado", "image.jpg", FOTO_DO_TERMO)
+        for item in DECLARACOES:
+            _marcar(comite, MEMBRO, caso, dep, item)
+
+        assert _concluir(comite, MEMBRO, caso, dep).status_code == 200
+
+    def test_os_pontos_e_o_motivo_ficam_cifrados(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+
+        _sem_gravacao(comite, MEMBRO, caso, dep)
+
+        (linha,) = comite.banco.tabelas["conduta_depoimentos"]
+        assert SEM_GRAVACAO["pontos"] not in str(linha) and SEM_GRAVACAO["motivo"] not in str(linha)
+
+    def test_sem_motivo_ou_sem_pontos_nao_vale(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+
+        assert _sem_gravacao(comite, MEMBRO, caso, dep, {"motivo": "", "pontos": "algo"}).status_code == 422
+        assert _sem_gravacao(comite, MEMBRO, caso, dep, {"motivo": "recusou", "pontos": " "}).status_code == 422
+
+    def test_depoimento_gravado_nao_vira_sem_gravacao_e_vice_versa(self, comite):
+        caso = comite.caso()
+        gravado, sem = comite.depoimento(caso), comite.depoimento(caso)
+        comite.anexar(MEMBRO, caso, gravado, "audio", "gravacao.m4a", AUDIO_M4A)
+        _sem_gravacao(comite, MEMBRO, caso, sem)
+
+        assert _sem_gravacao(comite, MEMBRO, caso, gravado).status_code == 409
+        assert comite.anexar(MEMBRO, caso, sem, "audio", "gravacao.m4a", AUDIO_M4A).status_code == 409
+        assert comite.anexar(MEMBRO, caso, sem, "transcricao", "t.txt", TRANSCRICAO).status_code == 409
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# A etapa Apuração não avança com depoimento em aberto (a trava do banco está
+# em test_conduta_depoimentos_migration_banco.py)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestApuracaoNaoAvanca:
+    def test_com_depoimento_em_aberto_a_tela_diz_que_a_apuracao_nao_avanca(self, comite):
+        caso = comite.caso()
+        comite.depoimento(caso)
+
+        tela = comite.abrir(MEMBRO, caso)
+
+        assert tela["avanco_da_apuracao"] == "A Apuração só avança com todos os depoimentos concluídos. Falta 1."
+
+    def test_com_todos_concluidos_a_trava_sai(self, comite):
+        caso = comite.caso()
+        dep = comite.depoimento(caso)
+        _tres_arquivos(comite, caso, dep)
+        for item in DECLARACOES:
+            _marcar(comite, MEMBRO, caso, dep, item)
+        _concluir(comite, MEMBRO, caso, dep)
+
+        assert comite.abrir(MEMBRO, caso)["avanco_da_apuracao"] is None
+
+    def test_a_regra_conta_os_que_faltam(self):
+        abertos = [{"concluido_em": None}, {"concluido_em": "2026-11-20T10:00:00+00:00"}, {"concluido_em": None}]
+
+        assert depoimentos.bloqueio_do_avanco(abertos) == (
+            "A Apuração só avança com todos os depoimentos concluídos. Faltam 2."
+        )
+        assert depoimentos.bloqueio_do_avanco([]) is None
