@@ -137,6 +137,9 @@ class FilaDoPapel(BaseModel):
 class Inicio(BaseModel):
     hoje: date
     frase: Frase
+    # Nada vencido nem para as próximas 48 horas, como na frase: só quem está
+    # em dia vê o que entregou nos últimos 7 dias (issue #1946).
+    em_dia: bool = False
     contadores: Contadores
     itens: list[ItemDoInicio]
     avisos: list[AvisoDeFonte]
@@ -217,6 +220,7 @@ def montar_inicio(
     return Inicio(
         hoje=hoje,
         frase=Frase(titulo=titulo, apoio=apoio),
+        em_dia=not vencidos and not por_grupo[ATE_48_HORAS],
         contadores=Contadores(
             passou_do_prazo=len(vencidos),
             ate_48_horas=len(por_grupo[ATE_48_HORAS]),
