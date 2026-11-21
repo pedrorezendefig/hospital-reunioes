@@ -1,8 +1,9 @@
 """O portão único do lado do Comitê do Canal de Conduta (ADR 0097, decisão 4).
 
 Toda rota do Comitê depende de `portao_da_lista`, de `portao_do_caso`, de
-`portao_da_acao` ou, nas configurações do módulo, de `portao_da_coordenacao`,
-e `tests/test_conduta_varredura.py` reprova a rota do módulo que não dependa.
+`portao_da_acao`, na tela inicial, de `portao_da_tela_inicial` ou, nas
+configurações do módulo, de `portao_da_coordenacao`, e
+`tests/test_conduta_varredura.py` reprova a rota do módulo que não dependa.
 A tela Membros, que não mostra caso, tem os dois portões dela:
 `portao_dos_membros` (ler) e `portao_do_cadastro` (incluir e encerrar).
 
@@ -17,7 +18,7 @@ fechado para a pessoa não se distinguem. O super admin não passa por cima.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from uuid import UUID
 
 import httpx
@@ -32,6 +33,7 @@ from app.services.conduta.acesso import (
     caso_se_a_pessoa_abre,
     casos_da_pessoa,
     hoje_em_sao_paulo,
+    papel_no_caso,
     pessoa_no_comite,
 )
 
@@ -48,6 +50,8 @@ class NoComite:
     autor_id: str
     pessoa: PessoaNoComite
     casos: list[dict]
+    # No Comitê hoje, sem o Termo de Confidencialidade e Posse assinado.
+    termo_pendente: bool = False
 
 
 @dataclass(frozen=True)
@@ -108,12 +112,32 @@ async def portao_da_lista(
     return NoComite(autor_id=me["id"], pessoa=pessoa, casos=casos)
 
 
+async def portao_da_tela_inicial(
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+) -> NoComite:
+    """MINHA VEZ: o portão da lista e, além dele, o membro do Comitê ainda
+    sem o Termo assinado (issue #1823; especificação, 3.4). Ele vê a tela
+    inicial vazia, com o Termo pendente, e não abre caso nenhum."""
+    me, pessoa = await _pessoa(current_user, supabase)
+    casos = casos_da_pessoa(supabase, pessoa)
+    # Quem tem Participação vigente e não assinou. O apurador, sem
+    # Participação, não tem este Termo.
+    termo_pendente = pessoa.papel is not None and not pessoa.termo_valido
+    if casos is None and not termo_pendente:
+        raise _recusar()
+    return NoComite(autor_id=me["id"], pessoa=pessoa, casos=casos or [], termo_pendente=termo_pendente)
+
+
 async def _caso_aberto(caso_id: UUID, current_user: dict, supabase) -> CasoAberto:
     me, pessoa = await _pessoa(current_user, supabase)
     aberto = caso_se_a_pessoa_abre(supabase, pessoa, str(caso_id))
     if aberto is None:
         raise _recusar()
     caso, atribuicoes = aberto
+    papel = papel_no_caso(pessoa.papel, atribuicoes)
+    if papel != pessoa.papel:
+        pessoa = replace(pessoa, papel=papel)
     return CasoAberto(autor_id=me["id"], pessoa=pessoa, caso=caso, atribuicoes=atribuicoes)
 
 

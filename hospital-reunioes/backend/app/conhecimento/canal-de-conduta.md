@@ -64,6 +64,34 @@ A tela Membros diz quem compõe o Comitê e até quando. Cada linha mostra a pes
 - Toda inclusão ou saída de membro, e todo perfil de cadastro dado ou tirado, avisa os membros vigentes do Comitê no sino do aplicativo e por e-mail. O e-mail diz só que houve mudança, sem nomes e sem nada de caso, e leva à tela Membros.
 - Cada uma dessas mudanças fica no registro do Comitê, com quem fez e quando, e o registro não se altera nem se apaga.
 
+## O Termo de Confidencialidade e Posse
+
+- Ao incluir um membro ou suplente, o aplicativo gera o Termo de Confidencialidade e Posse, um documento só com o Regimento do Comitê de Conduta como parte integrante, e ele chega à ClickSign no e-mail profissional do membro, para a assinatura eletrônica.
+- A tela Membros mostra, em cada linha, se o Termo foi assinado, se espera a assinatura ou se não foi enviado.
+- Quando o membro assina, a ClickSign avisa o aplicativo sozinha, e a participação passa a valer para abrir caso. O botão "Reconsultar status", na linha do membro, pergunta à ClickSign na hora, sem esperar esse aviso.
+- Se a ClickSign estiver fora do ar no cadastro, ou se a pessoa não tiver e-mail no cadastro, o membro fica incluído e a tela avisa. O botão "Reenviar o Termo" manda outro documento e cancela o anterior, cujo link para de valer.
+- O aplicativo guarda uma cópia do PDF assinado, com o histórico das assinaturas na última página, cifrada, na área própria do Canal. A prova não depende da conta da ClickSign.
+- Quem está no Comitê e ainda não assinou o Termo vê a tela inicial, mas não abre caso: a tela inicial diz que falta assinar o Termo que chegou no e-mail.
+- Reconsultar e reenviar o Termo é de quem tem o perfil de cadastro de membros.
+- Os outros documentos do Canal que vão à ClickSign, como a ata e o relatório de apuração, vão usar o mesmo registro de assinaturas.
+
+## Impedimento, suplente e Citado
+
+Ninguém julga um caso em que é parte, chefe, parente ou interessado. Na tela do caso:
+
+- cada membro tem o botão Declarar impedimento, com o motivo: parte no caso, chefia direta de envolvido, parentesco, relação pessoal ou interesse no resultado. Declarado, o membro perde o acesso àquele caso na hora: o caso some da lista dele, e abrir o endereço dá a mesma recusa de quem nunca teve acesso. Os outros casos continuam com ele;
+- um membro pode contestar a participação de outro no mesmo caso, com um desses motivos. Os demais membros decidem, sem o contestado: ele não vota na própria contestação. Vale a maioria de quem decide, e quem contestou já conta como um voto para confirmar. Confirmada, o contestado fica impedido. Rejeitada, ele segue no caso;
+- quando quem fica impedido votava no caso, um suplente vigente, com o Termo assinado, é convocado no lugar dele e avisado no sino. O suplente convocado vê só aquele caso e faz o que o substituído fazia: se substitui a coordenação, confirma a triagem; se substitui o segundo leitor, confere. Sem suplente livre, o impedimento vale do mesmo jeito, e a trilha registra que ninguém foi convocado;
+- o suplente sem convocação não vê caso nenhum.
+
+O Citado é a pessoa nomeada no caso como envolvida. Qualquer membro do caso marca um Citado, em qualquer etapa, até depois de encerrado, porque nomes novos aparecem nos depoimentos:
+
+- buscando pelo nome no cadastro do hospital, a marcação se liga à pessoa. Ligada, ela recebe a recusa naquele caso em qualquer perfil, mesmo designada como apuradora;
+- se a pessoa citada é do Comitê, ela fica impedida na hora, sem ato de ninguém, e um suplente é convocado no lugar quando ela votava no caso;
+- o nome que não está no cadastro fica como texto, guardado cifrado.
+
+Cada declaração de impedimento, contestação, voto, decisão, convocação e marcação de Citado entra na trilha do caso, com quem fez e quando. A trilha não leva o nome do Citado.
+
 ## Quem vê
 
 Ninguém vê um caso por ter um cargo. Vê quem está designado naquele caso:
@@ -88,7 +116,7 @@ Quem não tem acesso recebe a mesma recusa, exista o caso ou não.
 
 ## O que ele ainda não faz
 
-O formulário público de relato, as páginas públicas que vão mostrar os textos das configurações, a página de acompanhamento, a sugestão do agente na triagem, a Rota Especial, as perguntas ao relator, os depoimentos, o voto, a ata, o dossiê e o Termo de Confidencialidade e Posse do membro chegam nas próximas entregas. Na apuração, o botão "ADICIONAR PESSOA A OUVIR" aparece bloqueado até os depoimentos chegarem. O item Comitê de Conduta do menu lateral abre a tela Membros; MINHA VEZ, Casos e Configurações abrem pelo endereço do Comitê de Conduta. Por enquanto ninguém relata pelo Canal: os relatos continuam chegando pela Ouvidoria.
+O formulário público de relato, as páginas públicas que vão mostrar os textos das configurações, a página de acompanhamento, a sugestão do agente na triagem, a Rota Especial, as perguntas ao relator, os depoimentos, o voto, a ata e o dossiê chegam nas próximas entregas. Na apuração, o botão "ADICIONAR PESSOA A OUVIR" aparece bloqueado até os depoimentos chegarem. O item Comitê de Conduta do menu lateral abre a tela Membros; MINHA VEZ, Casos e Configurações abrem pelo endereço do Comitê de Conduta. Por enquanto ninguém relata pelo Canal: os relatos continuam chegando pela Ouvidoria.
 
 ## O que já foi decidido
 
@@ -102,6 +130,7 @@ O formulário público de relato, as páginas públicas que vão mostrar os text
 ## O que costuma virar Demanda
 
 - Um membro do Comitê que não abre caso: costuma ser o Termo ainda não assinado ou a participação fora da vigência.
+- Membro que assinou o Termo e a tela ainda diz que falta: use "Reconsultar status" na linha dele, na tela Membros.
 - O super admin que não consegue incluir membro: falta o perfil de cadastro de membros no cadastro dele.
 - Pedido para o super admin ler um caso: não é atendido, por decisão da Diretoria.
 - A página pública que não abre: o canal ainda está fechado.
@@ -111,3 +140,5 @@ O formulário público de relato, as páginas públicas que vão mostrar os text
 - A coordenação que não consegue encerrar um Encaminhamento: costuma faltar a conferência do segundo leitor.
 - Pedido para apagar ou corrigir uma versão antiga de um texto: não existe; salva-se uma versão nova, e a antiga fica.
 - Pedido de um item novo nas configurações: entra por Demanda, porque a lista de itens é fixa.
+- Um membro que deixou de ver um caso: ele se declarou impedido, teve a participação contestada e confirmada, ou foi marcado como Citado. A trilha do caso diz qual.
+- Um impedimento sem suplente convocado: não havia suplente vigente com o Termo assinado e livre naquele caso.

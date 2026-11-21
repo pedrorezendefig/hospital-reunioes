@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, FileSignature, Loader2 } from "lucide-react";
 
 import { OQueFazerAgora } from "@/components/conduta/OQueFazerAgora";
 import { chamarComite, rotuloDaEtapa, textoDoPrazo, type Caixa, type ItemDaMinhaVez } from "@/lib/conduta/comite";
@@ -28,15 +28,24 @@ function caixaDaMinhaVez(vazia: boolean): Caixa {
  * pessoa, do mais urgente ao menos urgente. Cada linha tem protocolo, etapa,
  * ação pendente e prazo, sem nome e sem trecho de relato. A ordem vem do
  * servidor.
+ *
+ * Quem está no Comitê e ainda não assinou o Termo de Confidencialidade e
+ * Posse (`termo_pendente`, issue #1823) vê a tela, com o aviso de que falta
+ * assinar, e nenhum caso.
  */
 export function MinhaVez() {
   const [itens, setItens] = useState<ItemDaMinhaVez[] | null>(null);
+  const [termoPendente, setTermoPendente] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     let vivo = true;
-    chamarComite<{ itens: ItemDaMinhaVez[] }>("/minha-vez")
-      .then((corpo) => vivo && setItens(corpo.itens))
+    chamarComite<{ itens: ItemDaMinhaVez[]; termo_pendente?: boolean }>("/minha-vez")
+      .then((corpo) => {
+        if (!vivo) return;
+        setTermoPendente(Boolean(corpo.termo_pendente));
+        setItens(corpo.itens);
+      })
       .catch((e: Error) => vivo && setErro(e.message));
     return () => {
       vivo = false;
@@ -48,6 +57,20 @@ export function MinhaVez() {
       <div role="alert" className={`${CARTAO} flex gap-2 items-start px-4 py-4`}>
         <AlertCircle className="w-5 h-5 shrink-0 text-red-500" aria-hidden />
         <p className="text-sm text-red-700">{erro}</p>
+      </div>
+    );
+  }
+  if (termoPendente) {
+    return (
+      <div role="status" className={`${CARTAO} flex gap-3 items-start px-4 py-5`}>
+        <FileSignature className="w-6 h-6 shrink-0 text-amber-600" aria-hidden />
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-slate-900">Falta assinar o Termo de Confidencialidade e Posse.</p>
+          <p className="text-sm text-slate-600">
+            Ele chegou no seu e-mail profissional pela ClickSign. Depois da assinatura, os casos em que você está
+            designado abrem aqui.
+          </p>
+        </div>
       </div>
     );
   }

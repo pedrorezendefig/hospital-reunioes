@@ -53,6 +53,21 @@ def _ambiente(monkeypatch):
     limiter._storage.reset()
 
 
+@pytest.fixture(autouse=True)
+def _termo_sem_clicksign(monkeypatch) -> list[str]:
+    """O Termo que a inclusão gera (issue #1823) é dublê aqui: nenhum teste
+    deste arquivo chega à ClickSign. O envio de verdade está em
+    `test_conduta_assinaturas`."""
+    enviados: list[str] = []
+
+    def _enviar(_supabase, participacao):
+        enviados.append(participacao["id"])
+        return {"erro": None}
+
+    monkeypatch.setattr(conduta_membros.assinaturas, "enviar_termo_de_posse", _enviar)
+    return enviados
+
+
 @pytest.fixture
 def emails(monkeypatch) -> list[dict]:
     enviados: list[dict] = []

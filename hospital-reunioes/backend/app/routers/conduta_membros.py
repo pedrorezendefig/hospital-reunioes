@@ -8,22 +8,30 @@ Nada se apaga: encerrar termina a vigência no dia e a linha fica, para a
 composição de qualquer data passada. Não existe rota DELETE, e o banco recusa
 apagar Participação (migration 150). Toda inclusão e saída grava o registro
 do módulo e avisa os membros vigentes (`membros.mudanca_no_comite`).
+
+Incluir gera o Termo de Confidencialidade e Posse e o envia à ClickSign
+(issue #1823, `assinaturas`). Falha no Termo não desfaz a inclusão: vira
+`aviso_termo` na resposta, e a linha tem o reenvio e o "Reconsultar status".
 """
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 from supabase import Client
 
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
-from app.services.conduta import membros
+from app.services.conduta import assinaturas, membros
 from app.services.conduta.acesso import hoje_em_sao_paulo
 from app.services.conduta.portao import portao_do_cadastro, portao_dos_membros
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/comite-de-conduta/membros", tags=["canal-de-conduta"])
 
@@ -163,7 +171,75 @@ async def incluir_membro(
         hoje=hoje,
     )
     tarefas.add_task(membros.enviar_emails, supabase, avisados)
-    return membros.linhas_da_tela(supabase, [membros.participacao(supabase, comite_id, nova["id"])], hoje)[0]
+    aviso = await run_in_threadpool(_enviar_termo, assinaturas.enviar_termo_de_posse, supabase, nova)
+    linha = membros.linhas_da_tela(supabase, [membros.participacao(supabase, comite_id, nova["id"])], hoje)[0]
+    return {**linha, "aviso_termo": aviso}
+
+
+def _enviar_termo(enviar, supabase, participacao: dict) -> str | None:
+    """Gera e envia o Termo. A inclusão já está gravada: a falha vira aviso."""
+    try:
+        return enviar(supabase, participacao).get("erro")
+    except assinaturas.TermoNaoGeradoError as erro:
+        return str(erro)
+    except Exception:  # noqa: BLE001 (a inclusão não se desfaz por falha do Termo)
+        logger.exception("Termo de Confidencialidade e Posse da Participação %s não gerado", participacao.get("id"))
+        return "O Termo não foi gerado agora. Use Reenviar o Termo na linha do membro."
+
+
+def _participacao_aberta(supabase, participacao_id: str) -> tuple[str, dict]:
+    comite_id = _comite_id(supabase)
+    atual = membros.participacao(supabase, comite_id, participacao_id)
+    if not atual:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Participação não encontrada")
+    return comite_id, atual
+
+
+@router.post("/{participacao_id}/termo/reconsultar")
+@limiter.limit("30/minute")
+async def reconsultar_termo(
+    request: Request,
+    participacao_id: str,
+    _: dict = Depends(portao_do_cadastro),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """Pergunta à ClickSign e aplica o mesmo tratamento do webhook."""
+    comite_id, _ = _participacao_aberta(supabase, participacao_id)
+    ultima = assinaturas.ultima_do_membro(supabase, participacao_id)
+    if not ultima or not ultima.get("envelope_id"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Este membro ainda não tem Termo enviado. Use Reenviar o Termo.",
+        )
+    try:
+        await run_in_threadpool(assinaturas.reconsultar, supabase, ultima)
+    except assinaturas.AssinaturaIndisponivelError as erro:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="A assinatura eletrônica não respondeu. Tente de novo em instantes.",
+        ) from erro
+    hoje = hoje_em_sao_paulo()
+    return membros.linhas_da_tela(supabase, [membros.participacao(supabase, comite_id, participacao_id)], hoje)[0]
+
+
+@router.post("/{participacao_id}/termo/reenviar")
+@limiter.limit("10/minute")
+async def reenviar_termo(
+    request: Request,
+    participacao_id: str,
+    _: dict = Depends(portao_do_cadastro),
+    supabase: Client = Depends(get_supabase_client),
+) -> dict:
+    """Cancela o envio aberto e manda outro Termo, com outro identificador."""
+    comite_id, atual = _participacao_aberta(supabase, participacao_id)
+    if atual.get("termo_assinado_em"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Este membro já assinou o Termo")
+    if atual.get("encerrada_em"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Esta participação já foi encerrada")
+    aviso = await run_in_threadpool(_enviar_termo, assinaturas.reenviar_termo_de_posse, supabase, atual)
+    hoje = hoje_em_sao_paulo()
+    linha = membros.linhas_da_tela(supabase, [membros.participacao(supabase, comite_id, participacao_id)], hoje)[0]
+    return {**linha, "aviso_termo": aviso}
 
 
 @router.post("/{participacao_id}/encerrar")

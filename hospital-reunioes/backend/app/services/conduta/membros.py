@@ -112,8 +112,13 @@ def nomes(supabase, ids: list[str]) -> dict[str, str]:
 
 
 def linhas_da_tela(supabase, lista: list[dict], hoje: date) -> list[dict]:
-    """O que a tela mostra de cada membro. Sem e-mail nem telefone."""
+    """O que a tela mostra de cada membro. Sem e-mail nem telefone. O `termo`
+    diz se o Termo de Confidencialidade e Posse foi assinado, espera a
+    assinatura ou não saiu (issue #1823)."""
+    from app.services.conduta.assinaturas import situacao_dos_termos
+
     nome_de = nomes(supabase, [p["participante_id"] for p in lista])
+    termo_de = situacao_dos_termos(supabase, lista)
     ordem = {papel: i for i, papel in enumerate(CADEIRAS)}
     linhas = [
         {
@@ -127,6 +132,7 @@ def linhas_da_tela(supabase, lista: list[dict], hoje: date) -> list[dict]:
             "vigencia_fim": str(p["vigencia_fim"])[:10],
             "encerrada_em": str(p["encerrada_em"])[:10] if p.get("encerrada_em") else None,
             "termo_assinado": bool(p.get("termo_assinado_em")),
+            "termo": termo_de[p["id"]],
             "situacao": situacao(p, hoje),
         }
         for p in lista

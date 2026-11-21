@@ -19,7 +19,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from app.services.conduta import cifra, trilha
-from app.services.conduta.acesso import _atribuicoes_e_citacoes
+from app.services.conduta.acesso import _atribuicoes_e_citacoes, papel_no_caso
 from app.services.conduta.portao import CasoAberto, NoComite
 from app.services.conduta.ritos import (
     CATEGORIAS,
@@ -125,11 +125,12 @@ def minha_vez(supabase, comite: NoComite, hoje: date) -> list[dict]:
     contestacoes = _contestacoes(supabase, [c["id"] for c in comite.casos if c.get("etapa") == "contestada"])
     itens = []
     for caso in comite.casos:
+        do_caso = atribuicoes.get(caso["id"], [])
         olhar = _olhar(
             supabase,
             comite.autor_id,
-            comite.pessoa.papel,
-            atribuicoes.get(caso["id"], []),
+            papel_no_caso(comite.pessoa.papel, do_caso),
+            do_caso,
             contestacoes.get(caso["id"]),
         )
         acao = acao_pendente(caso, olhar)

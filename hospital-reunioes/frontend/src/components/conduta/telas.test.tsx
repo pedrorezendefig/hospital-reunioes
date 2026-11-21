@@ -72,6 +72,16 @@ describe("MINHA VEZ", () => {
     expect(await screen.findByText("Nada depende de você agora.")).toBeTruthy();
   });
 
+  it("sem o Termo assinado, diz que falta assinar e não oferece caso (issue #1823)", async () => {
+    respostas = { "/minha-vez": { itens: [], termo_pendente: true } };
+    render(<MinhaVez />);
+
+    expect(await screen.findByText("Falta assinar o Termo de Confidencialidade e Posse.")).toBeTruthy();
+    expect(screen.getByText(/chegou no seu e-mail profissional pela ClickSign/)).toBeTruthy();
+    expect(screen.queryByText("Nada depende de você agora.")).toBeNull();
+    expect(screen.queryByRole("link", { name: "ABRIR O MAIS URGENTE" })).toBeNull();
+  });
+
   it("mostra protocolo, etapa, ação e prazo, na ordem do servidor", async () => {
     respostas = {
       "/minha-vez": {
@@ -201,6 +211,22 @@ describe("a tela do caso", () => {
     expect(within(trilho).getAllByRole("listitem").map((l) => l.textContent)).toEqual(["Triagem", "Encaminhado"]);
     expect(within(screen.getByRole("region", { name: "Orientação" })).getByText(CASO.orientacao)).toBeTruthy();
     expect(screen.getByText(CASO.relato)).toBeTruthy();
+  });
+
+  it("declarado o impedimento, o caso sai da tela e ela leva de volta aos casos (#1828)", async () => {
+    respostas = { "/casos/c1": CASO, "/casos/c1/impedimento": { caso: {} } };
+    render(<TelaDoCaso casoId="c1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "DECLARAR IMPEDIMENTO" }));
+    fireEvent.click(screen.getByLabelText("Relação pessoal"));
+    fireEvent.click(screen.getByRole("button", { name: "CONFIRMAR IMPEDIMENTO" }));
+
+    const aviso = await screen.findByRole("status");
+    expect(aviso.textContent).toContain("Você se declarou impedido neste caso e não tem mais acesso a ele.");
+    expect(screen.queryByText(CASO.relato)).toBeNull();
+    expect(within(aviso).getByRole("link", { name: "Voltar aos casos" }).getAttribute("href")).toBe(
+      "/comite-de-conduta/casos"
+    );
   });
 
   it("no Encaminhamento, um clique envia a orientação e encerra", async () => {

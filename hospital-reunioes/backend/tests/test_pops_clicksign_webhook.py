@@ -181,6 +181,8 @@ def _sb(versao: dict | None = None, reunioes: list[dict] | None = None) -> _Supa
             "nsp_termos_envios": [],
             # O quarto destino (issue #1771): os documentos do Núcleo.
             "nsp_documentos_envios": [],
+            # O quinto destino (issue #1823): as assinaturas do Canal de Conduta.
+            "conduta_assinaturas": [],
         }
     )
 

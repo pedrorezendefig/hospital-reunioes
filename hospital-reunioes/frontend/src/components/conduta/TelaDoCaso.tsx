@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AlertCircle, Check, Loader2 } from "lucide-react";
 
+import { ImpedimentoECitados } from "@/components/conduta/ImpedimentoECitados";
 import { OQueFazerAgora } from "@/components/conduta/OQueFazerAgora";
 import {
   CATEGORIAS,
@@ -136,6 +138,7 @@ export function TelaDoCaso({ casoId }: { casoId: string }) {
   const [triagem, setTriagem] = useState<TriagemDoFormulario>(VAZIA);
   const [motivo, setMotivo] = useState("");
   const [justificativa, setJustificativa] = useState("");
+  const [impedido, setImpedido] = useState(false);
 
   const carregar = useCallback(() => {
     chamarComite<CasoAberto>(`/casos/${casoId}`)
@@ -173,6 +176,18 @@ export function TelaDoCaso({ casoId }: { casoId: string }) {
     setPasso(acao);
   };
 
+  if (impedido) {
+    return (
+      <div role="status" className={`${CARTAO} px-4 py-4 space-y-2`}>
+        <p className="text-sm text-slate-800">
+          Você se declarou impedido neste caso e não tem mais acesso a ele. Um suplente é convocado no seu lugar.
+        </p>
+        <Link href="/comite-de-conduta/casos" className="text-sm font-semibold text-[#282760] underline">
+          Voltar aos casos
+        </Link>
+      </div>
+    );
+  }
   if (erro) {
     return (
       <div role="alert" className={`${CARTAO} flex gap-2 items-start px-4 py-4`}>
@@ -360,6 +375,8 @@ export function TelaDoCaso({ casoId }: { casoId: string }) {
           )}
         </section>
       )}
+
+      <ImpedimentoECitados casoId={casoId} caso={caso} aoMudar={carregar} aoImpedir={() => setImpedido(true)} />
 
       <section aria-label="Relato original" className={`${CARTAO} px-4 py-4 space-y-1`}>
         <h2 className="text-base font-semibold text-slate-900">Relato original</h2>

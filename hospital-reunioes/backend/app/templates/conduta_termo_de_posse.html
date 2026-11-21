@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Termo de Confidencialidade e Posse, {{ membro.nome }}</title>
+    <style>
+        {% if font_path %}
+        @font-face {
+            font-family: "HP Simplified";
+            src: url("{{ font_path }}") format("truetype");
+            font-weight: 400;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: "HP Simplified";
+            src: url("{{ font_path }}") format("truetype");
+            font-weight: 700;
+            font-style: normal;
+        }
+        {% endif %}
+
+        @page {
+            size: A4;
+            margin: 2cm 1.8cm 1.8cm 1.8cm;
+            @bottom-right {
+                content: "Página " counter(page) " de " counter(pages);
+                font-family: "HP Simplified", sans-serif;
+                font-size: 8.5pt;
+                color: #64748B;
+            }
+            @bottom-left {
+                content: "Termo de Confidencialidade e Posse · Documento {{ documento.identificador }}";
+                font-family: "HP Simplified", sans-serif;
+                font-size: 8pt;
+                color: #64748B;
+            }
+        }
+
+        body {
+            font-family: "HP Simplified", sans-serif;
+            font-synthesis: weight style;
+            color: #1E293B;
+            line-height: 1.55;
+            margin: 0;
+            font-size: 10.5pt;
+        }
+
+        .header { display: table; width: 100%; border-bottom: 1px solid #E2E8F0; padding-bottom: 16px; margin-bottom: 14px; }
+        .header-logo { display: table-cell; vertical-align: middle; width: 110px; }
+        .header-logo img { max-width: 96px; height: auto; }
+        .header-title { display: table-cell; vertical-align: middle; padding-left: 12px; }
+        .header-title h1 { color: #2B2E7E; margin: 0 0 4px 0; font-size: 18pt; text-transform: uppercase; line-height: 1.15; }
+        .header-title p { margin: 0; font-size: 10.5pt; font-weight: 700; }
+        .header-title .instituicao { color: #64748B; font-size: 9pt; font-weight: 400; }
+
+        h2 { color: #2B2E7E; font-size: 11.5pt; text-transform: uppercase; margin: 18px 0 6px 0; break-after: avoid; }
+        p { margin: 0 0 6px 0; text-align: justify; }
+
+        table.identificacao { width: 100%; border-collapse: collapse; margin: 4px 0 8px 0; }
+        table.identificacao th, table.identificacao td { border: 1px solid #E2E8F0; padding: 5px 8px; text-align: left; vertical-align: top; }
+        table.identificacao th { background: #F8FAFC; width: 34%; font-weight: 700; }
+
+        .assinatura { border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 12px; margin-top: 10px; }
+
+        .regimento { break-before: page; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        {% if logo_path %}<div class="header-logo"><img src="{{ logo_path }}" alt="Hospital São Matheus"></div>{% endif %}
+        <div class="header-title">
+            <h1>Termo de Confidencialidade e Posse</h1>
+            <p>Membro do Comitê de Conduta</p>
+            <p class="instituicao">Hospital São Matheus, AMA Assistência Médica</p>
+        </div>
+    </div>
+
+    <h2>1. Identificação do membro</h2>
+    <table class="identificacao">
+        <tr><th>Nome</th><td>{{ membro.nome }}</td></tr>
+        <tr><th>Cargo no Hospital</th><td>{{ membro.cargo }}</td></tr>
+        <tr><th>Setor</th><td>{{ membro.setor }}</td></tr>
+        <tr><th>Cadeira no Comitê</th><td>{{ membro.cadeira }}</td></tr>
+        <tr><th>Vigência</th><td>de {{ membro.vigencia_inicio }} a {{ membro.vigencia_fim }}</td></tr>
+        <tr><th>Regimento aplicável</th><td>Regimento do Comitê de Conduta, versão {{ regimento.versao }}, anexo a este Termo</td></tr>
+    </table>
+
+    <h2>2. Da posse</h2>
+    <p>Declaro que fui designado membro do Comitê de Conduta do Hospital São Matheus, na cadeira e pelo período acima indicados, e que <strong>aceito a designação e tomo posse</strong>.</p>
+    <p>Declaro que <strong>li integralmente o Regimento do Comitê de Conduta</strong>, versão {{ regimento.versao }}, anexo a este Termo e dele parte integrante, e que <strong>conheço e acato</strong> as regras nele estabelecidas.</p>
+    <p>Sei que só abro os casos do Canal de Conduta depois de assinar este Termo, e apenas os casos em que estou designado.</p>
+
+    <h2>3. Do compromisso de confidencialidade</h2>
+    <p>Comprometo-me a:</p>
+    <p><strong>3.1</strong> Manter sigilo absoluto sobre toda informação a que tiver acesso em razão da função, incluindo relatos, identidade de quem relata, identidade de quem é citado, depoimentos, votos, deliberações e documentos do Comitê.</p>
+    <p><strong>3.2</strong> Não reproduzir, transmitir, fotografar, gravar ou compartilhar, por qualquer meio, informação de caso com pessoa não autorizada, dentro ou fora do Hospital.</p>
+    <p><strong>3.3</strong> Nunca tentar identificar o autor de relato anônimo, nem cruzar o relato com dados de pessoal, escala ou acesso.</p>
+    <p><strong>3.4</strong> Utilizar a informação exclusivamente para a apuração do caso, observada a Lei nº 13.709/2018 e limitado ao mínimo necessário.</p>
+    <p><strong>3.5</strong> Manter o sigilo durante a vigência da designação <strong>e após o seu término, por prazo indeterminado</strong>.</p>
+    <p><strong>3.6</strong> Comunicar imediatamente à coordenação do Comitê qualquer acesso indevido, perda, vazamento ou suspeita de comprometimento de informação.</p>
+
+    <h2>4. Do compromisso contra a retaliação</h2>
+    <p>Comprometo-me a não praticar, incentivar ou tolerar qualquer forma de retaliação contra quem relata de boa-fé ou contra testemunha, e a comunicar ao Comitê eventual retaliação de que tenha conhecimento.</p>
+
+    <h2>5. Do impedimento</h2>
+    <p>Comprometo-me a <strong>declarar impedimento</strong> no caso e a <strong>abster-me da apuração, da deliberação e do voto</strong> sempre que eu seja parte, chefia direta de envolvido, parente de envolvido, tenha relação pessoal com envolvido ou interesse no resultado. Sei que, citado num relato como envolvido, não verei o caso em nenhum perfil.</p>
+
+    <h2>6. Da vigência</h2>
+    <p><strong>6.1</strong> Este Termo vigora pelo período de designação indicado no item 1.</p>
+    <p><strong>6.2</strong> O encerramento da vigência não extingue as obrigações de confidencialidade assumidas no item 3.</p>
+
+    <h2>7. Da assinatura</h2>
+    <p>Assino este Termo eletronicamente, por meio da plataforma de assinatura eletrônica contratada pelo Hospital São Matheus, sendo a assinatura eletrônica reconhecida como manifestação válida de vontade, nos termos da Lei nº 14.063/2020.</p>
+    <div class="assinatura">
+        <p><strong>Signatário:</strong> {{ membro.nome }}</p>
+        <p><strong>Data e hora:</strong> registradas pela plataforma de assinatura eletrônica</p>
+        <p><strong>Documento:</strong> {{ documento.identificador }}</p>
+    </div>
+
+    <div class="regimento">
+        <h2>Anexo único. Regimento do Comitê de Conduta, versão {{ regimento.versao }}</h2>
+        <p><strong>Art. 1º</strong> O Comitê de Conduta apura os relatos de conduta grave recebidos pelo Canal de Conduta do Hospital São Matheus, até a recomendação da medida.</p>
+        <p><strong>Art. 2º</strong> O Comitê tem três membros votantes, um deles na coordenação e outro como segundo leitor, e um ou dois suplentes, cadastrados com vigência de dois anos. Não há secretário nem voto de desempate.</p>
+        <p><strong>Art. 3º</strong> A coordenação confirma a triagem, conduz a apuração do rito rápido, convoca e aprova os retornos. O segundo leitor vê a mesma fila de triagem da coordenação e confirma ou contesta a triagem. O membro vota e conduz as conversas para as quais for designado. O suplente não tem acesso a caso até ser convocado, e então vê só o caso da convocação.</p>
+        <p><strong>Art. 4º</strong> Ninguém vê um caso por ter um cargo: vê quem está designado naquele caso. O membro só abre caso com este Termo assinado e com a participação vigente.</p>
+        <p><strong>Art. 5º</strong> O membro declara impedimento quando for parte, chefia direta de envolvido, parente de envolvido, tiver relação pessoal com envolvido ou interesse no resultado. Se um membro contestar a participação de outro, os demais decidem, sem o contestado. Confirmado o impedimento, o acesso ao caso é revogado e um suplente é convocado.</p>
+        <p><strong>Art. 6º</strong> Quem é citado no relato como envolvido nunca vê o caso, em nenhum perfil.</p>
+        <p><strong>Art. 7º</strong> Todo acesso, leitura, envio e alteração no caso fica registrado com quem, quando e o quê, e nenhum perfil edita ou apaga esse registro. Nenhum documento se substitui: a correção entra como nova versão e a anterior permanece.</p>
+        <p><strong>Art. 8º</strong> Protocolo, código, nomes e trechos de relato nunca aparecem em endereço de página, e-mail, notificação ou mensagem de erro.</p>
+        <p><strong>Art. 9º</strong> Toda sugestão do agente de inteligência artificial é só sugestão: uma pessoa do Comitê confirma ou discorda.</p>
+        <p><strong>Art. 10.</strong> Toda inclusão ou saída de membro é avisada a todos os membros do Comitê.</p>
+    </div>
+</body>
+</html>

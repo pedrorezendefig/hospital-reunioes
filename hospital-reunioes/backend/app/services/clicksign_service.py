@@ -379,7 +379,12 @@ def get_signed_document(envelope_id: str) -> bytes | None:
 
             # Pega o primeiro documento (nosso PDF da ata)
             doc = documents[0]
-            download_url = doc.get("attributes", {}).get("download_url")
+            # A referência da v3 traz o assinado em `links.files.signed`, link
+            # que vale 5 minutos (pesquisa na #1786, issue #1823); o
+            # `attributes.download_url` antigo fica como reserva.
+            download_url = ((doc.get("links") or {}).get("files") or {}).get("signed") or (
+                doc.get("attributes") or {}
+            ).get("download_url")
             if not download_url:
                 logger.warning(f"[ClickSign v3] URL de download não disponível para envelope {envelope_id}")
                 return None
