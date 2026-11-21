@@ -90,15 +90,60 @@ class _Consulta:
         return SimpleNamespace(data=linhas[: self._teto] if self._teto is not None else linhas)
 
 
-# As tabelas que o banco não deixa alterar (migrations 175 e 185).
-IMUTAVEIS = ("conduta_trilha", "conduta_prazos_vencidos")
+# As tabelas que o banco não deixa alterar (migrations 175, 185 e 190).
+IMUTAVEIS = (
+    "conduta_trilha",
+    "conduta_prazos_vencidos",
+    "conduta_depoimento_arquivos",
+    "conduta_depoimento_conferencia",
+)
 
-# As chaves únicas que o módulo usa para não gravar duas vezes (migration 185).
+# As chaves únicas que o módulo usa para não gravar duas vezes (migrations 185 e 190).
 UNICAS = {
     "conduta_prazos_vencidos": ("caso_id", "prazo_em"),
     "conduta_contestacoes": ("caso_id",),
     "conduta_contestacao_votos": ("contestacao_id", "participante_id"),
+    "conduta_depoimento_arquivos": ("depoimento_id", "tipo", "versao", "pagina"),
+    "conduta_depoimento_conferencia": ("depoimento_id", "item"),
 }
+
+
+class _Bucket:
+    def __init__(self, armazem: Armazem, nome: str):
+        self._armazem = armazem
+        self._nome = nome
+
+    def upload(self, caminho, conteudo, opcoes=None):
+        self._armazem.objetos[(self._nome, caminho)] = bytes(conteudo)
+        return {"Key": caminho}
+
+    def download(self, caminho):
+        return self._armazem.objetos[(self._nome, caminho)]
+
+    def remove(self, caminhos):
+        for caminho in caminhos:
+            self._armazem.objetos.pop((self._nome, caminho), None)
+        return [{"name": c} for c in caminhos]
+
+    def create_signed_url(self, caminho, *_a, **_kw):
+        self._armazem.urls_assinadas.append((self._nome, caminho))
+        return {"signedURL": f"https://bucket.test/{self._nome}/{caminho}?token=assinado"}
+
+    def get_public_url(self, caminho):
+        self._armazem.urls_assinadas.append((self._nome, caminho))
+        return f"https://bucket.test/{self._nome}/{caminho}"
+
+
+class Armazem:
+    """O Storage em memória: guarda os bytes como chegaram e anota todo pedido
+    de URL (assinada ou pública), que o Canal nunca deve fazer."""
+
+    def __init__(self):
+        self.objetos: dict[tuple[str, str], bytes] = {}
+        self.urls_assinadas: list[tuple[str, str]] = []
+
+    def from_(self, nome: str) -> _Bucket:
+        return _Bucket(self, nome)
 
 
 class Banco:
@@ -106,6 +151,7 @@ class Banco:
         self.tabelas: dict[str, list[dict]] = tabelas or {}
         self._seq = itertools.count(1)
         self.falhas_da_trilha = 0
+        self.storage = Armazem()
 
     def table(self, nome: str) -> _Consulta:
         return _Consulta(self, nome)
