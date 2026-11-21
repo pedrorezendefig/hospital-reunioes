@@ -83,7 +83,7 @@ export function QuemNotificou({ caso }: { caso: Caso }) {
 
 /** Os anexos do caso. O arquivo sai pelo backend, com a sessão de quem abre:
  * não há link que valha fora do app. */
-function AnexosDoCaso({ caso }: { caso: Caso }) {
+export function AnexosDoCaso({ caso }: { caso: Caso }) {
   const [abrindo, setAbrindo] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   if (!caso.anexos?.length) return null;

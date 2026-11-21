@@ -737,4 +737,5 @@ def test_o_kit_diz_o_que_o_agente_de_triagem_faz():
 def test_o_kit_nao_diz_mais_que_a_triagem_nao_chegou():
     ainda_nao = _secao_do_kit("O que ele ainda não faz")
     assert "as perguntas de esclarecimento, a triagem, os prazos" not in ainda_nao
-    assert "a tela de triagem" in ainda_nao
+    # A tela de triagem chegou com a issue #1992.
+    assert "a tela de triagem" not in ainda_nao

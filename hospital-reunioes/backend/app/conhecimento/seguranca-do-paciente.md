@@ -31,6 +31,18 @@ A notificação de incidente:
 - a resposta do agente passa pelas regras de coerência da norma (natureza com dano, faixa, revisão campo a campo e canal). Resposta fora das regras é pedida de novo uma vez; se vier errada outra vez, a notificação entra na fila marcada "classificar manualmente". O mesmo acontece quando o agente está desligado ou não responde e quando passa do limite de 100 leituras por dia, que é do Núcleo e não divide conta com a Ouvidoria. A notificação nunca fica retida;
 - o agente nasce desligado, e toda notificação entra para classificar manualmente até a Vitta rodar o teste de aceite com os 144 casos da Diretoria (três vezes cada) e as metas baterem: nenhum caso das faixas A ou B rebaixado e todos os eventos que nunca deveriam ocorrer de confiança alta reconhecidos. Toda mudança no prompt ou na base repete o teste.
 
+A triagem pela Presidência:
+
+- em Notificações, o botão **Fila de triagem** abre as notificações que ainda esperam a triagem, da mais antiga para a mais nova, com o protocolo, o setor, a data, a faixa e o assunto sugeridos. A fila não mostra o relato nem quem notificou. Só a Presidência e o Acesso pleno abrem a fila e confirmam;
+- cada caso abre numa tela só, com a linha "Leia o relato, confira a sugestão e confirme. Se discordar, ajuste: o sistema aprende com a diferença." no topo. À esquerda ficam o relato, as respostas de quem notificou e os anexos; à direita, a sugestão do agente, marcada como "Sugestão", com a justificativa, a confiança em palavras e os alertas à vista, sem clique;
+- nas faixas A e B, quando o relato fala em morte, quando o evento que nunca deveria ocorrer é "possível" e quando quem notificou marcou grave e o agente sugeriu menos, a tela traz também "Caso grave: confirme cada campo. O prazo legal já está correndo." e o botão Confirmar só libera com cada campo marcado. Não existe "aceitar tudo";
+- nas faixas C, D e E, Confirmar é um clique;
+- **Ajustar** abre os campos para a Presidência mudar o que discordar. A decisão fica gravada com o nome de quem decidiu e os campos que mudaram, e a sugestão do agente continua guardada como veio, para medir onde ele erra;
+- a tela mostra, calculados pelo aplicativo e não pelo agente, quantas vezes a mesma categoria aconteceu no mesmo setor em 60 dias (por exemplo, "3ª ocorrência desta categoria neste setor em 60 dias"), os casos parecidos, a frequência e a prioridade pela matriz da norma (gravidade por frequência);
+- a frequência conta as ocorrências anteriores da mesma categoria no mesmo setor em 12 meses: nenhuma é remota, 1 é incomum, 2 ou 3 é ocasional, 4 ou mais é frequente. Esses cortes ficam na tela Configuração do módulo e podem ser mudados por quem chega a ela; a mudança vale para os cálculos seguintes;
+- a notificação marcada "classificar manualmente" abre na mesma tela, sem sugestão e com os campos em branco, para a Presidência preencher;
+- confirmar leva o caso a Classificada, ou a Em análise agregada quando é quase erro, circunstância de risco ou incidente sem dano.
+
 A fundação do módulo:
 
 - o item **Segurança do Paciente** no menu lateral, com a página inicial do módulo (o item Visão geral, para não se confundir com o Início de cada pessoa), as Reuniões e o grupo Núcleo (Membros, Documentos, Capacitações e Agenda regulatória). Cada tela abre com uma linha dizendo o que fazer ali;
@@ -151,7 +163,7 @@ Membro nunca é apagado. Encerrar termina a vigência no dia escolhido e a parti
 
 ## O que ele ainda não faz
 
-Nas Capacitações, o profissional de fora do Núcleo que está na lista ainda não abre o módulo, então não confirma a presença por enquanto; a capacitação registrada também não se edita depois de salva. Nas reuniões, a ata própria do Núcleo também chega depois: por enquanto a ata segue o modelo das outras reuniões, e a pauta ainda não traz indicadores, casos, planos vencidos nem alertas, que dependem das próximas fases. Na notificação de incidente, ainda não chegaram as perguntas de esclarecimento, a tela de triagem (a sugestão do agente já fica guardada, mas ainda não aparece na tela para a Presidência), os prazos e o encaminhamento a outro canal: a notificação fica registrada como Recebida até essas partes entrarem. As notificações criadas a partir da reunião rápida chegam na segunda fase. Os casos que a Ouvidoria manda ao Núcleo também chegam depois.
+Nas Capacitações, o profissional de fora do Núcleo que está na lista ainda não abre o módulo, então não confirma a presença por enquanto; a capacitação registrada também não se edita depois de salva. Nas reuniões, a ata própria do Núcleo também chega depois: por enquanto a ata segue o modelo das outras reuniões, e a pauta ainda não traz indicadores, casos, planos vencidos nem alertas, que dependem das próximas fases. Na notificação de incidente, ainda não chegaram as perguntas de esclarecimento, os prazos, o que acontece depois que a triagem é confirmada (a reunião de análise e o chamado aos envolvidos) e o encaminhamento a outro canal. As notificações criadas a partir da reunião rápida chegam na segunda fase. Os casos que a Ouvidoria manda ao Núcleo também chegam depois.
 
 ## O que já foi decidido
 

@@ -64,6 +64,8 @@ interface Props {
   recurso: string;
   /** O conteúdo da tela. Sem ele, o estado vazio. */
   children?: ReactNode;
+  /** A tela de duas colunas (a triagem, issue #1992) ocupa mais largura. */
+  larga?: boolean;
 }
 
 /**
@@ -78,13 +80,13 @@ interface Props {
  * assinou o Termo vê, no lugar da recusa, a faixa com o documento pendente
  * (issue #1768).
  */
-export function TelaDoNucleo({ titulo, orientacao, recurso, children }: Props) {
+export function TelaDoNucleo({ titulo, orientacao, recurso, children, larga = false }: Props) {
   const { participante } = useCurrentParticipante();
   const liberada = participante?.recursos_nsp?.includes(recurso) ?? false;
   const meuTermo = useMeuTermo(Boolean(participante) && !liberada);
 
   return (
-    <div className="p-4 md:p-8 max-w-3xl mx-auto w-full">
+    <div className={`p-4 md:p-8 ${larga ? "max-w-6xl" : "max-w-3xl"} mx-auto w-full`}>
       <h1 className="text-2xl font-bold text-slate-900">{titulo}</h1>
       <p className="text-slate-500 text-sm mt-0.5 mb-5">{orientacao}</p>
 

@@ -36,6 +36,7 @@ TODOS = {
     "reunioes",
     "casos",
     "identidade_notificante",
+    "triagem",
     "gerir_nucleo",
     "configuracao",
 }
